@@ -15,6 +15,10 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 # contains include/, lib/ and lib/cmake/ortools/).  Download releases from
 # https://github.com/google/or-tools/releases  (e.g. or-tools_x86_64_Ubuntu-22.04_cpp_v9.x.tar.gz)
 # ---------------------------------------------------------------------------
+# The AlmaLinux archives (the only Linux arm64 ones Google publishes) install
+# into lib64/, which CMake skips on Debian-family hosts unless asked. This covers
+# both ortoolsConfig.cmake and the dependencies it finds (ZLIB, BZip2...).
+set_property(GLOBAL PROPERTY FIND_LIBRARY_USE_LIB64_PATHS TRUE)
 if(DEFINED ENV{ORTOOLS_ROOT})
   list(APPEND CMAKE_PREFIX_PATH "$ENV{ORTOOLS_ROOT}")
 endif()
