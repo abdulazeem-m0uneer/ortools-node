@@ -19,7 +19,13 @@ if(DEFINED ENV{ORTOOLS_ROOT})
   list(APPEND CMAKE_PREFIX_PATH "$ENV{ORTOOLS_ROOT}")
 endif()
 find_package(ortools CONFIG REQUIRED)
-message(STATUS "Using OR-Tools from: ${ortools_DIR}")
+message(STATUS "Using OR-Tools ${ortools_VERSION} from: ${ortools_DIR}")
+if(NOT ortools_VERSION MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)$")
+  message(FATAL_ERROR "Unexpected OR-Tools version '${ortools_VERSION}'")
+endif()
+set(ORTOOLS_VERSION_MAJOR ${CMAKE_MATCH_1})
+set(ORTOOLS_VERSION_MINOR ${CMAKE_MATCH_2})
+set(ORTOOLS_VERSION_PATCH ${CMAKE_MATCH_3})
 
 # ---------------------------------------------------------------------------
 # node-addon-api headers (cmake-js supplies CMAKE_JS_INC / CMAKE_JS_SRC / CMAKE_JS_LIB)
@@ -33,8 +39,10 @@ execute_process(
 string(REPLACE "\"" "" NODE_ADDON_API_DIR ${NODE_ADDON_API_DIR})
 string(REPLACE "\n" "" NODE_ADDON_API_DIR ${NODE_ADDON_API_DIR})
 
+# Every component lives in its own directory under src/.
+file(GLOB_RECURSE ORTOOLS_NODE_SOURCES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/src/*.cc")
 add_library(${PROJECT_NAME} SHARED
-  src/addon.cc
+  ${ORTOOLS_NODE_SOURCES}
   ${CMAKE_JS_SRC}
 )
 
@@ -48,6 +56,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE
+  ${CMAKE_SOURCE_DIR}/src
   ${CMAKE_JS_INC}
   ${NODE_ADDON_API_DIR}
 )
@@ -55,6 +64,11 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   NAPI_VERSION=8
   NAPI_DISABLE_CPP_EXCEPTIONS
+  # Compile-time OR-Tools version, for #if guards where 9.14 and 9.15 headers differ.
+  ORTOOLS_VERSION_MAJOR=${ORTOOLS_VERSION_MAJOR}
+  ORTOOLS_VERSION_MINOR=${ORTOOLS_VERSION_MINOR}
+  ORTOOLS_VERSION_PATCH=${ORTOOLS_VERSION_PATCH}
+  ORTOOLS_VERSION_STRING="${ortools_VERSION}"
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE

@@ -86,4 +86,8 @@ export class Solver {
 
 export function supportsBackend(name: string): boolean;
 export const INF: number;
+/** Version of the OR-Tools library loaded at runtime, e.g. "9.15.6755". */
+export const ortoolsVersion: string;
+/** How this addon was built. Loading fails if the runtime OR-Tools differs from ortoolsVersion. */
+export const buildInfo: Readonly<{ ortoolsVersion: string; napiVersion: number }>;
 export const native: unknown;

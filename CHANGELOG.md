@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- `ortoolsVersion` (the OR-Tools release loaded at runtime) and `buildInfo`
+  (the release the addon was compiled against). Loading fails with a clear error
+  when the two differ.
+- Builds and CI against both OR-Tools 9.14.6206 and 9.15.6755, on Linux x64 and
+  arm64.
+
+### Changed
+
+- Native sources are split by OR-Tools component under `src/`, and the JS layer
+  under `lib/`. The public API is unchanged.
+
 ## [0.1.0] - 2026-10-16
 
 First release.
