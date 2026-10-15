@@ -30,3 +30,6 @@ First release.
   numbers all throw, and the model is left unchanged.
 - TypeScript definitions.
 - Benchmark against OR-Tools' official Python binding (`npm run bench`).
+
+[Unreleased]: https://github.com/abdulazeem-m0uneer/ortools-node/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/abdulazeem-m0uneer/ortools-node/releases/tag/v0.1.0
