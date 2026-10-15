@@ -1,0 +1,67 @@
+{
+  "name": "ortools-node",
+  "version": "0.1.0",
+  "description": "Native Node.js bindings for Google OR-Tools: LP and MIP with GLOP, PDLP, SCIP, CBC, HiGHS, CP-SAT and more",
+  "keywords": [
+    "or-tools",
+    "ortools",
+    "optimization",
+    "operations-research",
+    "linear-programming",
+    "mixed-integer-programming",
+    "lp",
+    "mip",
+    "milp",
+    "solver",
+    "glop",
+    "scip",
+    "highs",
+    "cp-sat",
+    "napi",
+    "native"
+  ],
+  "homepage": "https://github.com/abdulazeem-m0uneer/ortools-node#readme",
+  "bugs": {
+    "url": "https://github.com/abdulazeem-m0uneer/ortools-node/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abdulazeem-m0uneer/ortools-node.git"
+  },
+  "author": "Abdulazeem Mouneer (https://github.com/abdulazeem-m0uneer)",
+  "license": "MIT",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "install": "cmake-js compile",
+    "build": "cmake-js compile",
+    "rebuild": "cmake-js rebuild",
+    "build:debug": "cmake-js compile --debug",
+    "test": "node --test",
+    "typecheck": "tsc --noEmit --strict --target es2022 lib/index.d.ts",
+    "example": "node examples/basic.js",
+    "bench": "node bench/run.js"
+  },
+  "dependencies": {
+    "bindings": "^1.5.0",
+    "cmake-js": "^8.0.0",
+    "node-addon-api": "^8.3.0"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3"
+  },
+  "binary": {
+    "napi_versions": [
+      8
+    ]
+  },
+  "files": [
+    "lib/",
+    "src/",
+    "CMakeLists.txt",
+    "CHANGELOG.md"
+  ]
+}
