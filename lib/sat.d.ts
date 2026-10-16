@@ -191,6 +191,7 @@ export class CpModel {
   toJSON(): Record<string, unknown>;
   /** '' when valid, otherwise OR-Tools' description of the first problem. */
   validate(): string;
+  /** OR-Tools' statistics; throws 'Invalid CpModel: ...' for an invalid model. */
   modelStats(): string;
 }
 

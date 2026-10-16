@@ -238,15 +238,21 @@ Napi::Value ValidateModel(const Napi::CallbackInfo& info) {
   return Napi::String::New(env, error);
 }
 
-// (modelJson) -> CpModelStats() text.
+// (modelJson) -> CpModelStats() text; throws for an invalid model.
 Napi::Value ModelStats(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   CpModelProto model;
   if (!ParseProtoArgument(env, info[0], "CpModelProto", &model)) return env.Undefined();
+  // CpModelStats() indexes the model without bounds checks: validate first.
+  std::string error;
   std::string stats;
-  if (!GuardCpp(env, "modelStats", [&] { stats = operations_research::sat::CpModelStats(model); })) {
+  if (!GuardCpp(env, "modelStats", [&] {
+        error = operations_research::sat::ValidateCpModel(model);
+        if (error.empty()) stats = operations_research::sat::CpModelStats(model);
+      })) {
     return env.Undefined();
   }
+  if (!error.empty()) THROW_AND_RETURN(env, "Invalid CpModel: " + error, env.Undefined());
   return Napi::String::New(env, stats);
 }
 
