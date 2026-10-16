@@ -19,6 +19,7 @@
 #include <memory>
 #include <string>
 
+#include "common/async_worker.h"
 #include "common/napi_util.h"
 #include "ortools/linear_solver/linear_solver.h"
 
@@ -73,12 +74,12 @@ class Solver : public Napi::ObjectWrap<Solver> {
   // Used by the async worker.
   MPSolver* raw() { return solver_.get(); }
   void FinishSolve(MPSolver::ResultStatus status) {
-    busy_ = false;
+    solve_state_.End();
     solved_ = true;
     has_solution_ = IsSolutionStatus(status);
   }
   void AbortSolve() {
-    busy_ = false;
+    solve_state_.End();
     MarkModelChanged();
   }
 
@@ -129,11 +130,7 @@ class Solver : public Napi::ObjectWrap<Solver> {
       Napi::Error::New(env, "Solver has been disposed").ThrowAsJavaScriptException();
       return false;
     }
-    if (busy_) {
-      Napi::Error::New(env, "Solver is busy: a solve() is in progress").ThrowAsJavaScriptException();
-      return false;
-    }
-    return true;
+    return CheckNotBusy(env, solve_state_, "Solver");
   }
   // Any model change invalidates the previous solve (MPSolver does the same).
   void MarkModelChanged() {
@@ -178,7 +175,7 @@ class Solver : public Napi::ObjectWrap<Solver> {
   }
 
   std::unique_ptr<MPSolver> solver_;
-  bool busy_ = false;
+  AsyncSolveState solve_state_;
   bool solved_ = false;        // a solve completed and the model is unchanged since
   bool has_solution_ = false;  // ...and it ended OPTIMAL or FEASIBLE
 };
@@ -187,15 +184,9 @@ class Solver : public Napi::ObjectWrap<Solver> {
 // Async solve worker
 // ---------------------------------------------------------------------------
 
-class SolveWorker : public Napi::AsyncWorker {
+class SolveWorker : public PromiseWorker {
  public:
-  SolveWorker(Napi::Env env, Napi::Object self, Solver* wrapper)
-      : Napi::AsyncWorker(env),
-        deferred_(Napi::Promise::Deferred::New(env)),
-        self_ref_(Napi::Persistent(self)),  // keep JS object (and MPSolver) alive
-        wrapper_(wrapper) {}
-
-  Napi::Promise Promise() { return deferred_.Promise(); }
+  SolveWorker(Napi::Env env, Napi::Object self, Solver* wrapper) : PromiseWorker(env, self), wrapper_(wrapper) {}
 
  protected:
   void Execute() override {
@@ -203,19 +194,17 @@ class SolveWorker : public Napi::AsyncWorker {
     status_ = wrapper_->raw()->Solve();
   }
 
-  void OnOK() override {
-    wrapper_->FinishSolve(status_);
-    deferred_.Resolve(Napi::String::New(Env(), StatusToString(status_)));
+  void Finish(bool succeeded) override {
+    if (succeeded) {
+      wrapper_->FinishSolve(status_);
+    } else {
+      wrapper_->AbortSolve();
+    }
   }
 
-  void OnError(const Napi::Error& e) override {
-    wrapper_->AbortSolve();
-    deferred_.Reject(e.Value());
-  }
+  Napi::Value Result(Napi::Env env) override { return Napi::String::New(env, StatusToString(status_)); }
 
  private:
-  Napi::Promise::Deferred deferred_;
-  Napi::ObjectReference self_ref_;
   Solver* wrapper_;
   MPSolver::ResultStatus status_ = MPSolver::NOT_SOLVED;
 };
@@ -486,7 +475,7 @@ Napi::Value Solver::SetSolverSpecificParameters(const Napi::CallbackInfo& info) 
 Napi::Value Solver::Solve(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  busy_ = true;
+  solve_state_.Begin();
   SolveWorker* w = new SolveWorker(env, info.This().As<Napi::Object>(), this);
   w->Queue();
   return w->Promise();
@@ -504,7 +493,7 @@ Napi::Value Solver::SolveSync(const Napi::CallbackInfo& info) {
 // in flight or the backend cannot be interrupted safely from another thread.
 Napi::Value Solver::Interrupt(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  bool interrupted = busy_ && solver_ && SupportsThreadSafeInterrupt(solver_->ProblemType()) && solver_->InterruptSolve();
+  bool interrupted = solve_state_.busy() && solver_ && SupportsThreadSafeInterrupt(solver_->ProblemType()) && solver_->InterruptSolve();
   return Napi::Boolean::New(env, interrupted);
 }
 
@@ -608,7 +597,7 @@ Napi::Value Solver::ExportModelAsMpsFormat(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value Solver::IsBusy(const Napi::CallbackInfo& info) {
-  return Napi::Boolean::New(info.Env(), busy_);
+  return Napi::Boolean::New(info.Env(), solve_state_.busy());
 }
 
 // Frees the MPSolver now. Node-API runs ObjectWrap finalizers only after the
