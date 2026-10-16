@@ -238,6 +238,13 @@ describe('assemble', () => {
     assert.equal(findLibDir(ubuntu.root), path.join(ubuntu.root, 'lib'));
   });
 
+  test('findLibDir prefers lib64/ when both have libortools.so', (t) => {
+    const f = fakeOrtools(t);
+    fs.mkdirSync(path.join(f.root, 'lib'));
+    fs.writeFileSync(path.join(f.root, 'lib', 'libortools.so.9'), '');
+    assert.equal(findLibDir(f.root), path.join(f.root, 'lib64'));
+  });
+
   test('findLibDir ignores a lib64/ without libortools.so', (t) => {
     const f = fakeOrtools(t, { libDirName: 'lib' });
     fs.mkdirSync(path.join(f.root, 'lib64'));
