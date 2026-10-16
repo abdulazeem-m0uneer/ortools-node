@@ -420,6 +420,16 @@ JavaScript.
 
 - Never touch `Napi::` values inside `AsyncWorker::Execute`, which runs on a
   worker thread.
+- Read and convert every JavaScript argument first, then check that the object
+  is still usable (not disposed, not busy), and only then touch the OR-Tools
+  model. Reading an array element or property can run user code (a getter or
+  a Proxy) that disposes the object or starts a solve.
+- Never let a C++ exception escape: the addon builds with
+  `NAPI_DISABLE_CPP_EXCEPTIONS`, so one would abort the process. Wrap OR-Tools
+  calls that can allocate or throw in `GuardCpp()` (main thread) or
+  `GuardCppOffThread()` (in `Execute`) from `src/common/cpp_guard.h`.
+- Validate every precondition behind an OR-Tools `CHECK` before the call: a
+  failed `CHECK` aborts the process, it is not an exception.
 - Keep the JavaScript object alive during async work (`Napi::ObjectReference`)
   so the `MPSolver` cannot be destroyed mid-solve.
 - Build with the same compiler ABI as the OR-Tools binaries. On Linux that is
