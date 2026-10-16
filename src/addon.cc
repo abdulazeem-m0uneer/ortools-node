@@ -16,6 +16,7 @@
 #include "graph/graph.h"
 #include "linear_solver/model_builder.h"
 #include "linear_solver/mp_solver.h"
+#include "math_opt/math_opt.h"
 #include "ortools/base/version.h"
 #include "routing/search_parameters.h"
 #include "sat/sat_parameters.h"
@@ -69,6 +70,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitGraph(env, exports);
   InitKnapsackSolver(env, exports);
   InitModelBuilder(env, exports);
+  InitMathOpt(env, exports);
   return InitMpSolver(env, exports);
 }
 

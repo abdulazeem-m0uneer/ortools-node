@@ -7,38 +7,11 @@ export type SolveStatusName =
 
 export const SolveStatus: Readonly<{ [K in SolveStatusName]: K }>;
 
-/** Anything usable where an expression is expected. */
-export type LinearExprLike = LinearExpr | number;
+import { BoundedLinearExpression, LinearExpr, LinearExprLike, VariableBase } from './linear_expr';
 
-/** An immutable affine expression: sum(coeff * variable) + constant. */
-export class LinearExpr {
-  protected constructor();
-  static sum(items: readonly LinearExprLike[]): LinearExpr;
-  static weightedSum(items: readonly LinearExprLike[], coeffs: readonly number[]): LinearExpr;
-  static term(item: LinearExprLike, coeff: number): LinearExpr;
-  static affine(item: LinearExprLike, coeff: number, constant: number): LinearExpr;
-  static constant(value: number): LinearExpr;
-  plus(other: LinearExprLike): LinearExpr;
-  minus(other: LinearExprLike): LinearExpr;
-  times(coeff: number): LinearExpr;
-  neg(): LinearExpr;
-  le(rhs: LinearExprLike): BoundedLinearExpression;
-  ge(rhs: LinearExprLike): BoundedLinearExpression;
-  eq(rhs: LinearExprLike): BoundedLinearExpression;
-  readonly constant: number;
-  terms(): Array<[Variable, number]>;
-  toString(): string;
-}
+export { BoundedLinearExpression, LinearExpr, LinearExprLike };
 
-/** lowerBound <= expression <= upperBound; pass it to Model.add(). */
-export class BoundedLinearExpression {
-  constructor(expr: LinearExprLike, lowerBound: number, upperBound: number);
-  readonly expression: LinearExpr;
-  readonly lowerBound: number;
-  readonly upperBound: number;
-}
-
-export class Variable extends LinearExpr {
+export class Variable extends VariableBase {
   private constructor();
   readonly index: number;
   name: string;
