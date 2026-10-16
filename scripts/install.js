@@ -4,7 +4,7 @@
 // otherwise compile the addon from source against ORTOOLS_ROOT.
 
 const { spawnSync } = require('node:child_process');
-const { findPrebuilt, findSourceBuild, notFoundMessage } = require('../lib/loader');
+const { findAddon, notFoundMessage } = require('../lib/loader');
 
 const PACKAGE_NAME = require('../package.json').name;
 
@@ -20,52 +20,40 @@ function buildFromSourceRequested(env) {
 
 /**
  * What the install hook does: { action: 'compile' | 'skip' | 'fail', message,
- * warning? }. `lookupPrebuilt` and `lookupSourceBuild` are findPrebuilt and
- * findSourceBuild (injected for tests). Without a prebuilt or ORTOOLS_ROOT, an
- * existing source build is kept, as `cmake-js compile` used to. A stale
- * ORTOOLS_NODE_PIN cannot block a source build: the lookup is skipped for
- * --build-from-source, and an invalid pin only warns when ORTOOLS_ROOT is set
- * or a source build exists.
+ * warning? }. `lookup` is findAddon (injected for tests), the same resolution
+ * the loader uses, so the hook acts on the addon that would load: a source
+ * build (recompiled when ORTOOLS_ROOT is set, else kept, as `cmake-js compile`
+ * used to), then a prebuilt. --build-from-source skips the lookup, and an
+ * ORTOOLS_NODE_PIN without prebuilts only warns when ORTOOLS_ROOT is set.
  */
-function decideInstall({ env, lookupPrebuilt, lookupSourceBuild }) {
+function decideInstall({ env, lookup }) {
   if (buildFromSourceRequested(env)) {
     return { action: 'compile', message: 'building from source (--build-from-source)' };
   }
-  const source = lookupSourceBuild();
-  let prebuilt;
+  let found;
   try {
-    prebuilt = lookupPrebuilt();
+    found = lookup();
   } catch (err) {
-    if (err.code !== 'ORTOOLS_NODE_INVALID_PIN') throw err;
-    // The loader ignores the pin for source builds, so it must not block one.
-    const decision = sourceBuildDecision(env, source);
-    if (!decision) throw err;
-    return { ...decision, warning: `${err.message}; ignoring it for the source build` };
+    if (err.code !== 'ORTOOLS_NODE_INVALID_PIN' || !env.ORTOOLS_ROOT) throw err;
+    return { ...compileAgainstRoot(env), warning: `${err.message}; ignoring it for the source build` };
   }
-  if (prebuilt.addon) {
-    return { action: 'skip', message: `using the prebuilt addon from ${prebuilt.addon.origin}` };
+  if (found.addon?.origin === 'source build') {
+    if (env.ORTOOLS_ROOT) return { action: 'compile', message: `recompiling the source build against ORTOOLS_ROOT=${env.ORTOOLS_ROOT}` };
+    return {
+      action: 'skip',
+      message: `keeping the source build at ${found.addon.path} (run \`npm run build\` to recompile it)`,
+    };
   }
-  const decision = sourceBuildDecision(env, source);
-  if (decision) return decision;
-  const tried = [...source.tried, ...prebuilt.tried];
+  if (found.addon) return { action: 'skip', message: `using the prebuilt addon from ${found.addon.origin}` };
+  if (env.ORTOOLS_ROOT) return compileAgainstRoot(env);
   return {
     action: 'fail',
-    message: `no prebuilt addon for this system and ORTOOLS_ROOT is not set. ${notFoundMessage(tried, prebuilt.suggested)}`,
+    message: `no prebuilt addon for this system and ORTOOLS_ROOT is not set. ${notFoundMessage(found.tried, found.suggested)}`,
   };
 }
 
-/** Compile against ORTOOLS_ROOT, or keep an existing source build; null when neither applies. */
-function sourceBuildDecision(env, source) {
-  if (env.ORTOOLS_ROOT) {
-    return { action: 'compile', message: `no prebuilt addon; building from source against ORTOOLS_ROOT=${env.ORTOOLS_ROOT}` };
-  }
-  if (source.addon) {
-    return {
-      action: 'skip',
-      message: `keeping the source build at ${source.addon.path} (run \`npm run build\` to recompile it)`,
-    };
-  }
-  return null;
+function compileAgainstRoot(env) {
+  return { action: 'compile', message: `no prebuilt addon; building from source against ORTOOLS_ROOT=${env.ORTOOLS_ROOT}` };
 }
 
 /** Runs `cmake-js compile` with this Node.js; returns its exit code. */
@@ -86,15 +74,14 @@ function compileFromSource(spawn = spawnSync) {
 /** Runs the install hook; returns the process exit code. */
 function main({
   env = process.env,
-  lookupPrebuilt = () => findPrebuilt({ env }),
-  lookupSourceBuild = () => findSourceBuild(),
+  lookup = () => findAddon({ env }),
   compile = compileFromSource,
   log = console.log,
   logError = console.error,
 } = {}) {
   let decision;
   try {
-    decision = decideInstall({ env, lookupPrebuilt, lookupSourceBuild });
+    decision = decideInstall({ env, lookup });
   } catch (err) {
     decision = { action: 'fail', message: err.message };
   }
