@@ -129,6 +129,18 @@ for (const strategy of ['referenceSolutionAcceptanceStrategy', 'bestSolutionAcce
   });
 }
 
+test('a partial override of the current oneof member keeps its other fields', {
+  skip: 'referenceSolutionAcceptanceStrategy' in ils ? false : 'this OR-Tools version has no acceptance-strategy oneofs',
+}, () => {
+  const annealing = ils.referenceSolutionAcceptanceStrategy.simulatedAnnealing;
+  assert.notEqual(annealing.coolingScheduleStrategy, 'LINEAR');
+  const p = validateRoutingSearchParameters({
+    iteratedLocalSearchParameters: { referenceSolutionAcceptanceStrategy: { simulatedAnnealing: { coolingScheduleStrategy: 'LINEAR' } } },
+  });
+  assert.deepEqual(p.iteratedLocalSearchParameters.referenceSolutionAcceptanceStrategy,
+    { simulatedAnnealing: { ...annealing, coolingScheduleStrategy: 'LINEAR' } });
+});
+
 test('the same field given in snake_case and camelCase is a TypeError', () => {
   assert.throws(() => validateRoutingSearchParameters({ logSearch: true, log_search: false }),
     { name: 'TypeError', message: /log_search|logSearch/ });
