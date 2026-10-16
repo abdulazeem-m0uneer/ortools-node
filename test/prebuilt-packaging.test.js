@@ -1,7 +1,9 @@
 'use strict';
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+const { execFileSync, spawnSync } = require('node:child_process');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { ADDON_FILE, PREBUILT_TARGETS } = require('../lib/loader');
 const { collectLibraries, componentOf, licenseExpression, parseNeeded, releaseOf } = require('../scripts/prebuilt/assemble');
@@ -123,4 +125,37 @@ describe('platform package templates', () => {
       for (const field of ['name', 'version', 'license']) assert.equal(template[field], undefined, field);
     });
   }
+});
+
+describe('copy_worktree (scripts/common.sh)', () => {
+  const commonSh = path.join(__dirname, '..', 'scripts', 'common.sh');
+
+  test('copies the working tree and succeeds when the last tracked file was deleted', (t) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ortools-node-worktree-'));
+    t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+    const repo = path.join(tmp, 'repo');
+    const dest = path.join(tmp, 'dest');
+    fs.mkdirSync(path.join(repo, 'sub'), { recursive: true });
+    fs.mkdirSync(dest);
+    fs.writeFileSync(path.join(repo, 'sub', 'kept.txt'), 'kept');
+    fs.writeFileSync(path.join(repo, 'zz-deleted.txt'), 'gone');
+    fs.writeFileSync(path.join(repo, 'untracked.txt'), 'new');
+    fs.writeFileSync(path.join(repo, '.gitignore'), 'ignored.txt\n');
+    fs.writeFileSync(path.join(repo, 'ignored.txt'), 'ignored');
+    const git = (...args) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
+    git('init', '-q');
+    git('add', '.gitignore', 'sub/kept.txt', 'zz-deleted.txt');
+    git('-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', 'init');
+    // git ls-files still lists it, and sorts it last.
+    fs.rmSync(path.join(repo, 'zz-deleted.txt'));
+
+    const script = 'set -euo pipefail; source "$1"; ortools_node_root=$2; copy_worktree "$3"; echo survived';
+    const result = spawnSync('bash', ['-c', script, 'bash', commonSh, repo, dest], { encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stdout.trim(), 'survived');
+    assert.equal(fs.readFileSync(path.join(dest, 'sub', 'kept.txt'), 'utf8'), 'kept');
+    assert.ok(fs.existsSync(path.join(dest, 'untracked.txt')));
+    assert.ok(!fs.existsSync(path.join(dest, 'zz-deleted.txt')));
+    assert.ok(!fs.existsSync(path.join(dest, 'ignored.txt')));
+  });
 });

@@ -55,6 +55,9 @@ fetch_node() {
 copy_worktree() {
   local dest=$1
   git -C "$ortools_node_root" ls-files -z -co --exclude-standard |
-    (cd "$ortools_node_root" && while IFS= read -r -d '' f; do [[ -e "$f" ]] && printf '%s\0' "$f"; done) |
-    (cd "$ortools_node_root" && xargs -0 cp --parents -t "$dest")
+    (cd "$ortools_node_root" && while IFS= read -r -d '' f; do
+      # ls-files also lists tracked files deleted from the working tree; skip them.
+      if [[ -e "$f" ]]; then printf '%s\0' "$f"; fi
+    done) |
+    (cd "$ortools_node_root" && xargs -0 -r cp --parents -t "$dest")
 }
