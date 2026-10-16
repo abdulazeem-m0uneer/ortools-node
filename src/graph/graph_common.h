@@ -4,6 +4,13 @@
 // OR-Tools guards these classes with CHECKs and unchecked vector indexing, so
 // every index and size is validated here before it reaches the library: a bad
 // argument must become a JS exception, never a process abort.
+//
+// Every method follows the same order, because reading a JS Array runs user
+// code (element getters, Proxy traps) that may call dispose() or solve():
+//   1. read every JS argument into C++ values (model-independent limits only);
+//   2. CheckUsable() / CheckResult();
+//   3. only then take get() and check indices against the model's sizes.
+// No model reference is held across a JS read.
 
 #ifndef ORTOOLS_NODE_GRAPH_GRAPH_COMMON_H_
 #define ORTOOLS_NODE_GRAPH_GRAPH_COMMON_H_
@@ -20,6 +27,7 @@
 #include <vector>
 
 #include "common/async_worker.h"
+#include "common/cpp_guard.h"
 
 namespace ortools_node {
 
@@ -31,6 +39,9 @@ struct SolveOutcome {
   const char* status;
   bool has_result;
 };
+
+// Reads one index: an integer number in [0, limit).
+bool ReadIndexBelow(Napi::Env env, const Napi::Value& v, int64_t limit, const char* what, int32_t* out);
 
 // Reads an index list: an Int32Array (copied as is) or anything ReadInt64Array
 // accepts. Every element must lie in [0, limit).
@@ -46,8 +57,17 @@ bool ReadCapacity(Napi::Env env, const Napi::Value& v, int64_t* out);
 // Throws a RangeError unless every size equals the first one.
 bool CheckSameLengths(Napi::Env env, std::initializer_list<size_t> sizes, const char* signature);
 
-// Reads the optional `arcs` argument of flows(): every arc when undefined.
-bool ReadArcSelection(Napi::Env env, const Napi::Value& v, int32_t num_arcs, std::vector<int32_t>* out);
+// Throws the same RangeError as ReadIndexBelow unless index < size.
+bool CheckIndexBelow(Napi::Env env, int32_t index, int64_t size, const char* what);
+
+// The optional `arcs` argument of flows(): read raw first, resolved against
+// the model's arc count once the model is known to be usable.
+struct ArcSelection {
+  bool all = true;
+  std::vector<int32_t> arcs;
+};
+bool ReadArcSelection(Napi::Env env, const Napi::Value& v, ArcSelection* out);
+bool ResolveArcSelection(Napi::Env env, int32_t num_arcs, ArcSelection* selection);
 
 // The arcs [first, first + count) as an Int32Array (what the bulk adders return).
 Napi::Value ArcRangeToJs(Napi::Env env, int32_t first, size_t count);
@@ -74,13 +94,16 @@ class GraphModel {
  public:
   explicit GraphModel(const char* class_name) : class_name_(class_name), model_(std::make_unique<Model>()) {}
 
+  // Only after CheckUsable() / CheckResult(), and after every JS read.
   Model& get() { return *model_; }
   bool busy() const { return solve_state_.busy(); }
 
   // Throws unless the model exists and no solve() is running.
   bool CheckUsable(Napi::Env env) const {
     if (!model_) {
-      Napi::Error::New(env, std::string(class_name_) + " has been disposed").ThrowAsJavaScriptException();
+      Napi::Error::New(env, std::string(class_name_) +
+                                (discarded_ ? " was discarded after running out of memory" : " has been disposed"))
+          .ThrowAsJavaScriptException();
       return false;
     }
     return CheckNotBusy(env, solve_state_, class_name_);
@@ -99,16 +122,28 @@ class GraphModel {
     return true;
   }
 
-  // Every mutation discards the previous result.
-  void MarkChanged() { has_result_ = false; }
+  // Applies a change to the model. Discards the previous result; if OR-Tools
+  // throws (out of memory) the model may be half-changed, so it is discarded
+  // too and the call throws.
+  template <typename F>
+  bool Mutate(Napi::Env env, const char* what, F&& change) {
+    has_result_ = false;
+    if (GuardCpp(env, what, std::forward<F>(change))) return true;
+    model_.reset();
+    discarded_ = true;
+    return false;
+  }
 
-  // Runs `solve` on the threadpool; the Promise resolves to the status name.
+  // Runs `solve` on the threadpool; the Promise resolves to the status name, or
+  // rejects if OR-Tools throws (the graph itself stays usable).
   Napi::Value SolveAsync(const Napi::CallbackInfo& info, std::function<SolveOutcome(Model&)> solve);
 
-  Napi::Value SolveSync(Napi::Env env, const std::function<SolveOutcome(Model&)>& solve) {
+  Napi::Value SolveSync(Napi::Env env, const char* what, const std::function<SolveOutcome(Model&)>& solve) {
     if (!CheckUsable(env)) return env.Undefined();
-    const SolveOutcome outcome = solve(*model_);
-    has_result_ = outcome.has_result;
+    SolveOutcome outcome{"NOT_SOLVED", false};
+    const bool ok = GuardCpp(env, what, [&] { outcome = solve(*model_); });
+    has_result_ = ok && outcome.has_result;
+    if (!ok) return env.Undefined();
     return Napi::String::New(env, outcome.status);
   }
 
@@ -128,6 +163,7 @@ class GraphModel {
   std::unique_ptr<Model> model_;
   AsyncSolveState solve_state_;
   bool has_result_ = false;
+  bool discarded_ = false;  // model_ was dropped after an out-of-memory mutation
 };
 
 template <typename Model>
@@ -138,7 +174,9 @@ class GraphModel<Model>::Worker : public PromiseWorker {
 
  protected:
   // Threadpool: the model is ours alone, every JS-facing call throws while busy.
-  void Execute() override { outcome_ = solve_(*model_->model_); }
+  void Execute() override {
+    RunGuarded("solve", [this] { outcome_ = solve_(*model_->model_); });
+  }
 
   void Finish(bool succeeded) override {
     model_->solve_state_.End();

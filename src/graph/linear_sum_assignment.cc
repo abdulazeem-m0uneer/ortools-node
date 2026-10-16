@@ -13,7 +13,6 @@
 #include <vector>
 
 #include "common/int64.h"
-#include "common/napi_util.h"
 #include "graph/graph.h"
 #include "graph/graph_common.h"
 #include "ortools/graph/assignment.h"
@@ -83,26 +82,21 @@ class LinearSumAssignment : public Napi::ObjectWrap<LinearSumAssignment> {
   Napi::Value IsBusy(const Napi::CallbackInfo& info) { return Napi::Boolean::New(info.Env(), model_.busy()); }
   Napi::Value Dispose(const Napi::CallbackInfo& info) { return model_.Dispose(info.Env()); }
 
-  bool ReadArc(Napi::Env env, const Napi::Value& v, int32_t* arc) {
-    size_t index;
-    if (!ReadIndex(env, v, static_cast<size_t>(model_.get().NumArcs()), "arc", &index)) return false;
-    *arc = static_cast<int32_t>(index);
-    return true;
+  // Reads the arc argument, then checks the model is usable and has that arc.
+  bool ReadExistingArc(Napi::Env env, const Napi::Value& v, int32_t* arc) {
+    return ReadIndexBelow(env, v, kInt32Max, "arc", arc) && model_.CheckUsable(env) &&
+           CheckIndexBelow(env, *arc, model_.get().NumArcs(), "arc");
   }
-  // A node of the current graph (results), in [0, NumNodes()).
-  bool ReadLeftNode(Napi::Env env, const Napi::Value& v, int32_t* node) {
-    size_t index;
-    if (!ReadIndex(env, v, static_cast<size_t>(model_.get().NumNodes()), "left node", &index)) return false;
-    *node = static_cast<int32_t>(index);
-    return true;
+  // Reads a left node, then checks there is a result covering it.
+  bool ReadResultLeftNode(Napi::Env env, const Napi::Value& v, int32_t* node) {
+    return ReadIndexBelow(env, v, kInt32Max, "left node", node) && model_.CheckResult(env) &&
+           CheckIndexBelow(env, *node, model_.get().NumNodes(), "left node");
   }
   // Any node index the graph can grow to.
   static bool ReadNewNode(Napi::Env env, const Napi::Value& v, const char* what, int32_t* node) {
-    size_t index;
-    if (!ReadIndex(env, v, static_cast<size_t>(kMaxNodes), what, &index)) return false;
-    *node = static_cast<int32_t>(index);
-    return true;
+    return ReadIndexBelow(env, v, kMaxNodes, what, node);
   }
+  // Call after CheckUsable().
   bool CheckArcCapacityLeft(Napi::Env env, size_t added) {
     if (static_cast<int64_t>(model_.get().NumArcs()) + static_cast<int64_t>(added) <= kInt32Max) return true;
     Napi::RangeError::New(env, "SimpleLinearSumAssignment: numArcs() must stay <= 2^31 - 1")
@@ -138,20 +132,23 @@ void LinearSumAssignment::Init(Napi::Env env, Napi::Object exports) {
 
 Napi::Value LinearSumAssignment::AddArc(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
   int32_t left, right;
   int64_t cost;
   if (!ReadNewNode(env, info[0], "left node", &left) || !ReadNewNode(env, info[1], "right node", &right) ||
-      !ReadInt64(env, info[2], /*allow_infinite=*/false, "cost", &cost) || !CheckArcCapacityLeft(env, 1)) {
+      !ReadInt64(env, info[2], /*allow_infinite=*/false, "cost", &cost) || !model_.CheckUsable(env) ||
+      !CheckArcCapacityLeft(env, 1)) {
     return env.Undefined();
   }
-  model_.MarkChanged();
-  return Napi::Number::New(env, model_.get().AddArcWithCost(left, right, cost));
+  SimpleLinearSumAssignment& m = model_.get();
+  int32_t arc = 0;
+  if (!model_.Mutate(env, "addArcWithCost", [&] { arc = m.AddArcWithCost(left, right, cost); })) {
+    return env.Undefined();
+  }
+  return Napi::Number::New(env, arc);
 }
 
 Napi::Value LinearSumAssignment::AddArcs(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
   std::vector<int32_t> lefts, rights;
   std::vector<int64_t> costs;
   if (!ReadIndexArray(env, info[0], kMaxNodes, "leftNodes", &lefts) ||
@@ -159,13 +156,16 @@ Napi::Value LinearSumAssignment::AddArcs(const Napi::CallbackInfo& info) {
       !ReadInt64List(env, info[2], /*allow_infinite=*/false, /*non_negative=*/false, "costs", &costs) ||
       !CheckSameLengths(env, {lefts.size(), rights.size(), costs.size()},
                         "addArcsWithCost(leftNodes, rightNodes, costs)") ||
-      !CheckArcCapacityLeft(env, lefts.size())) {
+      !model_.CheckUsable(env) || !CheckArcCapacityLeft(env, lefts.size())) {
     return env.Undefined();
   }
   SimpleLinearSumAssignment& m = model_.get();
   const int32_t first = m.NumArcs();
-  for (size_t i = 0; i < lefts.size(); ++i) m.AddArcWithCost(lefts[i], rights[i], costs[i]);
-  model_.MarkChanged();
+  if (!model_.Mutate(env, "addArcsWithCost", [&] {
+        for (size_t i = 0; i < lefts.size(); ++i) m.AddArcWithCost(lefts[i], rights[i], costs[i]);
+      })) {
+    return env.Undefined();
+  }
   return ArcRangeToJs(env, first, lefts.size());
 }
 
@@ -174,7 +174,7 @@ Napi::Value LinearSumAssignment::AddArcs(const Napi::CallbackInfo& info) {
 Napi::Value LinearSumAssignment::Solve(const Napi::CallbackInfo& info) { return model_.SolveAsync(info, RunSolve); }
 
 Napi::Value LinearSumAssignment::SolveSync(const Napi::CallbackInfo& info) {
-  return model_.SolveSync(info.Env(), RunSolve);
+  return model_.SolveSync(info.Env(), "solveSync", RunSolve);
 }
 
 // ---- results ----------------------------------------------------------------
@@ -188,14 +188,14 @@ Napi::Value LinearSumAssignment::OptimalCost(const Napi::CallbackInfo& info) {
 Napi::Value LinearSumAssignment::RightMate(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t left;
-  if (!model_.CheckResult(env) || !ReadLeftNode(env, info[0], &left)) return env.Undefined();
+  if (!ReadResultLeftNode(env, info[0], &left)) return env.Undefined();
   return Napi::Number::New(env, model_.get().RightMate(left));
 }
 
 Napi::Value LinearSumAssignment::AssignmentCost(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t left;
-  if (!model_.CheckResult(env) || !ReadLeftNode(env, info[0], &left)) return env.Undefined();
+  if (!ReadResultLeftNode(env, info[0], &left)) return env.Undefined();
   return Int64ToJs(env, model_.get().AssignmentCost(left), "assignmentCost");
 }
 
@@ -216,21 +216,21 @@ Napi::Value LinearSumAssignment::NumArcs(const Napi::CallbackInfo& info) {
 Napi::Value LinearSumAssignment::LeftNode(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckUsable(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadExistingArc(env, info[0], &arc)) return env.Undefined();
   return Napi::Number::New(env, model_.get().LeftNode(arc));
 }
 
 Napi::Value LinearSumAssignment::RightNode(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckUsable(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadExistingArc(env, info[0], &arc)) return env.Undefined();
   return Napi::Number::New(env, model_.get().RightNode(arc));
 }
 
 Napi::Value LinearSumAssignment::Cost(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckUsable(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadExistingArc(env, info[0], &arc)) return env.Undefined();
   return Int64ToJs(env, model_.get().Cost(arc), "cost");
 }
 

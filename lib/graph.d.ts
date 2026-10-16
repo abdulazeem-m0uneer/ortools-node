@@ -14,6 +14,10 @@
 // * Results throw unless the last solve returned OPTIMAL and the graph has not
 //   changed since. Every call throws while a solve() is pending, and after
 //   dispose().
+// * Memory grows with the largest node index. When OR-Tools runs out of
+//   memory, the call throws a RangeError instead of aborting the process (an
+//   async solve() rejects). A failed change discards the instance (later calls
+//   throw); a failed solve keeps the graph.
 
 /** An integer number or a BigInt holding an int64. */
 export type Int64Input = number | bigint;
