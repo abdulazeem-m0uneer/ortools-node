@@ -3,3 +3,4 @@ build/
 *.node
 bench/.venv/
 __pycache__/
+dist/

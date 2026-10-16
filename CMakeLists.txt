@@ -50,12 +50,26 @@ add_library(${PROJECT_NAME} SHARED
   ${CMAKE_JS_SRC}
 )
 
+# Prebuilt platform packages ship the OR-Tools shared libraries next to the
+# addon (scripts/package-prebuilt.sh), so the addon must look beside itself.
+option(ORTOOLS_NODE_PREBUILT "Search for OR-Tools libraries next to the addon (\$ORIGIN)" OFF)
+if(ORTOOLS_NODE_PREBUILT)
+  if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    message(FATAL_ERROR "ORTOOLS_NODE_PREBUILT is only supported on Linux")
+  endif()
+  set(ORTOOLS_NODE_RPATH "\$ORIGIN")
+  # DT_RUNPATH, not the older DT_RPATH that some toolchains still default to.
+  target_link_options(${PROJECT_NAME} PRIVATE "LINKER:--enable-new-dtags")
+else()
+  # Let the loader find libortools.so / libortools.dylib where OR-Tools is installed.
+  set(ORTOOLS_NODE_RPATH "$<TARGET_FILE_DIR:ortools::ortools>")
+endif()
+
 set_target_properties(${PROJECT_NAME} PROPERTIES
   PREFIX ""
   SUFFIX ".node"
-  # Let the loader find libortools.so / libortools.dylib next to where it was built.
-  BUILD_RPATH "$<TARGET_FILE_DIR:ortools::ortools>"
-  INSTALL_RPATH "$<TARGET_FILE_DIR:ortools::ortools>"
+  BUILD_RPATH "${ORTOOLS_NODE_RPATH}"
+  INSTALL_RPATH "${ORTOOLS_NODE_RPATH}"
   BUILD_WITH_INSTALL_RPATH TRUE
 )
 

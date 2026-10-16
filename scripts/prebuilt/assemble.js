@@ -1,0 +1,225 @@
+'use strict';
+
+// Assembles a prebuilt platform package directory: the addon, every OR-Tools
+// shared library it needs (found by following DT_NEEDED with readelf), the
+// licence files shipped in the OR-Tools archive, a third-party notice and a
+// package.json made from npm/<target>/package.json.
+//
+// Usage: node scripts/prebuilt/assemble.js <target> <ortools-version> <addon> <ortools-root> <out-dir>
+// Example: node scripts/prebuilt/assemble.js linux-x64-gnu 9.15.6755 build/Release/ortools_node.node /opt/or-tools pkg
+//
+// It fails when the addon needs a library that is neither in the OR-Tools
+// archive nor part of the base system, or one with no known licence below.
+
+const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
+const path = require('node:path');
+const { ADDON_FILE, ORTOOLS_RELEASES, prebuiltPackageName } = require('../../lib/loader');
+
+const REPO_ROOT = path.join(__dirname, '..', '..');
+
+/** Libraries every glibc system provides; never bundled. */
+const SYSTEM_LIBRARIES = new Set([
+  'libc.so.6',
+  'libm.so.6',
+  'libdl.so.2',
+  'libpthread.so.0',
+  'librt.so.1',
+  'libstdc++.so.6',
+  'libgcc_s.so.1',
+  'ld-linux-x86-64.so.2',
+  'ld-linux-aarch64.so.1',
+]);
+
+/** What each bundled library is, and its licence. A library must match one entry. */
+const COMPONENTS = [
+  { name: 'OR-Tools', spdx: 'Apache-2.0', url: 'https://github.com/google/or-tools', match: /^libortools(?:_flatzinc)?\.so/ },
+  { name: 'Abseil', spdx: 'Apache-2.0', url: 'https://github.com/abseil/abseil-cpp', match: /^libabsl_\w+\.so/ },
+  { name: 'Protocol Buffers', spdx: 'BSD-3-Clause', url: 'https://github.com/protocolbuffers/protobuf', match: /^libproto(?:buf|buf-lite|c)\.so/ },
+  { name: 'utf8_range (part of Protocol Buffers)', spdx: 'MIT', url: 'https://github.com/protocolbuffers/protobuf/tree/main/third_party/utf8_range', match: /^libutf8_(?:range|validity)\.so/ },
+  { name: 'RE2', spdx: 'BSD-3-Clause', url: 'https://github.com/google/re2', match: /^libre2\.so/ },
+  { name: 'HiGHS', spdx: 'MIT', url: 'https://github.com/ERGO-Code/HiGHS', match: /^libhighs\.so/ },
+  { name: 'SCIP', spdx: 'Apache-2.0', url: 'https://github.com/scipopt/scip', match: /^libscip\.so/ },
+  { name: 'SoPlex', spdx: 'Apache-2.0', url: 'https://github.com/scipopt/soplex', match: /^libsoplex\w*\.so/ },
+  { name: 'COIN-OR Cbc, Cgl, Clp, CoinUtils and Osi', spdx: 'EPL-2.0', url: 'https://github.com/coin-or', match: /^lib(?:Cbc|CbcSolver|Cgl|Clp|ClpSolver|CoinUtils|Osi|OsiCbc|OsiClp)\.so/ },
+  { name: 'zlib', spdx: 'Zlib', url: 'https://zlib.net', match: /^libz\.so/ },
+  { name: 'bzip2', spdx: 'bzip2-1.0.6', url: 'https://sourceware.org/bzip2/', match: /^libbz2\.so/ },
+];
+
+/** DT_NEEDED entries from `readelf -d` output. */
+function parseNeeded(readelfOutput) {
+  return [...readelfOutput.matchAll(/\(NEEDED\)\s+Shared library: \[([^\]]+)\]/g)].map((m) => m[1]);
+}
+
+function readNeeded(file) {
+  return parseNeeded(execFileSync('readelf', ['-d', file], { encoding: 'utf8' }));
+}
+
+/** The component a bundled library belongs to; throws for an unknown one. */
+function componentOf(soname) {
+  const component = COMPONENTS.find((c) => c.match.test(soname));
+  if (!component) {
+    throw new Error(`${soname} is not a known OR-Tools dependency; add it to COMPONENTS in ${__filename} with its licence`);
+  }
+  return component;
+}
+
+/**
+ * Every library the addon needs, transitively, split into the ones to bundle
+ * (found in libDir) and the system ones. Throws on anything else.
+ */
+function collectLibraries(addon, { libDir, needed = readNeeded, exists = fs.existsSync }) {
+  const bundled = new Set();
+  const system = new Set();
+  const queue = [addon];
+  while (queue.length > 0) {
+    const file = queue.shift();
+    for (const soname of needed(file)) {
+      if (bundled.has(soname) || system.has(soname)) continue;
+      const candidate = path.join(libDir, soname);
+      if (exists(candidate)) {
+        bundled.add(soname);
+        queue.push(candidate);
+      } else if (SYSTEM_LIBRARIES.has(soname)) {
+        system.add(soname);
+      } else {
+        throw new Error(`${path.basename(file)} needs ${soname}, which is neither in ${libDir} nor a base system library`);
+      }
+    }
+  }
+  return { bundled: [...bundled].sort(), system: [...system].sort() };
+}
+
+/** The OR-Tools library directory: lib64/ in the AlmaLinux archives, lib/ elsewhere. */
+function findLibDir(ortoolsRoot) {
+  for (const dir of ['lib64', 'lib']) {
+    const full = path.join(ortoolsRoot, dir);
+    if (fs.existsSync(full) && fs.readdirSync(full).some((f) => f.startsWith('libortools.so'))) return full;
+  }
+  throw new Error(`No libortools.so under ${ortoolsRoot}/lib64 or ${ortoolsRoot}/lib`);
+}
+
+/** The npm `license` expression: this addon (MIT) plus each bundled component's licence. */
+function licenseExpression(components) {
+  const ids = new Set(['MIT', ...components.map((c) => c.spdx)]);
+  return [...ids].join(' AND ');
+}
+
+function noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenceFiles) {
+  const rows = components.map(
+    (c) => `| [${c.name}](${c.url}) | ${c.spdx} | ${librariesByComponent.get(c).map((l) => `\`${l}\``).join(', ')} |`,
+  );
+  return [
+    '# Third-party notices',
+    '',
+    `This package bundles shared libraries from the OR-Tools ${ortoolsVersion} C++ release`,
+    '(https://github.com/google/or-tools/releases). The addon itself is MIT-licensed (LICENSE).',
+    'The libraries may also contain code that their projects link statically.',
+    '',
+    '| Component | Licence | Libraries |',
+    '| :-- | :-- | :-- |',
+    ...rows,
+    '',
+    'Licence texts shipped in the OR-Tools archive are in LICENSES/:',
+    '',
+    ...licenceFiles.map((f) => `- \`${f}\``),
+    '',
+  ].join('\n');
+}
+
+function readmeMarkdown(name, ortoolsVersion) {
+  return [
+    `# ${name}`,
+    '',
+    `The [ortools-node](https://www.npmjs.com/package/ortools-node) addon prebuilt against OR-Tools ${ortoolsVersion},`,
+    'with the OR-Tools shared libraries it needs. Install `ortools-node`; it loads this package when it',
+    'matches your system. With packages for several OR-Tools releases installed, ortools-node loads the',
+    'newest unless `ORTOOLS_NODE_PIN` names one (for example `ORTOOLS_NODE_PIN=9.14`).',
+    '',
+    'See THIRD_PARTY_NOTICES.md for the bundled libraries and their licences.',
+    '',
+  ].join('\n');
+}
+
+function ortoolsLicence(ortoolsRoot) {
+  return path.join(ortoolsRoot, 'share', 'doc', 'ortools', 'LICENSE');
+}
+
+/** Copies the licence files of the OR-Tools archive; returns their paths in the package. */
+function copyLicences(ortoolsRoot, outDir) {
+  fs.cpSync(ortoolsLicence(ortoolsRoot), path.join(outDir, 'LICENSES', 'or-tools', 'LICENSE'));
+  const thirdParty = path.join(ortoolsRoot, 'share', 'licenses');
+  if (fs.existsSync(thirdParty)) {
+    fs.cpSync(thirdParty, path.join(outDir, 'LICENSES'), { recursive: true, dereference: true });
+  }
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(path.join(outDir, dir), { withFileTypes: true })) {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(rel);
+      else files.push(rel);
+    }
+  };
+  walk('LICENSES');
+  return files.sort();
+}
+
+function releaseOf(ortoolsVersion) {
+  const match = /^(\d+\.\d+)\.\d+$/.exec(ortoolsVersion);
+  if (!match || !ORTOOLS_RELEASES.includes(match[1])) {
+    throw new Error(`Unsupported OR-Tools version '${ortoolsVersion}' (releases: ${ORTOOLS_RELEASES.join(', ')})`);
+  }
+  return match[1];
+}
+
+function assemble({ target, ortoolsVersion, addon, ortoolsRoot, outDir }) {
+  const templateFile = path.join(REPO_ROOT, 'npm', target, 'package.json');
+  if (!fs.existsSync(templateFile)) throw new Error(`No package template for target '${target}' (${templateFile})`);
+  const name = prebuiltPackageName(target, releaseOf(ortoolsVersion));
+  const libDir = findLibDir(ortoolsRoot);
+  const { bundled, system } = collectLibraries(addon, { libDir });
+  const librariesByComponent = new Map();
+  for (const soname of bundled) {
+    const component = componentOf(soname);
+    librariesByComponent.set(component, [...(librariesByComponent.get(component) ?? []), soname]);
+  }
+  const components = COMPONENTS.filter((c) => librariesByComponent.has(c));
+
+  if (!fs.existsSync(ortoolsLicence(ortoolsRoot))) {
+    throw new Error(`The OR-Tools archive has no licence at ${ortoolsLicence(ortoolsRoot)}`);
+  }
+  if (fs.existsSync(outDir)) throw new Error(`${outDir} already exists`);
+  fs.mkdirSync(outDir, { recursive: true });
+  fs.copyFileSync(addon, path.join(outDir, ADDON_FILE));
+  // Copy each library's real file under its SONAME: npm pack does not keep symlinks.
+  for (const soname of bundled) fs.copyFileSync(path.join(libDir, soname), path.join(outDir, soname));
+
+  const licenceFiles = copyLicences(ortoolsRoot, outDir);
+  fs.copyFileSync(path.join(REPO_ROOT, 'LICENSE'), path.join(outDir, 'LICENSE'));
+  fs.writeFileSync(path.join(outDir, 'THIRD_PARTY_NOTICES.md'), noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenceFiles));
+  fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, ortoolsVersion));
+
+  const template = JSON.parse(fs.readFileSync(templateFile, 'utf8'));
+  const { version } = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+  const manifest = {
+    name,
+    version,
+    ...template,
+    description: `${template.description}, built against OR-Tools ${ortoolsVersion}`,
+    license: licenseExpression(components),
+  };
+  fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  return { name, bundled, system };
+}
+
+if (require.main === module) {
+  const [target, ortoolsVersion, addon, ortoolsRoot, outDir] = process.argv.slice(2);
+  if (!outDir) {
+    console.error('usage: node scripts/prebuilt/assemble.js <target> <ortools-version> <addon> <ortools-root> <out-dir>');
+    process.exit(2);
+  }
+  const result = assemble({ target, ortoolsVersion, addon, ortoolsRoot, outDir });
+  console.log(`${result.name}: bundled ${result.bundled.length} libraries; needs from the system: ${result.system.join(' ')}`);
+}
+
+module.exports = { collectLibraries, componentOf, licenseExpression, parseNeeded, releaseOf };

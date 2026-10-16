@@ -1,0 +1,21 @@
+{
+  "description": "Prebuilt ortools-node addon for Linux x64 (glibc 2.28 or newer) with the OR-Tools shared libraries it needs",
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "libc": ["glibc"],
+  "main": "ortools_node.node",
+  "files": ["ortools_node.node", "*.so*", "LICENSES/", "THIRD_PARTY_NOTICES.md"],
+  "engines": {
+    "node": ">=22"
+  },
+  "homepage": "https://github.com/abdulazeem-m0uneer/ortools-node#readme",
+  "bugs": {
+    "url": "https://github.com/abdulazeem-m0uneer/ortools-node/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abdulazeem-m0uneer/ortools-node.git",
+    "directory": "npm/linux-x64-gnu"
+  },
+  "author": "Abdulazeem Mouneer (https://github.com/abdulazeem-m0uneer)"
+}
