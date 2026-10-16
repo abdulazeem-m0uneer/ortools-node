@@ -20,6 +20,7 @@
 #include <string>
 
 #include "common/async_worker.h"
+#include "common/cpp_guard.h"
 #include "common/napi_util.h"
 #include "ortools/linear_solver/linear_solver.h"
 
@@ -191,7 +192,8 @@ class SolveWorker : public PromiseWorker {
  protected:
   void Execute() override {
     // Runs on the threadpool.  Do NOT touch any Napi:: value here.
-    status_ = wrapper_->raw()->Solve();
+    const std::string error = GuardCppOffThread("solve", [this] { status_ = wrapper_->raw()->Solve(); });
+    if (!error.empty()) SetError(error);
   }
 
   void Finish(bool succeeded) override {
@@ -301,7 +303,7 @@ Napi::Value Solver::AddVariable(const Napi::CallbackInfo& info) {
   bool integer = info[2].As<Napi::Boolean>().Value();
   std::string name = (info.Length() > 3 && info[3].IsString()) ? info[3].As<Napi::String>().Utf8Value() : "";
   if (name.empty()) name = "x" + std::to_string(solver_->variables().size());
-  solver_->MakeVar(lb, ub, integer, name);
+  if (!GuardCpp(env, "addVariable", [&] { solver_->MakeVar(lb, ub, integer, name); })) return env.Undefined();
   MarkModelChanged();
   return Napi::Number::New(env, static_cast<double>(solver_->variables().size() - 1));
 }
@@ -316,7 +318,7 @@ Napi::Value Solver::AddConstraint(const Napi::CallbackInfo& info) {
   if (!ReadBound(env, info[0], "lb", &lb) || !ReadBound(env, info[1], "ub", &ub)) return env.Undefined();
   std::string name = (info.Length() > 2 && info[2].IsString()) ? info[2].As<Napi::String>().Utf8Value() : "";
   if (name.empty()) name = "c" + std::to_string(solver_->constraints().size());
-  solver_->MakeRowConstraint(lb, ub, name);
+  if (!GuardCpp(env, "addConstraint", [&] { solver_->MakeRowConstraint(lb, ub, name); })) return env.Undefined();
   MarkModelChanged();
   return Napi::Number::New(env, static_cast<double>(solver_->constraints().size() - 1));
 }
@@ -484,7 +486,11 @@ Napi::Value Solver::Solve(const Napi::CallbackInfo& info) {
 Napi::Value Solver::SolveSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  MPSolver::ResultStatus status = solver_->Solve();
+  MPSolver::ResultStatus status = MPSolver::NOT_SOLVED;
+  if (!GuardCpp(env, "solveSync", [&] { status = solver_->Solve(); })) {
+    MarkModelChanged();
+    return env.Undefined();
+  }
   FinishSolve(status);
   return Napi::String::New(env, StatusToString(status));
 }
@@ -578,7 +584,11 @@ Napi::Value Solver::ExportModelAsLpFormat(const Napi::CallbackInfo& info) {
   if (!CheckUsable(env)) return env.Undefined();
   bool obfuscated = info.Length() > 0 && info[0].IsBoolean() && info[0].As<Napi::Boolean>().Value();
   std::string model;
-  if (!solver_->ExportModelAsLpFormat(obfuscated, &model)) {
+  bool exported = false;
+  if (!GuardCpp(env, "exportModelAsLpFormat", [&] { exported = solver_->ExportModelAsLpFormat(obfuscated, &model); })) {
+    return env.Undefined();
+  }
+  if (!exported) {
     THROW_AND_RETURN(env, "exportModelAsLpFormat failed", env.Undefined());
   }
   return Napi::String::New(env, model);
@@ -590,7 +600,12 @@ Napi::Value Solver::ExportModelAsMpsFormat(const Napi::CallbackInfo& info) {
   bool fixed = info.Length() > 0 && info[0].IsBoolean() && info[0].As<Napi::Boolean>().Value();
   bool obfuscated = info.Length() > 1 && info[1].IsBoolean() && info[1].As<Napi::Boolean>().Value();
   std::string model;
-  if (!solver_->ExportModelAsMpsFormat(fixed, obfuscated, &model)) {
+  bool exported = false;
+  if (!GuardCpp(env, "exportModelAsMpsFormat",
+                [&] { exported = solver_->ExportModelAsMpsFormat(fixed, obfuscated, &model); })) {
+    return env.Undefined();
+  }
+  if (!exported) {
     THROW_AND_RETURN(env, "exportModelAsMpsFormat failed", env.Undefined());
   }
   return Napi::String::New(env, model);
