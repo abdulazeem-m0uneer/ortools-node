@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "target": "es2022",
+    "module": "commonjs"
+  },
+  "files": ["lib/index.d.ts"],
+  "include": ["test/types/*.ts"]
+}
