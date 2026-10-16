@@ -22,34 +22,17 @@ case "$arch" in
   *) echo "Unknown arch '$arch' (expected x64 or arm64)" >&2; exit 2 ;;
 esac
 
-root=$(cd "$(dirname "$0")/.." && pwd)
-archive=or-tools_${archive_os}_cpp_v${version}.tar.gz
-expected=$(grep -F " $archive" "$root/.github/ortools-sha256.txt" | cut -d' ' -f1 || true)
-if [[ -z "$expected" ]]; then
-  echo "No pinned SHA-256 for $archive in .github/ortools-sha256.txt" >&2
-  exit 1
-fi
+# shellcheck source=scripts/common.sh
+source "$(dirname "$0")/common.sh"
+archive=$(fetch_ortools_archive "or-tools_${archive_os}_cpp_v${version}.tar.gz" "$version")
 
-cache=${ORTOOLS_NODE_CACHE:-$HOME/.cache/ortools-node}
-mkdir -p "$cache"
-if [[ ! -f "$cache/$archive" ]]; then
-  curl -fsSL --retry 3 -o "$cache/$archive.part" \
-    "https://github.com/google/or-tools/releases/download/v${version%.*}/$archive"
-  mv "$cache/$archive.part" "$cache/$archive"
-fi
-echo "$expected  $cache/$archive" | sha256sum --check -
-
-# Copy the working tree (tracked and untracked, minus ignored files) so the
-# container builds exactly what is on disk and never writes into the checkout.
 src=$(mktemp -d)
 trap 'rm -rf "$src"' EXIT
-git -C "$root" ls-files -z -co --exclude-standard |
-  (cd "$root" && while IFS= read -r -d '' f; do [[ -e "$f" ]] && printf '%s\0' "$f"; done) |
-  (cd "$root" && xargs -0 cp --parents -t "$src")
+copy_worktree "$src"
 
 docker run --rm --platform "$platform" \
   -v "$src:/src:ro" \
-  -v "$cache/$archive:/ortools.tar.gz:ro" \
+  -v "$archive:/ortools.tar.gz:ro" \
   -e NODE_MAJOR="$node_major" -e NODE_ARCH="$node_arch" -e EXPECTED_VERSION="$version" \
   ubuntu:24.04 bash -euo pipefail -c '
     export DEBIAN_FRONTEND=noninteractive
