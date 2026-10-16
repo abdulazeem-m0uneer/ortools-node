@@ -10,6 +10,7 @@
 
 #include "absl/log/initialize.h"
 #include "absl/log/internal/globals.h"
+#include "algorithms/knapsack_solver.h"
 #include "common/cpp_guard_testing.h"
 #include "common/int64.h"
 #include "graph/graph.h"
@@ -65,6 +66,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitRoutingSearchParameters(env, exports);
   InitSatParameters(env, exports);
   InitGraph(env, exports);
+  InitKnapsackSolver(env, exports);
   return InitMpSolver(env, exports);
 }
 

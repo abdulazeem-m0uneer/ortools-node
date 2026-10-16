@@ -36,6 +36,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   graph. Running out of memory on a huge node index throws a RangeError, and
   user code run while reading array arguments (getters that dispose, solve or
   throw) cannot crash them.
+- `KnapsackSolver` (OR-Tools' `KnapsackSolver`): 0-1 knapsack problems with one
+  or several dimensions, `solve()` off the main thread or `solveSync()`, time
+  limit and reduction settings. `KnapsackSolverType` lists the solver types this
+  build can run. Malformed problems throw JS errors instead of aborting.
 
 ### Changed
 
