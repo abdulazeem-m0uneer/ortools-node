@@ -98,10 +98,14 @@ bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, go
     Napi::TypeError::New(env, std::string(what) + " must be a JSON string").ThrowAsJavaScriptException();
     return false;
   }
+  return ParseProtoJson(env, json.As<Napi::String>().Utf8Value(), what, out);
+}
+
+bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, google::protobuf::Message* out) {
   out->Clear();
   google::protobuf::json::ParseOptions options;
   options.ignore_unknown_fields = false;
-  absl::Status status = google::protobuf::json::JsonStringToMessage(json.As<Napi::String>().Utf8Value(), out, options);
+  absl::Status status = google::protobuf::json::JsonStringToMessage(json, out, options);
   const std::string error = status.ok() ? FindInvalidValue(*out, "") : std::string(status.message());
   if (!error.empty()) {
     Napi::TypeError::New(env, absl::StrCat("Invalid ", what, ": ", error)).ThrowAsJavaScriptException();

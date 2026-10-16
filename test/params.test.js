@@ -228,6 +228,69 @@ test('SAT parameters keep only the fields that were set', () => {
   assert.equal(p.numWorkers, 1);
   assert.equal('randomSeed' in p, false);
 });
+// ---- input checks ---------------------------------------------------------------
+
+test('null, undefined and holes inside repeated fields are TypeErrors naming the element', () => {
+  for (const restartAlgorithms of [[null, 'LUBY_RESTART'], [undefined, 'LUBY_RESTART'], new Array(2)]) {
+    assert.throws(() => validateSatParameters({ restartAlgorithms }), { name: 'TypeError', message: /'restartAlgorithms\[0\]' must not be null/ });
+  }
+  assert.throws(() => validateSatParameters({ ignoreSubsolvers: ['default_lp', undefined] }),
+    { name: 'TypeError', message: /'ignoreSubsolvers\[1\]'/ });
+  assert.throws(() => validateSatParameters({ subsolverParams: [{ name: 'a', restartAlgorithms: [null] }] }),
+    { name: 'TypeError', message: /'subsolverParams\[0\]\.restartAlgorithms\[0\]'/ });
+  assert.throws(() => validateRoutingSearchParameters({ iteratedLocalSearchParameters: { ruinRecreateParameters: { ruinStrategies: [null] } } }),
+    { name: 'TypeError', message: /'iteratedLocalSearchParameters\.ruinRecreateParameters\.ruinStrategies\[0\]'/ });
+  assert.deepEqual(validateSatParameters({ restartAlgorithms: [] }).restartAlgorithms, []);
+});
+
+test('±Infinity numbers are accepted only for float and double fields', () => {
+  assert.throws(() => validateRoutingSearchParameters({ logTag: Infinity }), { name: 'TypeError', message: /'logTag'.*Infinity/ });
+  assert.throws(() => validateSatParameters({ name: -Infinity }), { name: 'TypeError', message: /'name'.*Infinity/ });
+  assert.throws(() => validateSatParameters({ numWorkers: Infinity }), TypeError);
+  assert.throws(() => validateSatParameters({ subsolverParams: [{ name: Infinity }] }),
+    { name: 'TypeError', message: /'subsolverParams\[0\]\.name'/ });
+  assert.equal(validateSatParameters({ subsolverParams: [{ name: 'a', maxTimeInSeconds: Infinity }] })
+    .subsolverParams[0].maxTimeInSeconds, Infinity);
+  assert.equal(validateSatParameters({ maxTimeInSeconds: Infinity }).maxTimeInSeconds, Infinity);
+  assert.throws(() => validateSatParameters({ name: '\u0000+Infinity' }), { name: 'TypeError', message: /'name' is reserved/ });
+});
+
+test('NaN errors give the full path of the field', () => {
+  assert.throws(() => validateSatParameters({ subsolverParams: [{ name: 'a', maxTimeInSeconds: NaN }] }),
+    { name: 'TypeError', message: /'subsolverParams\[0\]\.maxTimeInSeconds' must not be NaN/ });
+  assert.throws(() => validateRoutingSearchParameters({ savingsParameters: { neighborsRatio: NaN } }),
+    { name: 'TypeError', message: /'savingsParameters\.neighborsRatio' must not be NaN/ });
+});
+
+test('boxed primitives are unwrapped before the NaN and Infinity checks', () => {
+  assert.equal(validateSatParameters({ maxTimeInSeconds: new Number(Infinity) }).maxTimeInSeconds, Infinity);
+  assert.throws(() => validateSatParameters({ maxTimeInSeconds: new Number(NaN) }),
+    { name: 'TypeError', message: /'maxTimeInSeconds' must not be NaN/ });
+  assert.equal(validateRoutingSearchParameters({ firstSolutionStrategy: new String('SAVINGS') }).firstSolutionStrategy, 'SAVINGS');
+  assert.equal(validateSatParameters({ logSearchProgress: new Boolean(true) }).logSearchProgress, true);
+});
+
+test('values that are not JSON data are TypeErrors naming the path', () => {
+  const cases = [
+    [{ localSearchOperators: new Map([['useRelocate', 'BOOL_FALSE']]) }, /'localSearchOperators'/],
+    [{ localSearchOperators: { useRelocate: Symbol('BOOL_FALSE') } }, /'localSearchOperators\.useRelocate'/],
+    [{ logTag: () => 'x' }, /'logTag'/],
+    [{ savingsParameters: new (class Savings {})() }, /'savingsParameters'/],
+    [{ iteratedLocalSearchParameters: { ruinRecreateParameters: { ruinStrategies: [new Set()] } } },
+      /'iteratedLocalSearchParameters\.ruinRecreateParameters\.ruinStrategies\[0\]'/],
+  ];
+  for (const [params, message] of cases) {
+    assert.throws(() => validateRoutingSearchParameters(params), { name: 'TypeError', message });
+  }
+  // JSON.stringify's own conversions still apply.
+  assert.equal(validateRoutingSearchParameters({ timeLimit: { toJSON: () => '2s' } }).timeLimit, '2s');
+});
+
+test('the same field twice inside a repeated message is a TypeError', () => {
+  assert.throws(() => validateSatParameters({ subsolverParams: [{ name: 'a', numWorkers: 1, num_workers: 2 }] }),
+    { name: 'TypeError', message: /subsolverParams\[0\]/ });
+});
+
 
 test('infinite SAT values round-trip as numbers', () => {
   assert.equal(validateSatParameters({ maxTimeInSeconds: Infinity }).maxTimeInSeconds, Infinity);
