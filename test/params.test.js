@@ -189,6 +189,30 @@ test('integer fields take any exact integer given as a JS number', () => {
   assert.equal(validateSatParameters({ randomSeed: 2 ** 31 - 1 }).randomSeed, 2 ** 31 - 1);
 });
 
+test('integer fields given as strings take only canonical decimals that fit the field type', () => {
+  for (const bad of ['1e3', '007', ' 7', '7 ', '+7', '-0', '1.5', '', '-', '0x10']) {
+    assert.throws(() => validateRoutingSearchParameters({ solutionLimit: bad }),
+      { name: 'TypeError', message: /'solutionLimit' must be an integer/ }, JSON.stringify(bad));
+  }
+  for (const bad of ['2147483648', '-2147483649']) {
+    assert.throws(() => validateSatParameters({ randomSeed: bad }), { name: 'TypeError', message: /'randomSeed' must fit in int32/ });
+  }
+  for (const good of ['2147483647', '-2147483648', '0']) assert.equal(validateSatParameters({ randomSeed: good }).randomSeed, Number(good));
+  for (const bad of ['9223372036854775808', '-9223372036854775809']) {
+    assert.throws(() => validateSatParameters({ maxNumberOfConflicts: bad }),
+      { name: 'TypeError', message: /'maxNumberOfConflicts' must fit in int64/ });
+  }
+  for (const good of ['9223372036854775807', '-9223372036854775808', '7']) {
+    assert.equal(validateSatParameters({ maxNumberOfConflicts: good }).maxNumberOfConflicts, good);
+  }
+  const ruin = (value) => ({ iteratedLocalSearchParameters: { ruinRecreateParameters: { routeSelectionMinNeighbors: value } } });
+  for (const bad of ['-1', '4294967296']) {
+    assert.throws(() => validateRoutingSearchParameters(ruin(bad)),
+      { name: 'TypeError', message: /'iteratedLocalSearchParameters\.ruinRecreateParameters\.routeSelectionMinNeighbors' must fit in uint32/ });
+  }
+  assert.equal(validateRoutingSearchParameters(ruin('7')).iteratedLocalSearchParameters.ruinRecreateParameters.routeSelectionMinNeighbors, 7);
+});
+
 test('integer fields reject numbers that are not integers or do not fit the field type', () => {
   assert.throws(() => validateSatParameters({ numWorkers: 1e16 }),
     { name: 'TypeError', message: /'numWorkers' must fit in int32/ });

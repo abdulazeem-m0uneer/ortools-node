@@ -1,16 +1,21 @@
 #include "common/proto_merge.h"
 
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/strings/ascii.h"
 #include "absl/strings/match.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "common/proto_json.h"
 #include "google/protobuf/json/json.h"
 #include "google/protobuf/struct.pb.h"
@@ -91,6 +96,51 @@ std::string FindInfinityMarker(const Value& value, const std::string& path) {
 
 std::string CheckObject(Struct* object, const Descriptor* descriptor, const std::string& path);
 
+std::string NotAnIntegerError(const std::string& path) { return absl::StrCat("'", path, "' must be an integer"); }
+
+std::string OutOfRangeError(const std::string& path, const FieldDescriptor* field) {
+  return absl::StrCat("'", path, "' must fit in ", FieldDescriptor::CppTypeName(field->cpp_type()));
+}
+
+// -?(0|[1-9][0-9]*), and not "-0".
+bool IsCanonicalInteger(absl::string_view text) {
+  if (absl::ConsumePrefix(&text, "-") && text == "0") return false;
+  if (text.empty() || !std::all_of(text.begin(), text.end(), absl::ascii_isdigit)) return false;
+  return text == "0" || text.front() != '0';
+}
+
+// protobuf's parser also takes "1e3", "007" or "+7" for an integer field, and
+// reports overflow in its own words. Only a canonical decimal that fits passes.
+std::string CheckIntegerString(const std::string& text, const FieldDescriptor* field, const std::string& path) {
+  bool fits = false;
+  switch (field->cpp_type()) {
+    case FieldDescriptor::CPPTYPE_INT32: {
+      int32_t parsed;
+      fits = absl::SimpleAtoi(text, &parsed);
+      break;
+    }
+    case FieldDescriptor::CPPTYPE_UINT32: {
+      uint32_t parsed;
+      fits = absl::SimpleAtoi(text, &parsed);
+      break;
+    }
+    case FieldDescriptor::CPPTYPE_INT64: {
+      int64_t parsed;
+      fits = absl::SimpleAtoi(text, &parsed);
+      break;
+    }
+    case FieldDescriptor::CPPTYPE_UINT64: {
+      uint64_t parsed;
+      fits = absl::SimpleAtoi(text, &parsed);
+      break;
+    }
+    default:
+      return "";
+  }
+  if (!IsCanonicalInteger(text)) return NotAnIntegerError(path);
+  return fits ? "" : OutOfRangeError(path, field);
+}
+
 // The Struct holds numbers as doubles, and printing it again would write large
 // integers in exponent form ("1e+18"), which protobuf's integer parser refuses.
 // So a number given to an integer field must be integral and in range, and is
@@ -117,9 +167,9 @@ std::string CheckIntegerNumber(Value* value, const FieldDescriptor* field, const
       return "";
   }
   const double number = value->number_value();
-  if (number != std::trunc(number)) return absl::StrCat("'", path, "' must be an integer");
+  if (number != std::trunc(number)) return NotAnIntegerError(path);
   if (number < lower || number >= upper) {
-    return absl::StrCat("'", path, "' must fit in ", FieldDescriptor::CppTypeName(field->cpp_type()));
+    return OutOfRangeError(path, field);
   }
   value->set_string_value(absl::StrFormat("%.0f", number + 0.0));  // + 0.0 turns -0 into 0
   return "";
@@ -157,7 +207,8 @@ std::string CheckValue(Value* value, const FieldDescriptor* field, const std::st
     case Value::kStringValue: {
       const bool plus = value->string_value() == kPlusInfinityMarker;
       if (!plus && value->string_value() != kMinusInfinityMarker) {
-        return ContainsInfinityMarker(value->string_value()) ? MarkerInValueError(path) : "";
+        if (ContainsInfinityMarker(value->string_value())) return MarkerInValueError(path);
+        return CheckIntegerString(value->string_value(), field, path);
       }
       if (field->cpp_type() != FieldDescriptor::CPPTYPE_DOUBLE && field->cpp_type() != FieldDescriptor::CPPTYPE_FLOAT) {
         return absl::StrCat("'", path, "' cannot be Infinity (only float and double fields can)");
