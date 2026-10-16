@@ -63,7 +63,8 @@ export class RoutingSolution {
 }
 
 export interface RoutingSolutionSnapshot {
-  objective: number;
+  /** A bigint beyond Number.MAX_SAFE_INTEGER (e.g. large penalties). */
+  objective: number | bigint;
   /** 0 for the first solution of the solve, then 1, 2... */
   solutionIndex: number;
   /** With includeRoutes: per vehicle, start to end (null if not readable). */

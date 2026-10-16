@@ -348,7 +348,9 @@ Napi::Value RoutingModelWrap::IsEnd(const Napi::CallbackInfo& info) {
 }
 
 // ---------------------------------------------------------------------------
-// Transits
+// Transits. Registering needs an OPEN model: the filters built at close keep
+// references into OR-Tools' evaluator vectors, which a later registration
+// would reallocate (use-after-free).
 // ---------------------------------------------------------------------------
 
 // (matrix: numNodes x numNodes, indexed by node) -> evaluator id
@@ -356,7 +358,7 @@ Napi::Value RoutingModelWrap::RegisterTransitMatrix(const Napi::CallbackInfo& in
   Napi::Env env = info.Env();
   std::vector<std::vector<int64_t>> matrix;
   if (!ReadInt64Matrix(env, info[0], static_cast<size_t>(nodes_), static_cast<size_t>(nodes_), "matrix", &matrix) ||
-      !CheckUsable(env)) {
+      !CheckOpen(env, "registerTransitMatrix()")) {
     return env.Undefined();
   }
   int id = -1;
@@ -375,7 +377,7 @@ Napi::Value RoutingModelWrap::RegisterUnaryTransitVector(const Napi::CallbackInf
   if (values.size() != static_cast<size_t>(nodes_)) {
     THROW_AND_RETURN(env, "values must have one entry per node (" + std::to_string(nodes_) + ")", env.Undefined());
   }
-  if (!CheckUsable(env)) return env.Undefined();
+  if (!CheckOpen(env, "registerUnaryTransitVector()")) return env.Undefined();
   int id = -1;
   if (!GuardCpp(env, "registerUnaryTransitVector()",
                 [&] { id = model_->RegisterUnaryTransitVector(std::move(values)); })) {
@@ -416,7 +418,7 @@ Napi::Value RoutingModelWrap::RegisterTransitCallback(const Napi::CallbackInfo& 
       }
     }
   }
-  if (!CheckUsable(env)) return env.Undefined();
+  if (!CheckOpen(env, "registerTransitCallback()")) return env.Undefined();
   int id = -1;
   if (!GuardCpp(env, "registerTransitCallback()", [&] {
         const RoutingModel::TransitEvaluatorSign sign = SignOf(*values);
@@ -448,7 +450,7 @@ Napi::Value RoutingModelWrap::RegisterUnaryTransitCallback(const Napi::CallbackI
       return env.Undefined();
     }
   }
-  if (!CheckUsable(env)) return env.Undefined();
+  if (!CheckOpen(env, "registerUnaryTransitCallback()")) return env.Undefined();
   int id = -1;
   if (!GuardCpp(env, "registerUnaryTransitCallback()", [&] {
         const RoutingModel::TransitEvaluatorSign sign = SignOf(*values);

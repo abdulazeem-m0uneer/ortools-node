@@ -418,7 +418,12 @@ test('model-definition calls throw once the model is closed', () => {
   model.solver().add(model.vehicleVar(1).eq(0));
   const solution = model.solveWithParametersSync(PCA);
   assert.equal(solution.value(model.vehicleVar(1)), 0);
-  assert.equal(model.registerTransitMatrix(data.distance17.slice(0, 5).map((r) => r.slice(0, 5))) > 0, true);
+  // Registering after close would reallocate evaluators the solver's filters reference.
+  const matrix = data.distance17.slice(0, 5).map((r) => r.slice(0, 5));
+  assert.throws(() => model.registerTransitMatrix(matrix), /before the model is closed/);
+  assert.throws(() => model.registerUnaryTransitVector([0, 1, 1, 1, 1]), /before the model is closed/);
+  assert.throws(() => model.registerTransitCallback(() => 0), /before the model is closed/);
+  assert.throws(() => model.registerUnaryTransitCallback(() => 0), /before the model is closed/);
 });
 
 test('solving closes the model', async () => {

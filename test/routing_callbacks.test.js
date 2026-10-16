@@ -133,3 +133,18 @@ test('onSolution must be a function', () => {
   assert.throws(() => model._n.solveSync(json, undefined, { onSolution: 1 }), TypeError);
   assert.throws(() => model._n.solveSync(json, undefined, 5), TypeError);
 });
+
+test('an objective beyond 2^53 reaches onSolution as a BigInt', async () => {
+  const manager = new RoutingIndexManager(4, 1, 0);
+  const model = new RoutingModel(manager);
+  for (const i of [1, 2, 3]) model.addDisjunction([i], 1n << 52n);
+  model.setAllowedVehiclesForIndex([0], 1);
+  model.vehicleVar(1).removeValue(0);
+  model.vehicleVar(2).removeValue(0);
+  const snapshots = [];
+  const solution = await model.solveWithParameters(PCA, { onSolution: (s) => snapshots.push(s) });
+  assert.ok(solution);
+  assert.equal(typeof snapshots.at(-1).objective, 'bigint');
+  assert.equal(snapshots.at(-1).objective, 2n * (1n << 52n));
+  assert.throws(() => solution.objectiveValue(), RangeError, 'objectiveValue() never rounds');
+});

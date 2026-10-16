@@ -71,9 +71,12 @@ SolutionSnapshot TakeSnapshot(const RoutingModel& model, int index, bool include
 
 Napi::Value SnapshotToJs(Napi::Env env, const SolutionSnapshot& snapshot, bool include_routes) {
   Napi::Object out = Napi::Object::New(env);
-  Napi::Value objective = Int64ToJs(env, snapshot.objective, "objective");
-  if (env.IsExceptionPending()) return Napi::Value();
-  out.Set("objective", objective);
+  // Beyond 2^53 (large penalties) the objective comes as a BigInt rather than
+  // failing the callback.
+  constexpr int64_t kMaxSafe = 9007199254740991;
+  out.Set("objective", snapshot.objective > kMaxSafe || snapshot.objective < -kMaxSafe
+                           ? Napi::Value(Napi::BigInt::New(env, snapshot.objective))
+                           : Napi::Value(Napi::Number::New(env, static_cast<double>(snapshot.objective))));
   out.Set("solutionIndex", Napi::Number::New(env, snapshot.index));
   if (include_routes) {
     if (!snapshot.has_routes) {
