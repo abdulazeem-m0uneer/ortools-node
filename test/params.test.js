@@ -124,11 +124,27 @@ for (const strategy of ['referenceSolutionAcceptanceStrategy', 'bestSolutionAcce
     for (const member of ACCEPTANCE_MEMBERS.filter((m) => m !== defaultMember)) {
       const value = member === 'simulatedAnnealing' ? annealing : {};
       const p = validateRoutingSearchParameters({ iteratedLocalSearchParameters: { [strategy]: { [member]: value } } });
-      assert.deepEqual(Object.keys(p.iteratedLocalSearchParameters[strategy]), [member]);
+      assert.deepEqual(p.iteratedLocalSearchParameters[strategy], { [member]: value });
+      const sibling = strategy === 'referenceSolutionAcceptanceStrategy'
+        ? 'bestSolutionAcceptanceStrategy' : 'referenceSolutionAcceptanceStrategy';
+      assert.deepEqual(p.iteratedLocalSearchParameters[sibling], ils[sibling]);
       assert.equal(p.iteratedLocalSearchParameters.improvePerturbedSolution, ils.improvePerturbedSolution);
     }
   });
 }
+
+test('null oneof members keep the default; two set members of one oneof are a TypeError', {
+  skip: 'bestSolutionAcceptanceStrategy' in ils ? false : 'this OR-Tools version has no acceptance-strategy oneofs',
+}, () => {
+  const best = (strategy) =>
+    validateRoutingSearchParameters({ iteratedLocalSearchParameters: { bestSolutionAcceptanceStrategy: strategy } })
+      .iteratedLocalSearchParameters.bestSolutionAcceptanceStrategy;
+  assert.deepEqual(ils.bestSolutionAcceptanceStrategy, { greedyDescent: {} });
+  assert.deepEqual(best({ simulatedAnnealing: null }), { greedyDescent: {} });
+  assert.deepEqual(best({ greedyDescent: null, allNodesPerformed: {} }), { allNodesPerformed: {} });
+  assert.throws(() => best({ greedyDescent: {}, allNodesPerformed: {} }),
+    { name: 'TypeError', message: /allNodesPerformed|greedyDescent/ });
+});
 
 test('a partial override of the current oneof member keeps its other fields', {
   skip: 'referenceSolutionAcceptanceStrategy' in ils ? false : 'this OR-Tools version has no acceptance-strategy oneofs',
@@ -339,6 +355,7 @@ test('boxed primitives are unwrapped before the NaN and Infinity checks', () => 
     { name: 'TypeError', message: /'maxTimeInSeconds' must not be NaN/ });
   assert.equal(validateRoutingSearchParameters({ firstSolutionStrategy: new String('SAVINGS') }).firstSolutionStrategy, 'SAVINGS');
   assert.equal(validateSatParameters({ logSearchProgress: new Boolean(true) }).logSearchProgress, true);
+  assert.equal(validateRoutingSearchParameters({ solutionLimit: Object(5n) }).solutionLimit, '5');
 });
 
 test('values that are not JSON data are TypeErrors naming the path', () => {
