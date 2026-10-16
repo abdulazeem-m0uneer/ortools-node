@@ -13,6 +13,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   when the two differ.
 - Builds and CI against both OR-Tools 9.14.6206 and 9.15.6755, on Linux x64 and
   arm64.
+- Parameter objects: `defaultRoutingSearchParameters()`,
+  `validateRoutingSearchParameters()`, `defaultSatParameters()` and
+  `validateSatParameters()` work with plain objects in protobuf's JSON form
+  (snake_case names accepted). Partial routing parameters are merged onto the
+  OR-Tools defaults. OR-Tools itself validates every value.
+- Enum constants `FirstSolutionStrategy`, `LocalSearchMetaheuristic` and
+  `RoutingSearchStatus`, read from the OR-Tools build in use, and
+  `durationMs(ms)` for protobuf Duration strings.
+- `npm run typecheck` also compiles usage checks in `test/types/`.
 
 ### Changed
 
