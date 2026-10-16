@@ -22,8 +22,12 @@ std::string FieldPath(const std::string& parent, const FieldDescriptor* field) {
   return parent.empty() ? std::string(field->json_name()) : absl::StrCat(parent, ".", field->json_name());
 }
 
+// Routing enums are nested as e.g. FirstSolutionStrategy.Value, so name the containing message too.
 std::string EnumError(const std::string& path, const FieldDescriptor* field, int64_t number) {
-  return absl::StrCat("'", path, "': no ", field->enum_type()->name(), " value has number ", number);
+  const google::protobuf::EnumDescriptor* type = field->enum_type();
+  const google::protobuf::Descriptor* container = type->containing_type();
+  return absl::StrCat("'", path, "': no ", container == nullptr ? "" : absl::StrCat(container->name(), "."),
+                      type->name(), " value has number ", number);
 }
 
 // Closed (proto2) enums keep numbers they do not know as unknown fields.
