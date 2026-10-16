@@ -125,6 +125,10 @@ test('assignment: cost magnitudes that overflow scaling are POSSIBLE_OVERFLOW', 
     a.addArcWithCost(0, 0, cost);
     assert.equal(a.solveSync(), 'POSSIBLE_OVERFLOW', `cost ${cost}`);
   }
+  // OR-Tools' own price bounds reject costs under that limit too: 2^61 < 2^63 / 2.
+  const single = new SimpleLinearSumAssignment();
+  single.addArcWithCost(0, 0, 2n ** 61n);
+  assert.equal(single.solveSync(), 'POSSIBLE_OVERFLOW');
   // Large costs well inside the range solve exactly.
   const a = new SimpleLinearSumAssignment();
   a.addArcsWithCost([0, 0, 1, 1], [0, 1, 0, 1], [2 ** 40, -(2 ** 40), -(2 ** 40), 2 ** 40]);
