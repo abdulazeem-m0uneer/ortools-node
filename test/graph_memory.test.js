@@ -60,12 +60,13 @@ test('assignment: an out-of-memory async solve rejects and keeps the graph', { s
   const out = runCapped(`
     const a = new SimpleLinearSumAssignment();
     a.addArcWithCost(1e9, 1e9, 1);
-    try { out.solve = { value: await a.solve() }; } catch (e) { out.solve = { error: e.message }; }
+    try { out.solve = { value: await a.solve() }; } catch (e) { out.solve = { error: e.message, type: e.name }; }
     attempt('busy', () => a.busy);
     attempt('result', () => a.optimalCost());
     attempt('arcs', () => a.numArcs());
     attempt('sync', () => a.solveSync());`);
   assert.match(out.solve.error, OUT_OF_MEMORY);
+  assert.equal(out.solve.type, 'RangeError'); // same error type as the synchronous paths
   assert.equal(out.busy.value, false);
   assert.match(out.result.error, /No SimpleLinearSumAssignment result/);
   assert.equal(out.arcs.value, 1);
