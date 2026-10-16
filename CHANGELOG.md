@@ -18,8 +18,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `validateSatParameters()` work with plain objects in protobuf's JSON form
   (snake_case names accepted). Partial routing parameters are merged onto the
   OR-Tools defaults field by field: undefined or null keeps a default, and
-  setting one member of a oneof replaces the others. NaN and enum numbers
-  without a name are rejected, and OR-Tools itself validates every value.
+  setting one member of a oneof replaces the others (the `Overrides<T>` input
+  type allows null). NaN, enum numbers without a name, null array elements,
+  ±Infinity outside float and double fields and values that are not JSON data
+  are rejected with the field path, and OR-Tools itself validates every value.
 - Enum constants `FirstSolutionStrategy`, `LocalSearchMetaheuristic` and
   `RoutingSearchStatus`, read from the OR-Tools build in use, and
   `durationMs(ms)` for protobuf Duration strings.
