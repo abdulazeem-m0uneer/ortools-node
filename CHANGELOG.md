@@ -63,6 +63,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   thread with `nextSolution()`, or `nextSolutionSync()`. Inputs OR-Tools would
   abort or misbehave on (zero costs, repeated elements, uncovered elements,
   focuses its heuristics cannot handle) throw JS errors instead.
+- `solveVectorBinPacking()` / `solveVectorBinPackingSync()`: vector bin
+  packing with OR-Tools' arc-flow formulation on a MIP backend
+  (`VectorBinPackingSolverType`), taking a `VectorBinPackingProblem` and
+  returning a `VectorBinPackingSolution` as plain objects; solver type, time
+  limit, threads and backend parameters as options. Problems OR-Tools would
+  abort on are rejected, and those where nothing can be packed get an exact
+  answer without it. The backend's log always goes to stdout (OR-Tools enables it).
 
 ### Changed
 

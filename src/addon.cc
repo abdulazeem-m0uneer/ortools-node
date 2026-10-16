@@ -18,6 +18,7 @@
 #include "linear_solver/mp_solver.h"
 #include "math_opt/math_opt.h"
 #include "ortools/base/version.h"
+#include "packing/bin_packing.h"
 #include "routing/search_parameters.h"
 #include "set_cover/set_cover.h"
 #include "sat/sat_parameters.h"
@@ -73,6 +74,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitModelBuilder(env, exports);
   InitMathOpt(env, exports);
   InitSetCover(env, exports);
+  InitBinPacking(env, exports);
   return InitMpSolver(env, exports);
 }
 
