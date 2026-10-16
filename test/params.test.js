@@ -164,6 +164,26 @@ test('int64 routing fields accept numbers, bigints and strings', () => {
     '9223372036854775807');
 });
 
+test('integer fields take any exact integer given as a JS number', () => {
+  for (const value of [1e16, 2 ** 53 + 2, 1e18]) {
+    assert.equal(validateRoutingSearchParameters({ solutionLimit: value }).solutionLimit, BigInt(value).toString());
+  }
+  assert.equal(validateSatParameters({ maxNumberOfConflicts: -(2 ** 60) }).maxNumberOfConflicts, '-1152921504606846976');
+  assert.equal(validateSatParameters({ randomSeed: 2 ** 31 - 1 }).randomSeed, 2 ** 31 - 1);
+});
+
+test('integer fields reject numbers that are not integers or do not fit the field type', () => {
+  assert.throws(() => validateSatParameters({ numWorkers: 1e16 }),
+    { name: 'TypeError', message: /'numWorkers' must fit in int32/ });
+  assert.throws(() => validateSatParameters({ numWorkers: 2 ** 31 }), { name: 'TypeError', message: /'numWorkers' must fit in int32/ });
+  assert.throws(() => validateRoutingSearchParameters({ solutionLimit: 2 ** 63 }),
+    { name: 'TypeError', message: /'solutionLimit' must fit in int64/ });
+  assert.throws(() => validateRoutingSearchParameters({ solutionLimit: 1.5 }),
+    { name: 'TypeError', message: /'solutionLimit' must be an integer/ });
+  assert.throws(() => validateSatParameters({ subsolverParams: [{ name: 'a', numWorkers: 0.5 }] }),
+    { name: 'TypeError', message: /'subsolverParams\[0\]\.numWorkers' must be an integer/ });
+});
+
 test('enum numbers without a named value are TypeErrors', () => {
   for (const bad of [999, -5]) {
     assert.throws(() => validateRoutingSearchParameters({ useCpSat: bad }), { name: 'TypeError', message: /useCpSat/ });
