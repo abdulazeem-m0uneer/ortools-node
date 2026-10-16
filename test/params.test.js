@@ -389,6 +389,17 @@ test('the same field twice inside a repeated message is a TypeError', () => {
     { name: 'TypeError', message: /subsolverParams\[0\]/ });
 });
 
+test('repeated fields must be arrays, not a bare value', () => {
+  assert.throws(() => validateSatParameters({ subsolvers: 'default_lp' }), { name: 'TypeError', message: /'subsolvers' must be an array/ });
+  assert.throws(() => validateSatParameters({ restartAlgorithms: 'LUBY_RESTART' }),
+    { name: 'TypeError', message: /'restartAlgorithms' must be an array/ });
+  assert.throws(() => validateSatParameters({ subsolverParams: { name: 'a' } }),
+    { name: 'TypeError', message: /'subsolverParams' must be an array/ });
+  const p = validateSatParameters({ subsolvers: ['default_lp'], restartAlgorithms: ['LUBY_RESTART'], subsolverParams: [{ name: 'a' }] });
+  assert.deepEqual([p.subsolvers, p.restartAlgorithms, p.subsolverParams[0].name], [['default_lp'], ['LUBY_RESTART'], 'a']);
+  assert.deepEqual(validateSatParameters({ subsolvers: null }).subsolvers, []);
+});
+
 // ---- SatParameters --------------------------------------------------------------
 
 test('default SAT parameters list every field with its default', () => {
