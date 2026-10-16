@@ -40,8 +40,8 @@
     "build": "cmake-js compile",
     "rebuild": "cmake-js rebuild",
     "build:debug": "cmake-js compile --debug",
-    "test": "node --test 'test/**/*.test.js'",
-    "typecheck": "tsc --noEmit --strict --target es2022 --module commonjs lib/index.d.ts test/types/*.ts",
+    "test": "node --test \"test/**/*.test.js\"",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
     "example": "node examples/basic.js",
     "bench": "node bench/run.js"
   },
