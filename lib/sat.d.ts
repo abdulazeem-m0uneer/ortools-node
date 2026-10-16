@@ -47,6 +47,8 @@ export class Domain {
 
 /** An immutable integer linear expression. */
 export class CpLinearExpr {
+  /** Abstract: build expressions from variables, arithmetic and the static helpers. */
+  protected constructor();
   plus(other: LinearExprLike): CpLinearExpr;
   minus(other: LinearExprLike): CpLinearExpr;
   times(coefficient: Int): CpLinearExpr;

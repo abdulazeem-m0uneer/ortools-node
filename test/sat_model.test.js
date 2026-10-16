@@ -436,3 +436,8 @@ test('addHint on a negated literal takes booleans, 0 / 1 and 0n / 1n', () => {
   assert.deepEqual(m.toJSON().solutionHint, { vars: [0, 0, 0], values: ['0', '1', '0'] });
   assert.throws(() => m.addHint(b.not(), 2n), TypeError);
 });
+
+test('CpLinearExpr cannot be constructed directly', () => {
+  assert.throws(() => new CpLinearExpr(), /CpLinearExpr\.sum\(\)/);
+  assert.ok(CpLinearExpr.constant(3) instanceof CpLinearExpr);
+});
