@@ -213,21 +213,6 @@ test('routingSearchParametersJson returns the full validated set as JSON that OR
     { ...JSON.parse(satParametersJson({})), numWorkers: 2, maxTimeInSeconds: 'Infinity' });
 });
 
-// ---- SatParameters --------------------------------------------------------------
-
-test('default SAT parameters list every field with its default', () => {
-  const p = defaultSatParameters();
-  assert.equal(p.maxTimeInSeconds, Infinity);
-  assert.equal(p.numWorkers, 0);
-  assert.ok(Object.keys(p).length > 100);
-});
-
-test('SAT parameters keep only the fields that were set', () => {
-  const p = validateSatParameters({ maxTimeInSeconds: 0.3, num_workers: 1 });
-  assert.equal(p.maxTimeInSeconds, 0.3);
-  assert.equal(p.numWorkers, 1);
-  assert.equal('randomSeed' in p, false);
-});
 // ---- input checks ---------------------------------------------------------------
 
 test('null, undefined and holes inside repeated fields are TypeErrors naming the element', () => {
@@ -291,6 +276,21 @@ test('the same field twice inside a repeated message is a TypeError', () => {
     { name: 'TypeError', message: /subsolverParams\[0\]/ });
 });
 
+// ---- SatParameters --------------------------------------------------------------
+
+test('default SAT parameters list every field with its default', () => {
+  const p = defaultSatParameters();
+  assert.equal(p.maxTimeInSeconds, Infinity);
+  assert.equal(p.numWorkers, 0);
+  assert.ok(Object.keys(p).length > 100);
+});
+
+test('SAT parameters keep only the fields that were set', () => {
+  const p = validateSatParameters({ maxTimeInSeconds: 0.3, num_workers: 1 });
+  assert.equal(p.maxTimeInSeconds, 0.3);
+  assert.equal(p.numWorkers, 1);
+  assert.equal('randomSeed' in p, false);
+});
 
 test('infinite SAT values round-trip as numbers', () => {
   assert.equal(validateSatParameters({ maxTimeInSeconds: Infinity }).maxTimeInSeconds, Infinity);
