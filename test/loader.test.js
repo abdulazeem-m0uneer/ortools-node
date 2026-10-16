@@ -213,12 +213,27 @@ describe('findPrebuilt', () => {
     assert.throws(() => findPrebuilt({ ...linuxX64, env: { ORTOOLS_NODE_PIN: '9' }, moduleRoot: both }), /ORTOOLS_NODE_PIN=9/);
   });
 
-  test('propagates resolution errors other than a missing package', () => {
+  test('propagates errors from an injected resolver', () => {
     const broken = Object.assign(new Error('EACCES'), { code: 'EACCES' });
     assert.throws(
       () => findPrebuilt({ ...linuxX64, resolvePackage: () => { throw broken; } }),
       (err) => err === broken,
     );
+  });
+
+  // These go through the real require.resolve, so only MODULE_NOT_FOUND may
+  // read as "not installed"; a broken package must not be skipped silently.
+  test('a corrupt package.json is an error, not "not installed"', () => {
+    const root = moduleRootWith([X64_15]);
+    fs.writeFileSync(path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json'), '{');
+    assert.throws(() => findPrebuilt({ ...linuxX64, moduleRoot: root }), (err) => err.code === 'ERR_INVALID_PACKAGE_CONFIG');
+  });
+
+  test('a package that does not export its package.json is an error, not "not installed"', () => {
+    const root = moduleRootWith([X64_15]);
+    const manifest = { name: X64_15, version: FAKE_VERSION, exports: { '.': './ortools_node.node' } };
+    fs.writeFileSync(path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json'), JSON.stringify(manifest));
+    assert.throws(() => findPrebuilt({ ...linuxX64, moduleRoot: root }), (err) => err.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED');
   });
 });
 
