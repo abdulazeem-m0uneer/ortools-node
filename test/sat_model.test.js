@@ -409,3 +409,20 @@ test('modelStats() validates first: an out-of-range index throws instead of cras
   assert.equal(child.status, 0, child.stderr);
   for (const message of JSON.parse(child.stdout)) assert.match(message, /^Invalid CpModel: /);
 });
+
+test('Domain.fromValues and contains() treat the int64 extremes like every other factory', () => {
+  const M = 2n ** 63n - 1n;
+  const m = -(2n ** 63n);
+  assert.deepEqual(Domain.fromValues([M]).flattenedIntervals(), [Infinity, Infinity]);
+  assert.equal(Domain.fromValues([M]).max(), new Domain(0, M).max());
+  assert.equal(String(Domain.fromValues([M]).complement()), String(new Domain(M, M).complement()));
+  assert.deepEqual(Domain.fromValues([M]).complement().flattenedIntervals(), [-Infinity, M - 1n]);
+  assert.equal(Domain.fromValues([M]).complement().contains(M), false);
+  assert.deepEqual(Domain.fromValues([m]).complement().flattenedIntervals(), [m + 1n, Infinity]);
+  assert.equal(Domain.fromValues([m]).complement().contains(m), false);
+  assert.deepEqual(Domain.fromValues([M - 1n, M]).complement().flattenedIntervals(), [-Infinity, M - 2n]);
+  assert.equal(Domain.fromValues([M]).contains(M), true);
+  assert.equal(new Domain(-Infinity, 0).contains(m), true);
+  assert.throws(() => Domain.fromValues([Infinity]), TypeError);
+  assert.throws(() => Domain.fromValues([M]).contains(-Infinity), TypeError);
+});
