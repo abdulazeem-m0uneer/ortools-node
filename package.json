@@ -36,7 +36,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "install": "cmake-js compile",
+    "install": "node scripts/install.js",
     "build": "cmake-js compile",
     "rebuild": "cmake-js rebuild",
     "build:debug": "cmake-js compile --debug",
@@ -46,7 +46,6 @@
     "bench": "node bench/run.js"
   },
   "dependencies": {
-    "bindings": "^1.5.0",
     "cmake-js": "^8.0.0",
     "node-addon-api": "^8.3.0"
   },
@@ -61,6 +60,7 @@
   "files": [
     "lib/",
     "src/",
+    "scripts/install.js",
     "CMakeLists.txt",
     "CHANGELOG.md",
     "LICENSES/",
