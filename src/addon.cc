@@ -20,6 +20,7 @@
 #include "math_opt/math_opt.h"
 #include "ortools/base/version.h"
 #include "packing/bin_packing.h"
+#include "routing/routing_model.h"
 #include "routing/search_parameters.h"
 #include "sat/cp_sat_solver.h"
 #include "set_cover/set_cover.h"
@@ -81,6 +82,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitBinPacking(env, exports);
   InitCpSatSolver(env, exports);
   InitCpSolver(env, exports);
+  InitRouting(env, exports);
   return InitMpSolver(env, exports);
 }
 

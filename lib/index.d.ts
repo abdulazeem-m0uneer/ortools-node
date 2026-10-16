@@ -8,6 +8,7 @@ export * as setCover from './set_cover';
 export * from './bin_packing';
 export * from './sat';
 export * as cp from './cp';
+export * from './routing';
 
 export type Backend =
   | 'GLOP' | 'PDLP' | 'CLP'              // LP
