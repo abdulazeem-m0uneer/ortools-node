@@ -7,6 +7,7 @@ export * as mathOpt from './math_opt';
 export * as setCover from './set_cover';
 export * from './bin_packing';
 export * from './sat';
+export * as cp from './cp';
 
 export type Backend =
   | 'GLOP' | 'PDLP' | 'CLP'              // LP

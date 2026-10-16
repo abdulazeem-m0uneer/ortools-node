@@ -104,6 +104,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CP-SAT solution callbacks: `solve(model, { onSolution })` passes each solution
   to JS while the search runs; `stopSearch()` works from inside it, and an
   exception stops the search and rejects `solve()`.
+- Classic constraint programming solver under the `cp` namespace (`cp.CpSolver`,
+  pywrapcp's `Solver`; the top-level `CpSolver` is CP-SAT's):
+  integer variables and expressions, comparison, `allDifferent`,
+  `allowedAssignments`, membership and reified constraints, `phase` decision
+  builders, `minimize` / `maximize`, search limits, `searchLog`, solution
+  collectors, synchronous `solve` and `newSearch` / `nextSolution` /
+  `endSearch` with JS search monitors, and `solveAsync` on the threadpool with
+  `interrupt()`. A domain change that empties a domain throws
+  `CP solver failure` instead of aborting the process, and building or changing
+  the model while a search is open throws.
 
 ### Changed
 

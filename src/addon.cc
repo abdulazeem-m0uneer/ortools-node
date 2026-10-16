@@ -13,6 +13,7 @@
 #include "algorithms/knapsack_solver.h"
 #include "common/cpp_guard_testing.h"
 #include "common/int64.h"
+#include "constraint_solver/cp_solver.h"
 #include "graph/graph.h"
 #include "linear_solver/model_builder.h"
 #include "linear_solver/mp_solver.h"
@@ -79,6 +80,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitSetCover(env, exports);
   InitBinPacking(env, exports);
   InitCpSatSolver(env, exports);
+  InitCpSolver(env, exports);
   return InitMpSolver(env, exports);
 }
 
