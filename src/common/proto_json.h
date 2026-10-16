@@ -9,6 +9,8 @@
 
 #include <napi.h>
 
+#include <string>
+
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/message.h"
 
@@ -17,6 +19,7 @@ namespace ortools_node {
 // Parses a JSON string argument into *out (cleared first) and checks every
 // parsed value. On failure throws a TypeError naming `what` and returns false.
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out);
+bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, google::protobuf::Message* out);
 
 // Prints every field, including those left at their proto3 default, with
 // lowerCamelCase names. On failure throws and returns env.Undefined().

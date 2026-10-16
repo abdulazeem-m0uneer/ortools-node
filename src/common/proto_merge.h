@@ -16,8 +16,9 @@ namespace ortools_node {
 
 // Parses and checks `json` like ParseProtoJson, then merges the keys it holds
 // onto *target. Keys may be lowerCamelCase or snake_case, but naming one field
-// twice is an error. On failure throws a TypeError naming `what` and returns
-// false; *target may then be partly merged.
+// twice is an error, and so are null array elements and Infinity markers (see
+// lib/params.js) outside float and double fields. On failure throws a TypeError
+// naming `what`, leaves *target unchanged and returns false.
 bool MergeProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* target);
 
 }  // namespace ortools_node
