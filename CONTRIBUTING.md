@@ -51,8 +51,11 @@ release's packages in `optionalDependencies`; they are added by
   saying it is not supported.
 - **Installing** (`scripts/install.js`, the npm `install` hook): skips the build
   when a platform package resolves, builds from source when `ORTOOLS_ROOT` is set
-  or `npm install --build-from-source` is used, and otherwise fails with what to
-  do. `npm run build` and `npm run rebuild` always build from source.
+  or `npm install --build-from-source` is used, keeps an existing
+  `build/Release` or `build/Debug` addon otherwise, and fails with what to do
+  when there is none. An `ORTOOLS_NODE_PIN` without prebuilts only warns when
+  `ORTOOLS_ROOT` is set. `npm run build` and `npm run rebuild` always build
+  from source.
 - **Building**: `scripts/package-prebuilt.sh <x64|arm64> <ortools-version>`
   builds the addon with `-DORTOOLS_NODE_PREBUILT=ON` in the
   `quay.io/pypa/manylinux_2_28` image against Google's AlmaLinux 8.10 archive,
