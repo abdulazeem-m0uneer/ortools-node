@@ -276,6 +276,18 @@ describe('assemble', () => {
     assert.ok(!fs.existsSync(path.join(f.outDir, 'libortools.so.9.15.6755')));
   });
 
+  test('writes name, version and licence that a template cannot override', (t) => {
+    const f = fakeOrtools(t);
+    f.writeTemplate({ name: 'evil', version: '9.9.9', license: 'UNLICENSED', description: 'Prebuilt', cpu: ['x64'] });
+    run(f);
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.outDir, 'package.json'), 'utf8'));
+    assert.equal(manifest.name, '@ortools-node/linux-x64-gnu-ortools9.15');
+    assert.equal(manifest.version, '2.3.4');
+    assert.equal(manifest.license, 'MIT AND Apache-2.0 AND Zlib');
+    assert.equal(manifest.description, 'Prebuilt, built against OR-Tools 9.15.6755');
+    assert.deepEqual(manifest.cpu, ['x64']);
+  });
+
   test('copyLicences copies the OR-Tools licence and the archive\'s third-party ones', (t) => {
     const f = fakeOrtools(t);
     fs.mkdirSync(f.outDir);
