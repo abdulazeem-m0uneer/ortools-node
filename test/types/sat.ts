@@ -75,3 +75,5 @@ model.addHint(notB, 1n);
 model.addHint(x, 2n ** 40n);
 // @ts-expect-error a negated literal's hint is a boolean, 0 or 1
 model.addHint(notB, 2);
+// @ts-expect-error expressions come from variables and the static helpers
+new CpLinearExpr();
