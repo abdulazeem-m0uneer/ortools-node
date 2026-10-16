@@ -3,6 +3,7 @@
 #include <cstring>
 
 #include "common/int64.h"
+#include "common/napi_util.h"
 
 namespace ortools_node {
 namespace {
@@ -14,20 +15,31 @@ bool OutOfRange(Napi::Env env, const char* what, size_t i, int64_t limit) {
   return false;
 }
 
+bool CheckIndicesBelow(Napi::Env env, const std::vector<int32_t>& indices, int64_t limit, const char* what) {
+  for (size_t i = 0; i < indices.size(); ++i) {
+    if (indices[i] < 0 || indices[i] >= limit) return OutOfRange(env, what, i, limit);
+  }
+  return true;
+}
+
 }  // namespace
+
+bool ReadIndexBelow(Napi::Env env, const Napi::Value& v, int64_t limit, const char* what, int32_t* out) {
+  size_t index;
+  if (!ReadIndex(env, v, static_cast<size_t>(limit), what, &index)) return false;
+  *out = static_cast<int32_t>(index);
+  return true;
+}
 
 bool ReadIndexArray(Napi::Env env, const Napi::Value& v, int64_t limit, const char* what, std::vector<int32_t>* out) {
   if (v.IsTypedArray() && v.As<Napi::TypedArray>().TypedArrayType() == napi_int32_array) {
     Napi::Int32Array array = v.As<Napi::Int32Array>();
-    out->assign(array.Data(), array.Data() + array.ElementLength());
-    for (size_t i = 0; i < out->size(); ++i) {
-      if ((*out)[i] < 0 || (*out)[i] >= limit) return OutOfRange(env, what, i, limit);
-    }
-    return true;
+    if (!GuardCpp(env, what, [&] { out->assign(array.Data(), array.Data() + array.ElementLength()); })) return false;
+    return CheckIndicesBelow(env, *out, limit, what);
   }
   std::vector<int64_t> values;
   if (!ReadInt64Array(env, v, /*allow_infinite=*/false, what, &values)) return false;
-  out->resize(values.size());
+  if (!GuardCpp(env, what, [&] { out->resize(values.size()); })) return false;
   for (size_t i = 0; i < values.size(); ++i) {
     if (values[i] < 0 || values[i] >= limit) return OutOfRange(env, what, i, limit);
     (*out)[i] = static_cast<int32_t>(values[i]);
@@ -69,11 +81,23 @@ bool CheckSameLengths(Napi::Env env, std::initializer_list<size_t> sizes, const 
   return true;
 }
 
-bool ReadArcSelection(Napi::Env env, const Napi::Value& v, int32_t num_arcs, std::vector<int32_t>* out) {
-  if (!v.IsUndefined()) return ReadIndexArray(env, v, num_arcs, "arcs", out);
-  out->resize(static_cast<size_t>(num_arcs));
-  for (int32_t arc = 0; arc < num_arcs; ++arc) (*out)[static_cast<size_t>(arc)] = arc;
-  return true;
+bool CheckIndexBelow(Napi::Env env, int32_t index, int64_t size, const char* what) {
+  if (index < size) return true;
+  Napi::RangeError::New(env, std::string(what) + " index out of range").ThrowAsJavaScriptException();
+  return false;
+}
+
+bool ReadArcSelection(Napi::Env env, const Napi::Value& v, ArcSelection* out) {
+  out->all = v.IsUndefined();
+  return out->all || ReadIndexArray(env, v, kInt32Max, "arcs", &out->arcs);
+}
+
+bool ResolveArcSelection(Napi::Env env, int32_t num_arcs, ArcSelection* selection) {
+  if (!selection->all) return CheckIndicesBelow(env, selection->arcs, num_arcs, "arcs");
+  return GuardCpp(env, "flows", [&] {
+    selection->arcs.resize(static_cast<size_t>(num_arcs));
+    for (int32_t arc = 0; arc < num_arcs; ++arc) selection->arcs[static_cast<size_t>(arc)] = arc;
+  });
 }
 
 Napi::Value ArcRangeToJs(Napi::Env env, int32_t first, size_t count) {

@@ -12,8 +12,8 @@
 #include <string>
 #include <vector>
 
+#include "common/cpp_guard.h"
 #include "common/int64.h"
-#include "common/napi_util.h"
 #include "graph/graph.h"
 #include "graph/graph_common.h"
 #include "ortools/graph/min_cost_flow.h"
@@ -114,18 +114,17 @@ class MinCostFlow : public Napi::ObjectWrap<MinCostFlow> {
         .ThrowAsJavaScriptException();
     return false;
   }
-  bool ReadArc(Napi::Env env, const Napi::Value& v, int32_t* arc) {
-    size_t index;
-    if (!ReadIndex(env, v, static_cast<size_t>(model_.get().NumArcs()), "arc", &index)) return false;
-    *arc = static_cast<int32_t>(index);
-    return true;
+  // Arc indices are read raw (step 1) and checked against the model later (step 3).
+  static bool ReadArc(Napi::Env env, const Napi::Value& v, int32_t* arc) {
+    return ReadIndexBelow(env, v, kInt32Max, "arc", arc);
   }
   // A node that may be new: any index the graph can grow to.
   static bool ReadNewNode(Napi::Env env, const Napi::Value& v, const char* what, int32_t* node) {
-    size_t index;
-    if (!ReadIndex(env, v, static_cast<size_t>(kMaxNodesPlusArcs), what, &index)) return false;
-    *node = static_cast<int32_t>(index);
-    return true;
+    return ReadIndexBelow(env, v, kMaxNodesPlusArcs, what, node);
+  }
+  // Reads the arc argument, then checks the model is usable and has that arc.
+  bool ReadExistingArc(Napi::Env env, const Napi::Value& v, int32_t* arc) {
+    return ReadArc(env, v, arc) && model_.CheckUsable(env) && CheckIndexBelow(env, *arc, model_.get().NumArcs(), "arc");
   }
   static bool ReadSupply(Napi::Env env, const Napi::Value& v, const char* what, int64_t* supply) {
     if (!ReadInt64(env, v, /*allow_infinite=*/false, what, supply)) return false;
@@ -173,24 +172,26 @@ void MinCostFlow::Init(Napi::Env env, Napi::Object exports) {
 
 Napi::Value MinCostFlow::AddArc(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
   int32_t tail, head;
   int64_t capacity, unit_cost;
   if (!ReadNewNode(env, info[0], "tail", &tail) || !ReadNewNode(env, info[1], "head", &head) ||
       !ReadCapacity(env, info[2], &capacity) ||
-      !ReadInt64(env, info[3], /*allow_infinite=*/false, "unitCost", &unit_cost)) {
+      !ReadInt64(env, info[3], /*allow_infinite=*/false, "unitCost", &unit_cost) || !model_.CheckUsable(env)) {
     return env.Undefined();
   }
   SimpleMinCostFlow& m = model_.get();
   const int64_t num_nodes = std::max<int64_t>(m.NumNodes(), std::max(tail, head) + int64_t{1});
   if (!CheckSize(env, num_nodes, int64_t{m.NumArcs()} + 1)) return env.Undefined();
-  model_.MarkChanged();
-  return Napi::Number::New(env, m.AddArcWithCapacityAndUnitCost(tail, head, capacity, unit_cost));
+  int32_t arc = 0;
+  if (!model_.Mutate(env, "addArcWithCapacityAndUnitCost",
+                     [&] { arc = m.AddArcWithCapacityAndUnitCost(tail, head, capacity, unit_cost); })) {
+    return env.Undefined();
+  }
+  return Napi::Number::New(env, arc);
 }
 
 Napi::Value MinCostFlow::AddArcs(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
   std::vector<int32_t> tails, heads;
   std::vector<int64_t> capacities, unit_costs;
   if (!ReadIndexArray(env, info[0], kMaxNodesPlusArcs, "tails", &tails) ||
@@ -198,50 +199,56 @@ Napi::Value MinCostFlow::AddArcs(const Napi::CallbackInfo& info) {
       !ReadInt64List(env, info[2], /*allow_infinite=*/true, /*non_negative=*/true, "capacities", &capacities) ||
       !ReadInt64List(env, info[3], /*allow_infinite=*/false, /*non_negative=*/false, "unitCosts", &unit_costs) ||
       !CheckSameLengths(env, {tails.size(), heads.size(), capacities.size(), unit_costs.size()},
-                        "addArcsWithCapacityAndUnitCost(tails, heads, capacities, unitCosts)")) {
+                        "addArcsWithCapacityAndUnitCost(tails, heads, capacities, unitCosts)") ||
+      !model_.CheckUsable(env)) {
     return env.Undefined();
   }
   SimpleMinCostFlow& m = model_.get();
   int64_t num_nodes = m.NumNodes();
-  for (size_t i = 0; i < tails.size(); ++i) num_nodes = std::max<int64_t>(num_nodes, std::max(tails[i], heads[i]) + int64_t{1});
+  for (size_t i = 0; i < tails.size(); ++i) {
+    num_nodes = std::max<int64_t>(num_nodes, std::max(tails[i], heads[i]) + int64_t{1});
+  }
   if (!CheckSize(env, num_nodes, int64_t{m.NumArcs()} + static_cast<int64_t>(tails.size()))) return env.Undefined();
   const int32_t first = m.NumArcs();
-  for (size_t i = 0; i < tails.size(); ++i) {
-    m.AddArcWithCapacityAndUnitCost(tails[i], heads[i], capacities[i], unit_costs[i]);
+  if (!model_.Mutate(env, "addArcsWithCapacityAndUnitCost", [&] {
+        for (size_t i = 0; i < tails.size(); ++i) {
+          m.AddArcWithCapacityAndUnitCost(tails[i], heads[i], capacities[i], unit_costs[i]);
+        }
+      })) {
+    return env.Undefined();
   }
-  model_.MarkChanged();
   return ArcRangeToJs(env, first, tails.size());
 }
 
 Napi::Value MinCostFlow::SetArcCapacity(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
   int32_t arc;
   int64_t capacity;
-  if (!ReadArc(env, info[0], &arc) || !ReadCapacity(env, info[1], &capacity)) return env.Undefined();
-  model_.get().SetArcCapacity(arc, capacity);
-  model_.MarkChanged();
+  if (!ReadArc(env, info[0], &arc) || !ReadCapacity(env, info[1], &capacity) || !model_.CheckUsable(env) ||
+      !CheckIndexBelow(env, arc, model_.get().NumArcs(), "arc")) {
+    return env.Undefined();
+  }
+  SimpleMinCostFlow& m = model_.get();
+  model_.Mutate(env, "setArcCapacity", [&] { m.SetArcCapacity(arc, capacity); });
   return env.Undefined();
 }
 
 Napi::Value MinCostFlow::SetNodeSupply(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
   int32_t node;
   int64_t supply;
-  if (!ReadNewNode(env, info[0], "node", &node) || !ReadSupply(env, info[1], "supply", &supply)) {
+  if (!ReadNewNode(env, info[0], "node", &node) || !ReadSupply(env, info[1], "supply", &supply) ||
+      !model_.CheckUsable(env)) {
     return env.Undefined();
   }
   SimpleMinCostFlow& m = model_.get();
   if (!CheckSize(env, std::max<int64_t>(m.NumNodes(), node + int64_t{1}), m.NumArcs())) return env.Undefined();
-  m.SetNodeSupply(node, supply);
-  model_.MarkChanged();
+  model_.Mutate(env, "setNodeSupply", [&] { m.SetNodeSupply(node, supply); });
   return env.Undefined();
 }
 
 Napi::Value MinCostFlow::SetNodesSupplies(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
   std::vector<int32_t> nodes;
   std::vector<int64_t> supplies;
   if (!ReadIndexArray(env, info[0], kMaxNodesPlusArcs, "nodes", &nodes) ||
@@ -249,19 +256,21 @@ Napi::Value MinCostFlow::SetNodesSupplies(const Napi::CallbackInfo& info) {
       !CheckSameLengths(env, {nodes.size(), supplies.size()}, "setNodesSupplies(nodes, supplies)")) {
     return env.Undefined();
   }
-  SimpleMinCostFlow& m = model_.get();
-  int64_t num_nodes = m.NumNodes();
-  for (size_t i = 0; i < nodes.size(); ++i) {
+  for (size_t i = 0; i < supplies.size(); ++i) {
     if (supplies[i] == std::numeric_limits<int64_t>::min()) {
       Napi::RangeError::New(env, "supplies[" + std::to_string(i) + "] must be > -(2^63)")
           .ThrowAsJavaScriptException();
       return env.Undefined();
     }
-    num_nodes = std::max<int64_t>(num_nodes, nodes[i] + int64_t{1});
   }
+  if (!model_.CheckUsable(env)) return env.Undefined();
+  SimpleMinCostFlow& m = model_.get();
+  int64_t num_nodes = m.NumNodes();
+  for (int32_t node : nodes) num_nodes = std::max<int64_t>(num_nodes, node + int64_t{1});
   if (!CheckSize(env, num_nodes, m.NumArcs())) return env.Undefined();
-  for (size_t i = 0; i < nodes.size(); ++i) m.SetNodeSupply(nodes[i], supplies[i]);
-  model_.MarkChanged();
+  model_.Mutate(env, "setNodesSupplies", [&] {
+    for (size_t i = 0; i < nodes.size(); ++i) m.SetNodeSupply(nodes[i], supplies[i]);
+  });
   return env.Undefined();
 }
 
@@ -272,7 +281,7 @@ Napi::Value MinCostFlow::Solve(const Napi::CallbackInfo& info) {
 }
 
 Napi::Value MinCostFlow::SolveSync(const Napi::CallbackInfo& info) {
-  return model_.SolveSync(info.Env(), [](SimpleMinCostFlow& m) { return RunSolve(m, false); });
+  return model_.SolveSync(info.Env(), "solveSync", [](SimpleMinCostFlow& m) { return RunSolve(m, false); });
 }
 
 Napi::Value MinCostFlow::SolveMaxFlowWithMinCost(const Napi::CallbackInfo& info) {
@@ -280,7 +289,8 @@ Napi::Value MinCostFlow::SolveMaxFlowWithMinCost(const Napi::CallbackInfo& info)
 }
 
 Napi::Value MinCostFlow::SolveMaxFlowWithMinCostSync(const Napi::CallbackInfo& info) {
-  return model_.SolveSync(info.Env(), [](SimpleMinCostFlow& m) { return RunSolve(m, true); });
+  return model_.SolveSync(info.Env(), "solveMaxFlowWithMinCostSync",
+                          [](SimpleMinCostFlow& m) { return RunSolve(m, true); });
 }
 
 // ---- results ----------------------------------------------------------------
@@ -300,18 +310,22 @@ Napi::Value MinCostFlow::MaximumFlow(const Napi::CallbackInfo& info) {
 Napi::Value MinCostFlow::Flow(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckResult(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadArc(env, info[0], &arc) || !model_.CheckResult(env) ||
+      !CheckIndexBelow(env, arc, model_.get().NumArcs(), "arc")) {
+    return env.Undefined();
+  }
   return Int64ToJs(env, model_.get().Flow(arc), "flow");
 }
 
 Napi::Value MinCostFlow::Flows(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckResult(env)) return env.Undefined();
+  ArcSelection selection;
+  if (!ReadArcSelection(env, info[0], &selection) || !model_.CheckResult(env)) return env.Undefined();
   SimpleMinCostFlow& m = model_.get();
-  std::vector<int32_t> arcs;
-  if (!ReadArcSelection(env, info[0], m.NumArcs(), &arcs)) return env.Undefined();
-  std::vector<int64_t> flows(arcs.size());
-  for (size_t i = 0; i < arcs.size(); ++i) flows[i] = m.Flow(arcs[i]);
+  if (!ResolveArcSelection(env, m.NumArcs(), &selection)) return env.Undefined();
+  std::vector<int64_t> flows;
+  if (!GuardCpp(env, "flows", [&] { flows.resize(selection.arcs.size()); })) return env.Undefined();
+  for (size_t i = 0; i < flows.size(); ++i) flows[i] = m.Flow(selection.arcs[i]);
   return Int64ArrayToJs(env, flows, "flow");
 }
 
@@ -332,37 +346,39 @@ Napi::Value MinCostFlow::NumArcs(const Napi::CallbackInfo& info) {
 Napi::Value MinCostFlow::Tail(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckUsable(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadExistingArc(env, info[0], &arc)) return env.Undefined();
   return Napi::Number::New(env, model_.get().Tail(arc));
 }
 
 Napi::Value MinCostFlow::Head(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckUsable(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadExistingArc(env, info[0], &arc)) return env.Undefined();
   return Napi::Number::New(env, model_.get().Head(arc));
 }
 
 Napi::Value MinCostFlow::Capacity(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckUsable(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadExistingArc(env, info[0], &arc)) return env.Undefined();
   return Int64ToJs(env, model_.get().Capacity(arc), "capacity");
 }
 
 Napi::Value MinCostFlow::UnitCost(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int32_t arc;
-  if (!model_.CheckUsable(env) || !ReadArc(env, info[0], &arc)) return env.Undefined();
+  if (!ReadExistingArc(env, info[0], &arc)) return env.Undefined();
   return Int64ToJs(env, model_.get().UnitCost(arc), "unitCost");
 }
 
 Napi::Value MinCostFlow::Supply(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
-  if (!model_.CheckUsable(env)) return env.Undefined();
-  size_t node;
-  if (!ReadIndex(env, info[0], static_cast<size_t>(model_.get().NumNodes()), "node", &node)) return env.Undefined();
-  return Int64ToJs(env, model_.get().Supply(static_cast<int32_t>(node)), "supply");
+  int32_t node;
+  if (!ReadIndexBelow(env, info[0], kInt32Max, "node", &node) || !model_.CheckUsable(env) ||
+      !CheckIndexBelow(env, node, model_.get().NumNodes(), "node")) {
+    return env.Undefined();
+  }
+  return Int64ToJs(env, model_.get().Supply(node), "supply");
 }
 
 }  // namespace

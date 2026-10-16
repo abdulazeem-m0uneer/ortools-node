@@ -33,7 +33,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The graph classes validate every index, capacity, supply and cost before it
   reaches OR-Tools, so bad input throws a JS error instead of aborting the
   process, and results throw unless the last solve was OPTIMAL on the current
-  graph.
+  graph. Running out of memory on a huge node index throws a RangeError, and
+  user code run while reading array arguments (getters that dispose, solve or
+  throw) cannot crash them.
 
 ### Changed
 
