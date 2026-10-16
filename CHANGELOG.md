@@ -134,9 +134,23 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   invalid after the next solve or any model change. Model-definition calls
   throw once the model is closed, and every argument OR-Tools would `CHECK` is
   validated first, so misuse throws instead of aborting the process.
+- Prebuilt binaries for Linux x64 and arm64 (glibc 2.28 or newer): platform
+  packages such as `@ortools-node/linux-x64-gnu-ortools9.15` bundle the addon
+  and the OR-Tools libraries, so installing needs no compiler and no
+  `ORTOOLS_ROOT`. The OR-Tools 9.15 packages install automatically; 9.14 users
+  install theirs and set `ORTOOLS_NODE_PIN=9.14` when both are present.
+- The install step uses a matching prebuilt when one is installed, builds from
+  source when `ORTOOLS_ROOT` is set or `--build-from-source` is given, and
+  otherwise fails with instructions. Loading reports every place it looked when
+  no addon is found, and says that musl (Alpine) is not supported.
+- `scripts/package-prebuilt.sh` builds a platform package in the
+  manylinux_2_28 image, and the Prebuilt binaries workflow builds and
+  smoke-tests all of them in clean Debian 13 and Ubuntu 24.04 containers.
 
 ### Changed
 
+- The addon is located by `lib/loader.js` instead of the `bindings` package,
+  which is no longer a dependency.
 - Native sources are split by OR-Tools component under `src/`, and the JS layer
   under `lib/`. The public API is unchanged.
 
