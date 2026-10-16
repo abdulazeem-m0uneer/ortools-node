@@ -177,7 +177,9 @@ export class CpModel {
   hasObjective(): boolean;
   clearObjective(): void;
 
-  addHint(variable: IntVar | NotBooleanVariable, value: Int | boolean): void;
+  addHint(variable: IntVar, value: Int | boolean): void;
+  /** A negated literal's hint: a boolean, 0 or 1. */
+  addHint(literal: NotBooleanVariable, value: boolean | 0 | 1 | 0n | 1n): void;
   clearHints(): void;
   addAssumption(literal: Literal): void;
   addAssumptions(literals: Literal[]): void;

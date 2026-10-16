@@ -70,3 +70,8 @@ model.addNoOverlap([x]);
 x.index = 3;
 
 export { ct, problem, run, syncStatus, wrong };
+
+model.addHint(notB, 1n);
+model.addHint(x, 2n ** 40n);
+// @ts-expect-error a negated literal's hint is a boolean, 0 or 1
+model.addHint(notB, 2);

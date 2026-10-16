@@ -426,3 +426,13 @@ test('Domain.fromValues and contains() treat the int64 extremes like every other
   assert.throws(() => Domain.fromValues([Infinity]), TypeError);
   assert.throws(() => Domain.fromValues([M]).contains(-Infinity), TypeError);
 });
+
+test('addHint on a negated literal takes booleans, 0 / 1 and 0n / 1n', () => {
+  const m = new CpModel();
+  const b = m.newBoolVar('b');
+  m.addHint(b.not(), 1n);
+  m.addHint(b.not(), 0n);
+  m.addHint(b.not(), true);
+  assert.deepEqual(m.toJSON().solutionHint, { vars: [0, 0, 0], values: ['0', '1', '0'] });
+  assert.throws(() => m.addHint(b.not(), 2n), TypeError);
+});
