@@ -1,3 +1,4 @@
+/// <reference lib="esnext.disposable" />
 // CP-SAT: CpModel builds a CpModelProto in JS, CpSolver solves it natively.
 // Integers are safe-integer numbers or BigInts (int64); ±Infinity in bounds and
 // domains means unbounded. CpLinearExpr / CpConstraint carry a Cp prefix
@@ -229,8 +230,13 @@ export class CpSolver {
   /** Stops the running search (also from inside onSolution); false when none is running. */
   stopSearch(): boolean;
   readonly busy: boolean;
-  /** Drops the last result; later calls throw. Throws while a solve() is pending. */
+  /**
+   * Drops the last result. Later solves and result reads throw; stopSearch()
+   * returns false and busy is false. Idempotent; throws while a solve() is pending.
+   */
   dispose(): void;
+  /** Same as dispose(), for `using solver = new CpSolver()`. */
+  [Symbol.dispose](): void;
 
   statusName(): CpSolverStatusName;
   /** A number, or a BigInt beyond 2^53 - 1. Throws unless the last solve ended OPTIMAL or FEASIBLE. */

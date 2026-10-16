@@ -77,3 +77,9 @@ model.addHint(x, 2n ** 40n);
 model.addHint(notB, 2);
 // @ts-expect-error expressions come from variables and the static helpers
 new CpLinearExpr();
+
+function scopedSolve(): CpSolverStatusName {
+  using scoped = new CpSolver();  // disposed when the scope ends
+  return scoped.solveSync(model);
+}
+export { scopedSolve };
