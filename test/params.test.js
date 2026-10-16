@@ -184,6 +184,14 @@ test('integer fields reject numbers that are not integers or do not fit the fiel
     { name: 'TypeError', message: /'subsolverParams\[0\]\.numWorkers' must be an integer/ });
 });
 
+test('a Duration must be given as a string, not in object form', () => {
+  for (const timeLimit of [{ seconds: 1, nanos: -5 }, { seconds: '9223372036854775807' }, { seconds: 1, nanos: 2e9 }, { seconds: 1 }]) {
+    assert.throws(() => validateRoutingSearchParameters({ timeLimit }),
+      { name: 'TypeError', message: /'timeLimit' must be a Duration string/ });
+    assert.throws(() => routingSearchParametersJson({ timeLimit }), { name: 'TypeError', message: /'timeLimit'/ });
+  }
+});
+
 test('enum numbers without a named value are TypeErrors', () => {
   for (const bad of [999, -5]) {
     assert.throws(() => validateRoutingSearchParameters({ useCpSat: bad }), { name: 'TypeError', message: /useCpSat/ });

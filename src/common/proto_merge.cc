@@ -141,6 +141,11 @@ std::string CheckValue(Value* value, const FieldDescriptor* field, const std::st
       }
       return "";
     case Value::kStructValue:
+      // protobuf also parses {seconds, nanos} without checking signs or ranges; only the string form is checked.
+      if (field->cpp_type() == FieldDescriptor::CPPTYPE_MESSAGE &&
+          field->message_type()->well_known_type() == Descriptor::WELLKNOWNTYPE_DURATION) {
+        return absl::StrCat("'", path, "' must be a Duration string such as \"1.5s\", not an object");
+      }
       if (field->cpp_type() != FieldDescriptor::CPPTYPE_MESSAGE || IsWellKnownType(field->message_type())) {
         return FindInfinityMarker(*value, path);
       }
