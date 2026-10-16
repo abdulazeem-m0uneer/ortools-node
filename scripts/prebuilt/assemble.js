@@ -217,10 +217,12 @@ function assemble({
   fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, version, ortoolsVersion));
 
   const template = JSON.parse(fs.readFileSync(templateFile, 'utf8'));
+  // A template cannot set the identity or licence: those are computed here.
+  const { name: _name, version: _version, license: _license, ...templateFields } = template;
   const manifest = {
     name,
     version,
-    ...template,
+    ...templateFields,
     description: `${template.description}, built against OR-Tools ${ortoolsVersion}`,
     license: licenseExpression(components),
   };
