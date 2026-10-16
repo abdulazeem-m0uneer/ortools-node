@@ -45,3 +45,12 @@ lsa.busy = true;
 lsa.addArcsWithCost(0, 1, 2);
 
 export { arc, optimal, flows, pendingMcf, maxFlowStatus, cut, busy, lsaStatus, mate, wrongStatus };
+
+// `using` frees each graph at scope exit (Symbol.dispose).
+function scoped(): number {
+  using flow = new SimpleMinCostFlow();
+  using maxFlowScoped = new SimpleMaxFlow();
+  using assignment = new SimpleLinearSumAssignment();
+  return flow.numArcs() + maxFlowScoped.numArcs() + assignment.numArcs();
+}
+export { scoped };
