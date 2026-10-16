@@ -65,10 +65,24 @@ Napi::Value SolutionValuesToJs(Napi::Env env, const std::vector<int64_t>& values
   return Napi::Value(env, array);
 }
 
-SolutionChannel::SolutionChannel(Napi::Env env, Napi::Function callback, std::atomic<bool>* stop_flag)
-    : tsfn_(Tsfn::New(env, callback, "ortools-node:cpSatSolution", /*maxQueueSize=*/0, /*initialThreadCount=*/1,
-                      this)),
-      stop_flag_(stop_flag) {}
+std::shared_ptr<SolutionChannel> SolutionChannel::Create(Napi::Env env, Napi::Function callback,
+                                                         std::atomic<bool>* stop_flag) {
+  auto channel = std::make_shared<SolutionChannel>(stop_flag);
+  // The thread-safe function owns a reference, dropped by Finalize().
+  auto* self_ref = new std::shared_ptr<SolutionChannel>(channel);
+  channel->tsfn_ = Tsfn::New(env, callback, "ortools-node:cpSatSolution", /*maxQueueSize=*/0,
+                             /*initialThreadCount=*/1, channel.get(), &SolutionChannel::Finalize, self_ref);
+  if (env.IsExceptionPending()) {
+    delete self_ref;
+    channel->released_ = true;  // nothing to release
+    return nullptr;
+  }
+  return channel;
+}
+
+void SolutionChannel::Finalize(Napi::Env, std::shared_ptr<SolutionChannel>* self_ref, SolutionChannel*) {
+  delete self_ref;
+}
 
 SolutionChannel::~SolutionChannel() { Release(); }
 
@@ -94,12 +108,24 @@ void SolutionChannel::Deliver(const CpSolverResponse& response) {
   snapshot.values.assign(response.solution().begin(), response.solution().end());
 
   std::unique_lock<std::mutex> lock(mutex_);
-  if (released_) return;
-  // Once queued, CallJs always runs (with a null env if the environment shuts
-  // down), so waiting for it is safe and `snapshot` outlives its use.
-  if (tsfn_.NonBlockingCall(&snapshot) != napi_ok) return;
+  if (released_ || abandoned_) return;
+  // CallJs owns the snapshot: the wait below may end (Abandon) before it runs.
+  auto* queued = new SolutionSnapshot(std::move(snapshot));
+  if (tsfn_.NonBlockingCall(queued) != napi_ok) {
+    delete queued;
+    released_ = true;  // Node is closing it: it must not be used, nor released, again
+    return;
+  }
   const int64_t ticket = ++queued_;
-  delivered_cv_.wait(lock, [this, ticket] { return delivered_ >= ticket; });
+  delivered_cv_.wait(lock, [this, ticket] { return delivered_ >= ticket || abandoned_; });
+}
+
+void SolutionChannel::Abandon() {
+  std::lock_guard<std::mutex> lock(mutex_);
+  abandoned_ = true;
+  callback_failed_.store(true);
+  stop_flag_->store(true);
+  delivered_cv_.notify_all();
 }
 
 void SolutionChannel::Release() {
@@ -115,11 +141,12 @@ void SolutionChannel::MarkDelivered() {
   delivered_cv_.notify_all();
 }
 
-// Main thread. `env` is null while the environment shuts down: the waiting
-// solver thread is only released then.
+// Main thread. `env` is null while the environment shuts down: the snapshot
+// is only freed then.
 void SolutionChannel::CallJs(Napi::Env env, Napi::Function callback, SolutionChannel* self,
                              SolutionSnapshot* snapshot) {
-  if (env != nullptr && !self->callback_failed_.load()) self->CallCallback(env, callback, *snapshot);
+  std::unique_ptr<SolutionSnapshot> owned(snapshot);
+  if (env != nullptr && !self->callback_failed_.load()) self->CallCallback(env, callback, *owned);
   self->MarkDelivered();
 }
 

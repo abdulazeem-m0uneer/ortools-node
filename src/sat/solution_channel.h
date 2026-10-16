@@ -14,6 +14,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -36,11 +37,17 @@ struct SolutionSnapshot {
 // usual case), otherwise as a BigInt64Array, so no value is ever rounded.
 Napi::Value SolutionValuesToJs(Napi::Env env, const std::vector<int64_t>& values);
 
-class SolutionChannel {
+// Shared by the solve worker and the thread-safe function: the channel lives
+// until both are done, so a snapshot still queued at teardown never reaches a
+// freed channel.
+class SolutionChannel : public std::enable_shared_from_this<SolutionChannel> {
  public:
   // Main thread. `callback` receives one plain object per solution; `stop_flag`
-  // is the solve's stop flag, raised when the callback throws.
-  SolutionChannel(Napi::Env env, Napi::Function callback, std::atomic<bool>* stop_flag);
+  // is the solve's stop flag, raised when the callback throws. Returns null
+  // with a pending JS exception when the thread-safe function cannot be made.
+  static std::shared_ptr<SolutionChannel> Create(Napi::Env env, Napi::Function callback,
+                                                 std::atomic<bool>* stop_flag);
+  explicit SolutionChannel(std::atomic<bool>* stop_flag) : stop_flag_(stop_flag) {}
   ~SolutionChannel();
   SolutionChannel(const SolutionChannel&) = delete;
   SolutionChannel& operator=(const SolutionChannel&) = delete;
@@ -52,6 +59,11 @@ class SolutionChannel {
   // Any thread, once the solve returned: releases the thread-safe function.
   void Release();
 
+  // Main thread, when JS can no longer run (process exit, environment
+  // teardown): stops the search and releases every solver thread waiting for a
+  // callback; later solutions are dropped.
+  void Abandon();
+
   // Main thread, after the solve: when the callback failed, makes its exception
   // the pending JS exception and returns true.
   bool ThrowCallbackError(Napi::Env env);
@@ -61,10 +73,12 @@ class SolutionChannel {
   void Deliver(const operations_research::sat::CpSolverResponse& response);  // solver thread; may throw
   void CallCallback(Napi::Env env, Napi::Function callback, const SolutionSnapshot& snapshot);
   void MarkDelivered();
+  static void Finalize(Napi::Env env, std::shared_ptr<SolutionChannel>* self_ref, SolutionChannel* self);
 
   using Tsfn = Napi::TypedThreadSafeFunction<SolutionChannel, SolutionSnapshot, &SolutionChannel::CallJs>;
   Tsfn tsfn_;
-  bool released_ = false;  // guarded by mutex_
+  bool released_ = false;   // guarded by mutex_
+  bool abandoned_ = false;  // guarded by mutex_
   std::atomic<bool>* stop_flag_;
   std::atomic<bool> callback_failed_{false};
   std::atomic<int64_t> solution_count_{0};

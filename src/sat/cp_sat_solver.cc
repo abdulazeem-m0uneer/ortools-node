@@ -33,6 +33,7 @@
 #include "ortools/util/time_limit.h"
 #include "sat/sat_parameters.h"
 #include "sat/solution_channel.h"
+#include "sat/teardown_watch.h"
 
 namespace ortools_node {
 namespace {
@@ -100,13 +101,27 @@ class CpSatSolver : public Napi::ObjectWrap<CpSatSolver> {
         InstanceMethod("solveSync", &CpSatSolver::SolveSync),
         InstanceMethod("stopSearch", &CpSatSolver::StopSearch),
         InstanceMethod("isBusy", &CpSatSolver::IsBusy),
+        InstanceMethod("abandon", &CpSatSolver::AbandonMethod),
     });
   }
 
   explicit CpSatSolver(const Napi::CallbackInfo& info) : Napi::ObjectWrap<CpSatSolver>(info) {}
 
   std::atomic<bool>* stop_flag() { return solve_state_.stop_flag(); }
-  void EndSolve() { solve_state_.End(); }
+
+  // Main thread: a solve starts / ends. While it runs, a TeardownWatch
+  // abandons it once JS can no longer run, so terminating a worker thread
+  // stops the search instead of waiting for its time limit.
+  void BeginSolve(std::shared_ptr<SolutionChannel> channel, std::unique_ptr<TeardownWatch> watch) {
+    solve_state_.Begin();
+    active_channel_ = std::move(channel);
+    teardown_watch_ = std::move(watch);
+  }
+  void EndSolve() {
+    teardown_watch_.reset();
+    active_channel_.reset();
+    solve_state_.End();
+  }
 
  private:
   Napi::Value Solve(const Napi::CallbackInfo& info);      // (modelJson, paramsJson, onSolution?) -> Promise
@@ -118,14 +133,28 @@ class CpSatSolver : public Napi::ObjectWrap<CpSatSolver> {
     return Napi::Boolean::New(info.Env(), true);
   }
   Napi::Value IsBusy(const Napi::CallbackInfo& info) { return Napi::Boolean::New(info.Env(), solve_state_.busy()); }
+  // For process exit (lib/sat/cp_solver.js): JS will not run again.
+  Napi::Value AbandonMethod(const Napi::CallbackInfo& info) {
+    Abandon();
+    return info.Env().Undefined();
+  }
+
+  // Stops the running solve and releases solver threads waiting for JS.
+  void Abandon() {
+    if (!solve_state_.busy()) return;
+    solve_state_.RequestStop();
+    if (active_channel_) active_channel_->Abandon();
+  }
 
   AsyncSolveState solve_state_;
+  std::shared_ptr<SolutionChannel> active_channel_;  // while a solve() with onSolution runs
+  std::unique_ptr<TeardownWatch> teardown_watch_;    // while a solve() runs
 };
 
 class SolveWorker : public PromiseWorker {
  public:
   SolveWorker(Napi::Env env, Napi::Object owner, CpSatSolver* solver, CpModelProto model, SatParameters params,
-              std::unique_ptr<SolutionChannel> channel)
+              std::shared_ptr<SolutionChannel> channel)
       : PromiseWorker(env, owner),
         solver_(solver),
         model_(std::move(model)),
@@ -149,7 +178,7 @@ class SolveWorker : public PromiseWorker {
   CpSatSolver* solver_;
   CpModelProto model_;
   SatParameters params_;
-  std::unique_ptr<SolutionChannel> channel_;
+  std::shared_ptr<SolutionChannel> channel_;
   CpSolverResponse response_;
 };
 
@@ -166,17 +195,19 @@ Napi::Value CpSatSolver::Solve(const Napi::CallbackInfo& info) {
   if (!ReadSolveArguments(info, &model, &params)) return env.Undefined();
   if (!CheckNotBusy(env, solve_state_, "CpSolver")) return env.Undefined();
   SolveWorker* worker = nullptr;
+  std::shared_ptr<SolutionChannel> channel;
+  std::unique_ptr<TeardownWatch> watch;
   const bool created = GuardCpp(env, "solve", [&] {
-    std::unique_ptr<SolutionChannel> channel;
     if (has_callback) {
-      channel = std::make_unique<SolutionChannel>(env, info[2].As<Napi::Function>(), stop_flag());
-      if (env.IsExceptionPending()) return;  // the thread-safe function could not be created
+      channel = SolutionChannel::Create(env, info[2].As<Napi::Function>(), stop_flag());
+      if (!channel) return;  // the thread-safe function could not be created
     }
-    worker = new SolveWorker(env, info.This().As<Napi::Object>(), this, std::move(model), std::move(params),
-                             std::move(channel));
+    watch = TeardownWatch::Start(env, [this] { Abandon(); });
+    if (!watch) return;
+    worker = new SolveWorker(env, info.This().As<Napi::Object>(), this, std::move(model), std::move(params), channel);
   });
   if (!created || worker == nullptr) return env.Undefined();
-  solve_state_.Begin();
+  BeginSolve(std::move(channel), std::move(watch));
   worker->Queue();
   return worker->Promise();
 }
