@@ -86,7 +86,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `onlyEnforceIf()`, objectives, hints, assumptions and decision strategies.
   int64 values are exact: numbers, or BigInts beyond 2^53.
 - `CpSolver`: `solve()` on the threadpool and `solveSync()`, `SatParameters` as
-  a plain object, `stopSearch()`, values, objective, bound and statistics.
+  a plain object, `stopSearch()`, values (BigInts beyond 2^53), objective,
+  bound and statistics.
   Invalid models throw OR-Tools' own message instead of aborting the process;
   values throw when the last solve found no solution.
 - CP-SAT solution callbacks: `solve(model, { onSolution })` passes each solution
