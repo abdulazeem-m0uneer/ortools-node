@@ -159,6 +159,9 @@ test('enum numbers without a named value are TypeErrors', () => {
       { name: 'TypeError', message: /iteratedLocalSearchParameters\.perturbationStrategy/ });
     assert.throws(() => validateSatParameters({ searchBranching: bad }), { name: 'TypeError', message: /searchBranching/ });
   }
+  // Nested enums (FirstSolutionStrategy.Value) are named by their containing message.
+  assert.throws(() => validateRoutingSearchParameters({ firstSolutionStrategy: 999 }),
+    { name: 'TypeError', message: /'firstSolutionStrategy': no FirstSolutionStrategy\.Value value has number 999/ });
   assert.equal(validateRoutingSearchParameters({ firstSolutionStrategy: 3 }).firstSolutionStrategy,
     validateRoutingSearchParameters({ firstSolutionStrategy: 'PATH_CHEAPEST_ARC' }).firstSolutionStrategy);
 });
