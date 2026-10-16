@@ -55,6 +55,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `SolveResult` gives the termination, statistics, values, duals and reduced
   costs. MathOpt validates models and parameters; bad input is a JS error.
 - `modelBuilder` and `mathOpt` share one `LinearExpr` class.
+- `setCover` (Python's `set_cover`): `SetCoverModel`, `SetCoverInvariant` (a
+  solution, copied from the model), the trivial, random, greedy, element-degree
+  and lazy element-degree generators, steepest search, guided local and tabu
+  search, `SetCoverMip` (or its LP relaxation for a lower bound), and
+  `clearRandomSubsets` / `clearMostCoveredElements`. Runs go off the main
+  thread with `nextSolution()`, or `nextSolutionSync()`. Inputs OR-Tools would
+  abort or misbehave on (zero costs, repeated elements, uncovered elements,
+  focuses its heuristics cannot handle) throw JS errors instead.
 
 ### Changed
 

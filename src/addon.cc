@@ -19,6 +19,7 @@
 #include "math_opt/math_opt.h"
 #include "ortools/base/version.h"
 #include "routing/search_parameters.h"
+#include "set_cover/set_cover.h"
 #include "sat/sat_parameters.h"
 
 #ifndef ORTOOLS_VERSION_STRING
@@ -71,6 +72,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitKnapsackSolver(env, exports);
   InitModelBuilder(env, exports);
   InitMathOpt(env, exports);
+  InitSetCover(env, exports);
   return InitMpSolver(env, exports);
 }
 
