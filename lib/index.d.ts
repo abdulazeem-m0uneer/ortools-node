@@ -1,3 +1,4 @@
+/// <reference lib="esnext.disposable" />
 export * from './params';
 
 export type Backend =
@@ -84,6 +85,8 @@ export class Solver {
   clear(): this;
   /** Frees the native model now (GC only runs after the event loop turns); later calls throw. */
   dispose(): void;
+  /** Same as dispose(), so `using solver = new Solver(...)` frees it at scope exit. */
+  [Symbol.dispose](): void;
 }
 
 export function supportsBackend(name: string): boolean;
