@@ -54,7 +54,7 @@ release's packages in `optionalDependencies`; they are added by
   or `npm install --build-from-source` is used, keeps an existing
   `build/Release` or `build/Debug` addon otherwise, and fails with what to do
   when there is none. An `ORTOOLS_NODE_PIN` without prebuilts only warns when
-  `ORTOOLS_ROOT` is set. `npm run build` and `npm run rebuild` always build
+  `ORTOOLS_ROOT` is set or a source build exists. `npm run build` and `npm run rebuild` always build
   from source.
 - **Building**: `scripts/package-prebuilt.sh <x64|arm64> <ortools-version>`
   builds the addon with `-DORTOOLS_NODE_PREBUILT=ON` in the

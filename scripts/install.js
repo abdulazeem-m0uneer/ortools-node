@@ -24,41 +24,48 @@ function buildFromSourceRequested(env) {
  * findSourceBuild (injected for tests). Without a prebuilt or ORTOOLS_ROOT, an
  * existing source build is kept, as `cmake-js compile` used to. A stale
  * ORTOOLS_NODE_PIN cannot block a source build: the lookup is skipped for
- * --build-from-source, and an invalid pin only warns when ORTOOLS_ROOT is set.
+ * --build-from-source, and an invalid pin only warns when ORTOOLS_ROOT is set
+ * or a source build exists.
  */
 function decideInstall({ env, lookupPrebuilt, lookupSourceBuild }) {
   if (buildFromSourceRequested(env)) {
     return { action: 'compile', message: 'building from source (--build-from-source)' };
   }
+  const source = lookupSourceBuild();
   let prebuilt;
   try {
     prebuilt = lookupPrebuilt();
   } catch (err) {
-    if (err.code !== 'ORTOOLS_NODE_INVALID_PIN' || !env.ORTOOLS_ROOT) throw err;
-    return {
-      action: 'compile',
-      message: `building from source against ORTOOLS_ROOT=${env.ORTOOLS_ROOT}`,
-      warning: `${err.message}; ignoring it and building from source`,
-    };
+    if (err.code !== 'ORTOOLS_NODE_INVALID_PIN') throw err;
+    // The loader ignores the pin for source builds, so it must not block one.
+    const decision = sourceBuildDecision(env, source);
+    if (!decision) throw err;
+    return { ...decision, warning: `${err.message}; ignoring it for the source build` };
   }
   if (prebuilt.addon) {
     return { action: 'skip', message: `using the prebuilt addon from ${prebuilt.addon.origin}` };
   }
+  const decision = sourceBuildDecision(env, source);
+  if (decision) return decision;
+  const tried = [...source.tried, ...prebuilt.tried];
+  return {
+    action: 'fail',
+    message: `no prebuilt addon for this system and ORTOOLS_ROOT is not set. ${notFoundMessage(tried, prebuilt.suggested)}`,
+  };
+}
+
+/** Compile against ORTOOLS_ROOT, or keep an existing source build; null when neither applies. */
+function sourceBuildDecision(env, source) {
   if (env.ORTOOLS_ROOT) {
     return { action: 'compile', message: `no prebuilt addon; building from source against ORTOOLS_ROOT=${env.ORTOOLS_ROOT}` };
   }
-  const source = lookupSourceBuild();
   if (source.addon) {
     return {
       action: 'skip',
       message: `keeping the source build at ${source.addon.path} (run \`npm run build\` to recompile it)`,
     };
   }
-  const tried = [...source.tried, ...prebuilt.tried];
-  return {
-    action: 'fail',
-    message: `no prebuilt addon for this system and ORTOOLS_ROOT is not set. ${notFoundMessage(tried, prebuilt.suggested)}`,
-  };
+  return null;
 }
 
 /** Runs `cmake-js compile` with this Node.js; returns its exit code. */
