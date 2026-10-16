@@ -46,6 +46,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `le` / `ge` / `eq`...); `Solver` for any compiled-in backend with `solve()` off
   the main thread, `interrupt()`, time limit, values, duals, reduced costs and
   activities. Duals from HiGHS are withheld: OR-Tools reports them wrong.
+- `mathOpt` (Python's `mathopt`): `Model` with variables, linear constraints
+  and a linear objective (ids never reused, deletion supported), `solve()` off
+  the main thread with a `SolveInterrupter`, or `solveSync()`, on every MathOpt
+  solver this build can run (`SolverType`: GSCIP, GLOP, CP_SAT, PDLP, HIGHS...).
+  `SolveParameters` and `ModelSolveParameters` are plain objects (time limit in
+  seconds, LP algorithm and emphasis names, hints keyed by `Variable`); a
+  `SolveResult` gives the termination, statistics, values, duals and reduced
+  costs. MathOpt validates models and parameters; bad input is a JS error.
+- `modelBuilder` and `mathOpt` share one `LinearExpr` class.
 
 ### Changed
 
