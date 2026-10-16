@@ -48,6 +48,14 @@ Napi::Value ParametersJson(const Napi::CallbackInfo& info) {
   return ProtoToJson(info.Env(), parameters);
 }
 
+// Test hook: the parameters a solver reads (via ReadSatParameters) from the JSON
+// that satParametersJson returns.
+Napi::Value ReadParametersForTesting(const Napi::CallbackInfo& info) {
+  SatParameters parameters;
+  if (!ReadSatParameters(info.Env(), info[0], &parameters)) return info.Env().Undefined();
+  return MessageToJs(info.Env(), parameters);
+}
+
 }  // namespace
 
 bool ReadSatParameters(Napi::Env env, const Napi::Value& json, SatParameters* out) {
@@ -58,6 +66,7 @@ void InitSatParameters(Napi::Env env, Napi::Object exports) {
   exports.Set("defaultSatParameters", Napi::Function::New(env, DefaultParameters));
   exports.Set("validateSatParameters", Napi::Function::New(env, ValidateSatParameters));
   exports.Set("satParametersJson", Napi::Function::New(env, ParametersJson));
+  exports.Set("readSatParametersForTesting", Napi::Function::New(env, ReadParametersForTesting));
 }
 
 }  // namespace ortools_node
