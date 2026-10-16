@@ -3,24 +3,39 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { ADDON_FILE, findPrebuilt, findSourceBuild } = require('../lib/loader');
+const { ADDON_FILE, findAddon } = require('../lib/loader');
 const { buildFromSourceRequested, compileFromSource, decideInstall, main } = require('../scripts/install');
 const { FAKE_VERSION, confinedTo, moduleRootWith } = require('./helpers/fake-packages');
 
 const X64_15 = '@ortools-node/linux-x64-gnu-ortools9.15';
-const found = () => ({ addon: { path: '/x/ortools_node.node', origin: X64_15 }, tried: [], suggested: null });
+const SOURCE_TRIED = 'source build /pkg/build/Release/ortools_node.node: not found';
+// Results of findAddon, the loader's own resolution.
+const prebuiltFound = () => ({ addon: { path: '/x/ortools_node.node', origin: X64_15 }, tried: [SOURCE_TRIED], suggested: null });
+const sourceFound = () => ({ addon: { path: '/pkg/build/Release/ortools_node.node', origin: 'source build' }, tried: [], suggested: null });
 const missing = () => ({
   addon: null,
-  tried: [`prebuilt ${X64_15}: not installed`],
+  tried: [SOURCE_TRIED, `prebuilt ${X64_15}: not installed`],
   suggested: `${X64_15}@1.0.0`,
 });
 const unsupported = () => ({
   addon: null,
-  tried: ['Prebuilt binaries need glibc; musl-based Linux (such as Alpine) is not supported'],
+  tried: [SOURCE_TRIED, 'Prebuilt binaries need glibc; musl-based Linux (such as Alpine) is not supported'],
   suggested: null,
 });
-const notCalled = () => assert.fail('prebuilt lookup must not run');
-const noSourceBuild = () => ({ addon: null, tried: ['source build /pkg/build/Release/ortools_node.node: not found'] });
+const notCalled = () => assert.fail('lookup must not run');
+const quiet = { log: () => {}, logError: () => {} };
+
+/** findAddon on a Linux x64 glibc machine, confined to a temporary module root. */
+const lookupIn = (root, env = {}) => () =>
+  findAddon({ platform: 'linux', arch: 'x64', libc: 'glibc', env, version: FAKE_VERSION, ...confinedTo(root) });
+
+/** A temporary module root with a Release source build and the given packages. */
+function builtRoot(packages = [], options) {
+  const root = moduleRootWith(packages, options);
+  fs.mkdirSync(path.join(root, 'build', 'Release'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'build', 'Release', ADDON_FILE), '');
+  return root;
+}
 
 describe('buildFromSourceRequested', () => {
   test('is set by npm --build-from-source and --build-from-source=ortools-node', () => {
@@ -43,30 +58,30 @@ describe('buildFromSourceRequested', () => {
   });
 
   test('another package named in the flag does not force a source build over a prebuilt', () => {
-    const decision = decideInstall({ lookupSourceBuild: noSourceBuild, env: { npm_config_build_from_source: 'sqlite3' }, lookupPrebuilt: found });
+    const decision = decideInstall({ env: { npm_config_build_from_source: 'sqlite3' }, lookup: prebuiltFound });
     assert.equal(decision.action, 'skip');
   });
 });
 
 describe('decideInstall', () => {
   test('skips compiling when a prebuilt resolves', () => {
-    assert.deepEqual(decideInstall({ lookupSourceBuild: noSourceBuild, env: {}, lookupPrebuilt: found }), {
+    assert.deepEqual(decideInstall({ env: {}, lookup: prebuiltFound }), {
       action: 'skip',
       message: `using the prebuilt addon from ${X64_15}`,
     });
   });
 
   test('prefers the prebuilt even when ORTOOLS_ROOT is set', () => {
-    assert.equal(decideInstall({ lookupSourceBuild: noSourceBuild, env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookupPrebuilt: found }).action, 'skip');
+    assert.equal(decideInstall({ env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookup: prebuiltFound }).action, 'skip');
   });
 
-  test('--build-from-source compiles without looking for a prebuilt', () => {
-    const decision = decideInstall({ lookupSourceBuild: noSourceBuild, env: { npm_config_build_from_source: 'true' }, lookupPrebuilt: notCalled });
+  test('--build-from-source compiles without looking anything up', () => {
+    const decision = decideInstall({ env: { npm_config_build_from_source: 'true' }, lookup: notCalled });
     assert.equal(decision.action, 'compile');
   });
 
-  test('compiles against ORTOOLS_ROOT when no prebuilt resolves', () => {
-    const decision = decideInstall({ lookupSourceBuild: noSourceBuild, env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookupPrebuilt: missing });
+  test('compiles against ORTOOLS_ROOT when nothing resolves', () => {
+    const decision = decideInstall({ env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookup: missing });
     assert.deepEqual(decision, {
       action: 'compile',
       message: 'no prebuilt addon; building from source against ORTOOLS_ROOT=/opt/or-tools',
@@ -74,24 +89,25 @@ describe('decideInstall', () => {
   });
 
   test('compiles on an unsupported system when ORTOOLS_ROOT is set', () => {
-    assert.equal(decideInstall({ lookupSourceBuild: noSourceBuild, env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookupPrebuilt: unsupported }).action, 'compile');
+    assert.equal(decideInstall({ env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookup: unsupported }).action, 'compile');
   });
 
   test('an empty ORTOOLS_ROOT counts as unset', () => {
-    assert.equal(decideInstall({ lookupSourceBuild: noSourceBuild, env: { ORTOOLS_ROOT: '' }, lookupPrebuilt: missing }).action, 'fail');
+    assert.equal(decideInstall({ env: { ORTOOLS_ROOT: '' }, lookup: missing }).action, 'fail');
   });
 
   test('fails with both fixes when nothing is available', () => {
-    const { action, message } = decideInstall({ lookupSourceBuild: noSourceBuild, env: {}, lookupPrebuilt: missing });
+    const { action, message } = decideInstall({ env: {}, lookup: missing });
     assert.equal(action, 'fail');
     assert.match(message, /ORTOOLS_ROOT is not set/);
+    assert.match(message, /source build .*: not found/);
     assert.match(message, /prebuilt @ortools-node\/linux-x64-gnu-ortools9\.15: not installed/);
     assert.match(message, /\(npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
     assert.match(message, /set ORTOOLS_ROOT/);
   });
 
   test('on musl, fails with the reason and only the source-build fix', () => {
-    const { action, message } = decideInstall({ lookupSourceBuild: noSourceBuild, env: {}, lookupPrebuilt: unsupported });
+    const { action, message } = decideInstall({ env: {}, lookup: unsupported });
     assert.equal(action, 'fail');
     assert.match(message, /Alpine/);
     assert.doesNotMatch(message, /npm install/);
@@ -99,60 +115,61 @@ describe('decideInstall', () => {
 });
 
 describe('main', () => {
-  const quiet = { log: () => {}, logError: () => {} };
-
   test('exits 0 without compiling when a prebuilt resolves', () => {
-    const code = main({ lookupSourceBuild: noSourceBuild, ...quiet, env: {}, lookupPrebuilt: found, compile: () => assert.fail('compiled') });
-    assert.equal(code, 0);
+    assert.equal(main({ ...quiet, env: {}, lookup: prebuiltFound, compile: () => assert.fail('compiled') }), 0);
   });
 
   test('returns the compiler exit code', () => {
     const env = { ORTOOLS_ROOT: '/opt/or-tools' };
-    assert.equal(main({ lookupSourceBuild: noSourceBuild, ...quiet, env, lookupPrebuilt: missing, compile: () => 0 }), 0);
-    assert.equal(main({ lookupSourceBuild: noSourceBuild, ...quiet, env, lookupPrebuilt: missing, compile: () => 2 }), 2);
+    assert.equal(main({ ...quiet, env, lookup: missing, compile: () => 0 }), 0);
+    assert.equal(main({ ...quiet, env, lookup: missing, compile: () => 2 }), 2);
   });
 
   test('exits 1 with instructions when nothing is available', () => {
     const errors = [];
-    const code = main({ lookupSourceBuild: noSourceBuild, env: {}, lookupPrebuilt: missing, compile: () => assert.fail('compiled'), log: () => {}, logError: (m) => errors.push(m) });
+    const code = main({ env: {}, lookup: missing, compile: () => assert.fail('compiled'), log: () => {}, logError: (m) => errors.push(m) });
     assert.equal(code, 1);
     assert.match(errors.join('\n'), /^ortools-node: no prebuilt addon for this system/);
   });
 
-  test('exits 1 when the prebuilt lookup throws, such as on an invalid pin', () => {
+  test('exits 1 when the lookup throws', () => {
     const errors = [];
-    const lookupPrebuilt = () => {
-      throw new Error('ORTOOLS_NODE_PIN=9 is not an OR-Tools release with prebuilt binaries');
+    const lookup = () => {
+      throw new Error('@ortools-node/linux-x64-gnu-ortools9.15 has an unreadable package.json; reinstall it');
     };
-    const code = main({ lookupSourceBuild: noSourceBuild, env: {}, lookupPrebuilt, compile: () => assert.fail('compiled'), log: () => {}, logError: (m) => errors.push(m) });
+    const code = main({ env: {}, lookup, compile: () => assert.fail('compiled'), log: () => {}, logError: (m) => errors.push(m) });
     assert.equal(code, 1);
-    assert.match(errors[0], /ORTOOLS_NODE_PIN=9/);
+    assert.match(errors[0], /unreadable package\.json/);
+  });
+});
+
+describe('the install hook follows the loader', () => {
+  test('a source build and a prebuilt together: the hook keeps the source build the loader loads', () => {
+    const root = builtRoot([X64_15]);
+    const options = { platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: FAKE_VERSION, ...confinedTo(root) };
+    assert.equal(findAddon(options).addon.origin, 'source build');
+    const decision = decideInstall({ env: {}, lookup: lookupIn(root) });
+    assert.equal(decision.action, 'skip');
+    assert.match(decision.message, /^keeping the source build at .*build[/\\]Release[/\\]ortools_node\.node/);
   });
 
-  test('looks up prebuilts with the environment it was given', () => {
-    const errors = [];
-    const code = main({ lookupSourceBuild: noSourceBuild, env: { ORTOOLS_NODE_PIN: 'bogus' }, log: () => {}, logError: (m) => errors.push(m) });
-    assert.equal(code, 1);
-    assert.match(errors[0], /ORTOOLS_NODE_PIN=bogus/);
+  test('a source build and a prebuilt together: ORTOOLS_ROOT recompiles the source build', () => {
+    const decision = decideInstall({ env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookup: lookupIn(builtRoot([X64_15])) });
+    assert.equal(decision.action, 'compile');
+  });
+
+  test('a broken prebuilt cannot fail an install that has a source build', () => {
+    const root = builtRoot([X64_15], { withAddon: false });
+    assert.equal(decideInstall({ env: {}, lookup: lookupIn(root) }).action, 'skip');
   });
 });
 
 describe('an existing source build', () => {
-  const sourceBuildIn = (root) => () => findSourceBuild({ moduleRoot: root });
-  function builtRoot() {
-    const root = moduleRootWith([]);
-    fs.mkdirSync(path.join(root, 'build', 'Release'), { recursive: true });
-    fs.writeFileSync(path.join(root, 'build', 'Release', ADDON_FILE), '');
-    return root;
-  }
-
   test('lets the install succeed without ORTOOLS_ROOT or a prebuilt', () => {
-    const root = builtRoot();
     const logged = [];
     const code = main({
       env: {},
-      lookupPrebuilt: missing,
-      lookupSourceBuild: sourceBuildIn(root),
+      lookup: lookupIn(builtRoot()),
       compile: () => assert.fail('compiled'),
       log: (m) => logged.push(m),
       logError: (m) => assert.fail(m),
@@ -163,25 +180,17 @@ describe('an existing source build', () => {
   });
 
   test('is recompiled when ORTOOLS_ROOT is set', () => {
-    const decision = decideInstall({ env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookupPrebuilt: missing, lookupSourceBuild: sourceBuildIn(builtRoot()) });
-    assert.equal(decision.action, 'compile');
+    assert.equal(decideInstall({ env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookup: lookupIn(builtRoot()) }).action, 'compile');
   });
 
   test('is kept even when ORTOOLS_NODE_PIN names a release without prebuilts', () => {
-    const errors = [];
-    const code = main({
-      env: { ORTOOLS_NODE_PIN: '9.16' },
-      lookupSourceBuild: sourceBuildIn(builtRoot()),
-      compile: () => assert.fail('compiled'),
-      log: () => {},
-      logError: (m) => errors.push(m),
-    });
+    const env = { ORTOOLS_NODE_PIN: '9.16' };
+    const code = main({ ...quiet, env, lookup: lookupIn(builtRoot(), env), compile: () => assert.fail('compiled') });
     assert.equal(code, 0);
-    assert.match(errors[0], /^ortools-node: warning: ORTOOLS_NODE_PIN=9\.16 .*; ignoring it/);
   });
 
   test('the failure lists the source build paths it looked at', () => {
-    const { message } = decideInstall({ env: {}, lookupPrebuilt: missing, lookupSourceBuild: sourceBuildIn(moduleRootWith([])) });
+    const { message } = decideInstall({ env: {}, lookup: lookupIn(moduleRootWith([])) });
     assert.match(message, /source build .*build[/\\]Release[/\\]ortools_node\.node: not found/);
   });
 });
@@ -194,8 +203,8 @@ describe('an ORTOOLS_NODE_PIN with no prebuilt', () => {
     const errors = [];
     let compiled = 0;
     const code = main({
-      lookupSourceBuild: noSourceBuild,
       env,
+      lookup: lookupIn(moduleRootWith([]), env),
       compile: () => ++compiled && 0,
       log: (m) => logged.push(m),
       logError: (m) => errors.push(m),
@@ -207,28 +216,24 @@ describe('an ORTOOLS_NODE_PIN with no prebuilt', () => {
   });
 
   test('still fails without ORTOOLS_ROOT', () => {
-    const decision = () => decideInstall({ lookupSourceBuild: noSourceBuild, env: { ORTOOLS_NODE_PIN: '9.16' }, lookupPrebuilt: () => findPrebuilt({ env: { ORTOOLS_NODE_PIN: '9.16' } }) });
-    assert.throws(decision, /ORTOOLS_NODE_PIN=9\.16/);
+    const pin = { ORTOOLS_NODE_PIN: '9.16' };
+    assert.throws(() => decideInstall({ env: pin, lookup: lookupIn(moduleRootWith([]), pin) }), /ORTOOLS_NODE_PIN=9\.16/);
   });
 
   test('other lookup errors still fail even with ORTOOLS_ROOT', () => {
     const broken = () => {
       throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
     };
-    assert.throws(() => decideInstall({ lookupSourceBuild: noSourceBuild, env, lookupPrebuilt: broken }), /EACCES/);
+    assert.throws(() => decideInstall({ env, lookup: broken }), /EACCES/);
   });
 });
 
 describe('a prebuilt at another version than ortools-node', () => {
-  const lookupIn = (root) => () =>
-    findPrebuilt({ platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: FAKE_VERSION, ...confinedTo(root) });
-
   test('counts as not found: the install fails with the versioned install command', () => {
     const errors = [];
     const code = main({
-      lookupSourceBuild: noSourceBuild,
       env: {},
-      lookupPrebuilt: lookupIn(moduleRootWith([X64_15], { version: '0.9.0' })),
+      lookup: lookupIn(moduleRootWith([X64_15], { version: '0.9.0' })),
       compile: () => assert.fail('compiled'),
       log: () => assert.fail('logged success'),
       logError: (m) => errors.push(m),
@@ -239,12 +244,8 @@ describe('a prebuilt at another version than ortools-node', () => {
   });
 
   test('is built from source instead when ORTOOLS_ROOT is set', () => {
-    const decision = decideInstall({
-      lookupSourceBuild: noSourceBuild,
-      env: { ORTOOLS_ROOT: '/opt/or-tools' },
-      lookupPrebuilt: lookupIn(moduleRootWith([X64_15], { version: '0.9.0' })),
-    });
-    assert.equal(decision.action, 'compile');
+    const lookup = lookupIn(moduleRootWith([X64_15], { version: '0.9.0' }));
+    assert.equal(decideInstall({ env: { ORTOOLS_ROOT: '/opt/or-tools' }, lookup }).action, 'compile');
   });
 });
 
