@@ -1,0 +1,137 @@
+name: Prebuilt binaries
+
+# Builds the prebuilt platform packages (Linux x64 and arm64, glibc 2.28+, one
+# per OR-Tools release), then installs each in clean containers with no
+# compiler and no ORTOOLS_ROOT and runs the test suite. publish.yml calls this
+# workflow on every release tag before publishing.
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  pull_request:
+    paths:
+      - 'npm/**'
+      - 'scripts/**'
+      - 'lib/loader.js'
+      - 'lib/native.js'
+      - 'CMakeLists.txt'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/ortools-sha256.txt'
+      - '.github/workflows/prebuild.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prebuild-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pack-main:
+    name: Pack ortools-node
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Pack with the prebuilts as optional dependencies
+        run: scripts/prebuilt/pack-main.sh dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: main-package
+          path: dist/ortools-node-*.tgz
+          if-no-files-found: error
+
+  build:
+    name: Build linux-${{ matrix.platform.arch }} · OR-Tools ${{ matrix.ortools }}
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { arch: x64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+        ortools: [9.14.6206, 9.15.6755]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache OR-Tools and Node.js downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ortools-node
+          key: prebuilt-${{ matrix.platform.arch }}-${{ matrix.ortools }}-${{ hashFiles('.github/ortools-sha256.txt') }}
+
+      - name: Build and pack in manylinux_2_28
+        run: scripts/package-prebuilt.sh ${{ matrix.platform.arch }} ${{ matrix.ortools }} dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prebuilt-linux-${{ matrix.platform.arch }}-ortools${{ matrix.ortools }}
+          path: dist/*.tgz
+          if-no-files-found: error
+
+  smoke:
+    name: Smoke linux-${{ matrix.platform.arch }} · OR-Tools ${{ matrix.ortools }} · ${{ matrix.image }}
+    needs: [pack-main, build]
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { arch: x64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+        ortools: [9.14.6206, 9.15.6755]
+        image: ['debian:trixie-slim', 'ubuntu:24.04']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: main-package
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: prebuilt-linux-${{ matrix.platform.arch }}-ortools${{ matrix.ortools }}
+          path: dist
+
+      - name: Install without a compiler and run the tests on each Node.js
+        run: |
+          for node in 22 24 26; do
+            NODE_MAJOR=$node scripts/smoke-prebuilt.sh ${{ matrix.platform.arch }} ${{ matrix.ortools }} dist '${{ matrix.image }}'
+          done
+
+  install-errors:
+    name: Install errors without a prebuilt
+    needs: pack-main
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: main-package
+          path: dist
+
+      - name: Alpine (musl) is refused with a clear message
+        run: |
+          docker run --rm -v "$PWD/dist:/pkgs:ro" node:22-alpine sh -c '
+            cd /tmp && npm init -y >/dev/null
+            if npm install /pkgs/ortools-node-*.tgz >install.log 2>&1; then echo "install succeeded on musl"; exit 1; fi
+            cat install.log
+            grep -q "musl-based Linux (such as Alpine) is not supported" install.log'
+
+      - name: glibc without a platform package names the package to install
+        run: |
+          docker run --rm -v "$PWD/dist:/pkgs:ro" node:22-trixie-slim sh -c '
+            cd /tmp && npm init -y >/dev/null
+            if npm install --omit=optional /pkgs/ortools-node-*.tgz >install.log 2>&1; then echo "install succeeded"; exit 1; fi
+            cat install.log
+            grep -q "npm install @ortools-node/linux-x64-gnu-ortools9.15" install.log'
