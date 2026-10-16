@@ -205,7 +205,8 @@ export class SolutionSnapshot {
   readonly deterministicTime: number;
   /** 0 for the first solution of the solve, then 1, 2, ... */
   readonly solutionIndex: number;
-  value(expr: LinearExprLike): number;
+  /** A number, or a BigInt beyond 2^53 - 1. */
+  value(expr: LinearExprLike): Int;
   booleanValue(literal: Literal): boolean;
 }
 
@@ -228,8 +229,8 @@ export class CpSolver {
   dispose(): void;
 
   statusName(): CpSolverStatusName;
-  /** Throws unless the last solve ended OPTIMAL or FEASIBLE. */
-  value(expr: LinearExprLike): number;
+  /** A number, or a BigInt beyond 2^53 - 1. Throws unless the last solve ended OPTIMAL or FEASIBLE. */
+  value(expr: LinearExprLike): Int;
   booleanValue(literal: Literal): boolean;
   readonly objectiveValue: number;
   readonly bestObjectiveBound: number;

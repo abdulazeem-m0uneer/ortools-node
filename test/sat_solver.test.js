@@ -212,20 +212,25 @@ test('a decision strategy steers a fixed search', () => {
   assert.equal(solver.value(y), 0);
 });
 
-test('int64 extremes: values beyond 2^53 are exact in the proto, and value() refuses to round them', () => {
+test('int64 values beyond 2^53 come back exact as BigInts, safe ones as numbers', async () => {
   const m = new CpModel();
-  const big = 2n ** 61n + 1n;
-  const x = m.newIntVar(big, big, 'x');
+  const big = 2n ** 60n;
+  const x = m.newIntVar(big, big + 5n, 'x');
   const y = m.newIntVar(-5, 5, 'y');
-  m.minimize(y);
+  m.maximize(x.minus(y));
   const solver = new CpSolver();
   assert.equal(solver.solveSync(m), 'OPTIMAL');
+  assert.equal(solver.value(x), big + 5n);
   assert.equal(solver.value(y), -5);
-  assert.deepEqual(solver.responseProto().solution, [String(big), '-5']);
-  assert.throws(() => solver.value(x), RangeError);
-  assert.equal(solver.value(x.minus(big)), 0);
-  assert.equal(solver.value(x.minus(2n ** 61n).plus(y)), -4);
-  assert.throws(() => solver.value(2n ** 60n), RangeError);
+  assert.deepEqual(solver.responseProto().solution, [String(big + 5n), '-5']);
+  assert.equal(solver.value(x.minus(big)), 5);  // safe results are numbers again
+  assert.equal(solver.value(x.minus(big).plus(y)), 0);
+  assert.equal(solver.value(x.times(-1)), -(big + 5n));
+  assert.equal(solver.value(2n ** 60n), 2n ** 60n);
+  assert.equal(solver.value(2n ** 52n), 2 ** 52);
+  const seen = [];
+  await new CpSolver().solve(m, { onSolution: (s) => seen.push(s.value(x)) });
+  assert.equal(seen.at(-1), big + 5n);
 });
 
 test('value() stays exact when products exceed 2^53 but the result does not', () => {

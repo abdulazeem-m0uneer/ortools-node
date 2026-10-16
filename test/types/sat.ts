@@ -9,6 +9,7 @@ import {
   CpSolverStatusName,
   Domain,
   IntVar,
+  Int,
   IntervalVar,
   NotBooleanVariable,
   SolutionSnapshot,
@@ -41,12 +42,14 @@ solver.parameters = { maxTimeInSeconds: 0.3, numWorkers: 1 };
 async function run(): Promise<number> {
   const status: CpSolverStatusName = await solver.solve(model, {
     onSolution(s: SolutionSnapshot) {
-      const v: number = s.value(x);
+      const v: Int = s.value(x);  // a BigInt beyond 2^53
       const lit: boolean = s.booleanValue(notB);
       if (v > 5 && lit) solver.stopSearch();
     },
   });
-  if (status === CpSolverStatus.OPTIMAL) return solver.value(x) + solver.objectiveValue;
+  // @ts-expect-error value() may be a BigInt, so it is not a number
+  const asNumber: number = solver.value(x);
+  if (status === CpSolverStatus.OPTIMAL) return Number(solver.value(x)) + solver.objectiveValue + asNumber;
   return solver.numBranches;
 }
 const syncStatus: CpSolverStatusName = solver.solveSync(model);
