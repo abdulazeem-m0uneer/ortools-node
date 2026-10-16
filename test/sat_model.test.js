@@ -387,3 +387,25 @@ test('validate() returns OR-Tools\' message for invalid models and modelStats() 
   ok.addExactlyOne([ok.newBoolVar('a'), ok.newBoolVar('b')]);
   assert.match(ok.modelStats(), /kExactlyOne: 1/);
 });
+
+test('modelStats() validates first: an out-of-range index throws instead of crashing', () => {
+  const { spawnSync } = require('node:child_process');
+  const script = `
+    const native = require(${JSON.stringify(require('node:path').join(__dirname, '..', 'lib', 'native'))});
+    const { CpModel } = require(${JSON.stringify(require('node:path').join(__dirname, '..'))});
+    const results = [];
+    for (const vars of [[100000000], [7]]) {
+      const json = JSON.stringify({ variables: [{ domain: ['0', '1'] }], objective: { vars, coeffs: ['1'] } });
+      try { native.cpModelStats(json); results.push('no error'); } catch (e) { results.push(e.message); }
+    }
+    const model = new CpModel();
+    model.newBoolVar('b');
+    model._proto.constraints.push({ boolOr: { literals: [5] } });
+    try { model.modelStats(); results.push('no error'); } catch (e) { results.push(e.message); }
+    console.log(JSON.stringify(results));
+  `;
+  const child = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 30000 });
+  assert.equal(child.signal, null, child.stderr);
+  assert.equal(child.status, 0, child.stderr);
+  for (const message of JSON.parse(child.stdout)) assert.match(message, /^Invalid CpModel: /);
+});
