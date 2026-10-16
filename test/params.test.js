@@ -246,13 +246,39 @@ test('null, undefined and holes inside repeated fields are TypeErrors naming the
 test('±Infinity numbers are accepted only for float and double fields', () => {
   assert.throws(() => validateRoutingSearchParameters({ logTag: Infinity }), { name: 'TypeError', message: /'logTag'.*Infinity/ });
   assert.throws(() => validateSatParameters({ name: -Infinity }), { name: 'TypeError', message: /'name'.*Infinity/ });
-  assert.throws(() => validateSatParameters({ numWorkers: Infinity }), TypeError);
+  assert.throws(() => validateSatParameters({ numWorkers: Infinity }),
+    { name: 'TypeError', message: /'numWorkers' cannot be Infinity/ });
+  assert.throws(() => validateSatParameters({ searchBranching: -Infinity }),
+    { name: 'TypeError', message: /'searchBranching' cannot be Infinity/ });
+  assert.throws(() => validateRoutingSearchParameters({ localSearchOperators: { useRelocate: Infinity } }),
+    { name: 'TypeError', message: /'localSearchOperators\.useRelocate' cannot be Infinity/ });
   assert.throws(() => validateSatParameters({ subsolverParams: [{ name: Infinity }] }),
     { name: 'TypeError', message: /'subsolverParams\[0\]\.name'/ });
   assert.equal(validateSatParameters({ subsolverParams: [{ name: 'a', maxTimeInSeconds: Infinity }] })
     .subsolverParams[0].maxTimeInSeconds, Infinity);
   assert.equal(validateSatParameters({ maxTimeInSeconds: Infinity }).maxTimeInSeconds, Infinity);
   assert.throws(() => validateSatParameters({ name: '\u0000+Infinity' }), { name: 'TypeError', message: /'name' is reserved/ });
+});
+
+test('strings and keys that contain an Infinity marker are rejected, never rewritten', () => {
+  assert.throws(() => validateSatParameters({ logPrefix: '"\u0000+Infinity' }),
+    { name: 'TypeError', message: /'logPrefix' contains a reserved Infinity marker/ });
+  assert.throws(() => validateSatParameters({ logPrefix: 'a\\"\u0000-Infinity"b' }),
+    { name: 'TypeError', message: /'logPrefix' contains a reserved Infinity marker/ });
+  assert.throws(() => validateSatParameters({ subsolvers: ['default_lp', 'x\u0000-Infinity'] }),
+    { name: 'TypeError', message: /'subsolvers\[1\]' contains a reserved Infinity marker/ });
+  assert.throws(() => validateSatParameters({ '\u0000+Infinity': 1 }),
+    { name: 'TypeError', message: /contains a reserved Infinity marker/ });
+  assert.equal(validateSatParameters({ logPrefix: '"Infinity"' }).logPrefix, '"Infinity"');
+});
+
+test('numbers reach protobuf unchanged', () => {
+  for (const value of [0.1, 1 / 3, 5e-324, Number.MAX_VALUE, 123456789.123456789, 1e21]) {
+    assert.equal(validateSatParameters({ maxTimeInSeconds: value }).maxTimeInSeconds, value);
+  }
+  for (const value of [1, 1e15, Number.MAX_SAFE_INTEGER]) {
+    assert.equal(validateRoutingSearchParameters({ solutionLimit: value }).solutionLimit, String(value));
+  }
 });
 
 test('NaN errors give the full path of the field', () => {
