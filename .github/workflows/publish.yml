@@ -1,0 +1,79 @@
+name: Publish
+
+# Publishes a release to npm when a v* tag is pushed: builds and smoke-tests
+# every prebuilt (prebuild.yml), then waits for approval on the `npm`
+# environment (configure required reviewers under Settings > Environments)
+# before publishing the platform packages and then ortools-node itself, the
+# exact tarballs the smoke tests installed. Needs the NPM_TOKEN secret on that
+# environment.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prebuilt:
+    uses: ./.github/workflows/prebuild.yml
+
+  publish:
+    name: Publish to npm
+    needs: prebuilt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Check the tag matches package.json
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "$GITHUB_REF_NAME" = "v$version" || { echo "Tag $GITHUB_REF_NAME does not match version $version"; exit 1; }
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: main-package
+          path: dist
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: prebuilt-*
+          path: dist
+          merge-multiple: true
+
+      - name: Publish the platform packages, then ortools-node
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # Platform packages first, so ortools-node's optionalDependencies resolve.
+          # A re-run skips versions that are already on the registry.
+          publish() {
+            local spec
+            spec=$(tar -xzOf "$1" package/package.json | node -p "const p = JSON.parse(require('fs').readFileSync(0, 'utf8')); p.name + '@' + p.version")
+            if npm view "$spec" version >/dev/null 2>&1; then
+              echo "$spec is already published"
+            else
+              npm publish "$1" --access public --provenance
+            fi
+          }
+          shopt -s nullglob
+          platform=(dist/ortools-node-linux-*.tgz)
+          main=(dist/ortools-node-[0-9]*.tgz)
+          test ${#platform[@]} -eq 4 || { echo "Expected 4 platform tarballs, found ${#platform[@]}"; exit 1; }
+          test ${#main[@]} -eq 1 || { echo "Expected 1 ortools-node tarball, found ${#main[@]}"; exit 1; }
+          for tarball in "${platform[@]}"; do publish "$tarball"; done
+          publish "${main[0]}"
