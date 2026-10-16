@@ -6,7 +6,18 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { ADDON_FILE, PREBUILT_TARGETS } = require('../lib/loader');
-const { collectLibraries, componentOf, licenseExpression, parseNeeded, releaseOf } = require('../scripts/prebuilt/assemble');
+const {
+  assemble,
+  collectLibraries,
+  componentOf,
+  copyLicences,
+  findLibDir,
+  licenseExpression,
+  noticeMarkdown,
+  ortoolsLicence,
+  parseNeeded,
+  releaseOf,
+} = require('../scripts/prebuilt/assemble');
 const { withPrebuiltOptionalDependencies } = require('../scripts/prebuilt/set-optional-deps');
 
 const NPM_DIR = path.join(__dirname, '..', 'npm');
@@ -177,5 +188,118 @@ describe('copy_worktree (scripts/common.sh)', { skip: worktreeSkip }, () => {
     assert.ok(fs.existsSync(path.join(dest, 'untracked.txt')));
     assert.ok(!fs.existsSync(path.join(dest, 'zz-deleted.txt')));
     assert.ok(!fs.existsSync(path.join(dest, 'ignored.txt')));
+  });
+});
+
+describe('assemble', () => {
+  // A fake OR-Tools root: libraries in libDirName, with a licence unless told not to.
+  function fakeOrtools(t, { libDirName = 'lib64', licence = true } = {}) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ortools-node-assemble-'));
+    t.after(() => fs.rmSync(tmp, { recursive: true, force: true }));
+    const root = path.join(tmp, 'or-tools');
+    const libDir = path.join(root, libDirName);
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(path.join(libDir, 'libortools.so.9.15.6755'), 'ortools-real');
+    fs.symlinkSync('libortools.so.9.15.6755', path.join(libDir, 'libortools.so.9'));
+    fs.writeFileSync(path.join(libDir, 'libz.so.1'), 'zlib');
+    if (licence) {
+      fs.mkdirSync(path.join(root, 'share', 'doc', 'ortools'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'share', 'doc', 'ortools', 'LICENSE'), 'Apache');
+      fs.mkdirSync(path.join(root, 'share', 'licenses', 'scip'), { recursive: true });
+      fs.writeFileSync(path.join(root, 'share', 'licenses', 'scip', 'LICENSE'), 'scip');
+    }
+    const addon = path.join(tmp, ADDON_FILE);
+    fs.writeFileSync(addon, 'addon');
+    const templateDir = path.join(tmp, 'npm');
+    fs.mkdirSync(path.join(templateDir, 'linux-x64-gnu'), { recursive: true });
+    const writeTemplate = (template) =>
+      fs.writeFileSync(path.join(templateDir, 'linux-x64-gnu', 'package.json'), JSON.stringify(template));
+    writeTemplate({ description: 'Prebuilt', os: ['linux'], cpu: ['x64'] });
+    return { root, libDir, addon, templateDir, writeTemplate, outDir: path.join(tmp, 'pkg') };
+  }
+  const collect = () => ({ bundled: ['libortools.so.9', 'libz.so.1'], system: ['libc.so.6'] });
+  const run = (f, extra = {}) =>
+    assemble({
+      target: 'linux-x64-gnu',
+      ortoolsVersion: '9.15.6755',
+      addon: f.addon,
+      ortoolsRoot: f.root,
+      outDir: f.outDir,
+      templateDir: f.templateDir,
+      collect,
+      packageVersion: '2.3.4',
+      ...extra,
+    });
+
+  test('findLibDir picks lib64/ (AlmaLinux archives) or lib/', (t) => {
+    const alma = fakeOrtools(t);
+    assert.equal(findLibDir(alma.root), path.join(alma.root, 'lib64'));
+    const ubuntu = fakeOrtools(t, { libDirName: 'lib' });
+    assert.equal(findLibDir(ubuntu.root), path.join(ubuntu.root, 'lib'));
+  });
+
+  test('findLibDir ignores a lib64/ without libortools.so', (t) => {
+    const f = fakeOrtools(t, { libDirName: 'lib' });
+    fs.mkdirSync(path.join(f.root, 'lib64'));
+    fs.writeFileSync(path.join(f.root, 'lib64', 'libz.so.1'), '');
+    assert.equal(findLibDir(f.root), path.join(f.root, 'lib'));
+  });
+
+  test('findLibDir fails without libortools.so', (t) => {
+    const f = fakeOrtools(t);
+    for (const file of fs.readdirSync(f.libDir)) if (file.startsWith('libortools')) fs.rmSync(path.join(f.libDir, file));
+    assert.throws(() => findLibDir(f.root), /No libortools\.so under .*lib64 or .*lib/);
+  });
+
+  test('refuses an OR-Tools root without its licence, before writing anything', (t) => {
+    const f = fakeOrtools(t, { licence: false });
+    assert.throws(() => run(f), new RegExp(`The OR-Tools archive has no licence at ${ortoolsLicence(f.root).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+    assert.ok(!fs.existsSync(f.outDir));
+  });
+
+  test('refuses an existing output directory', (t) => {
+    const f = fakeOrtools(t);
+    fs.mkdirSync(f.outDir);
+    fs.writeFileSync(path.join(f.outDir, 'keep'), 'x');
+    assert.throws(() => run(f), /pkg already exists/);
+    assert.deepEqual(fs.readdirSync(f.outDir), ['keep']);
+  });
+
+  test('copies each library as a real file under its SONAME, plus the addon', (t) => {
+    const f = fakeOrtools(t);
+    run(f);
+    const lib = path.join(f.outDir, 'libortools.so.9');
+    assert.ok(!fs.lstatSync(lib).isSymbolicLink());
+    assert.equal(fs.readFileSync(lib, 'utf8'), 'ortools-real');
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'libz.so.1'), 'utf8'), 'zlib');
+    assert.equal(fs.readFileSync(path.join(f.outDir, ADDON_FILE), 'utf8'), 'addon');
+    assert.ok(!fs.existsSync(path.join(f.outDir, 'libortools.so.9.15.6755')));
+  });
+
+  test('copyLicences copies the OR-Tools licence and the archive\'s third-party ones', (t) => {
+    const f = fakeOrtools(t);
+    fs.mkdirSync(f.outDir);
+    const files = copyLicences(f.root, f.outDir);
+    assert.deepEqual(files, [path.join('LICENSES', 'or-tools', 'LICENSE'), path.join('LICENSES', 'scip', 'LICENSE')]);
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'or-tools', 'LICENSE'), 'utf8'), 'Apache');
+  });
+
+  test('THIRD_PARTY_NOTICES has one row per component and lists the licence files', (t) => {
+    const f = fakeOrtools(t);
+    run(f);
+    const notice = fs.readFileSync(path.join(f.outDir, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+    assert.match(notice, /OR-Tools 9\.15\.6755 C\+\+ release/);
+    const rows = notice.split('\n').filter((l) => /^\| \[/.test(l));
+    assert.deepEqual(rows, [
+      '| [OR-Tools](https://github.com/google/or-tools) | Apache-2.0 | `libortools.so.9` |',
+      '| [zlib](https://zlib.net) | Zlib | `libz.so.1` |',
+    ]);
+    assert.match(notice, /- `LICENSES\/scip\/LICENSE`/);
+  });
+
+  test('noticeMarkdown joins several libraries of one component', () => {
+    const absl = componentOf('libabsl_base.so.1');
+    const md = noticeMarkdown('9.14.6206', [absl], new Map([[absl, ['libabsl_base.so.1', 'libabsl_city.so.1']]]), []);
+    assert.match(md, /\| Apache-2\.0 \| `libabsl_base\.so\.1`, `libabsl_city\.so\.1` \|/);
   });
 });

@@ -175,12 +175,25 @@ function releaseOf(ortoolsVersion) {
   return match[1];
 }
 
-function assemble({ target, ortoolsVersion, addon, ortoolsRoot, outDir }) {
-  const templateFile = path.join(REPO_ROOT, 'npm', target, 'package.json');
+/**
+ * Writes the package directory. `templateDir`, `collect` (collectLibraries)
+ * and `packageVersion` are injectable for tests.
+ */
+function assemble({
+  target,
+  ortoolsVersion,
+  addon,
+  ortoolsRoot,
+  outDir,
+  templateDir = path.join(REPO_ROOT, 'npm'),
+  collect = collectLibraries,
+  packageVersion = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).version,
+}) {
+  const templateFile = path.join(templateDir, target, 'package.json');
   if (!fs.existsSync(templateFile)) throw new Error(`No package template for target '${target}' (${templateFile})`);
   const name = prebuiltPackageName(target, releaseOf(ortoolsVersion));
   const libDir = findLibDir(ortoolsRoot);
-  const { bundled, system } = collectLibraries(addon, { libDir });
+  const { bundled, system } = collect(addon, { libDir });
   const librariesByComponent = new Map();
   for (const soname of bundled) {
     const component = componentOf(soname);
@@ -200,7 +213,7 @@ function assemble({ target, ortoolsVersion, addon, ortoolsRoot, outDir }) {
   const licenceFiles = copyLicences(ortoolsRoot, outDir);
   fs.copyFileSync(path.join(REPO_ROOT, 'LICENSE'), path.join(outDir, 'LICENSE'));
   fs.writeFileSync(path.join(outDir, 'THIRD_PARTY_NOTICES.md'), noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenceFiles));
-  const { version } = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+  const version = packageVersion;
   fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, version, ortoolsVersion));
 
   const template = JSON.parse(fs.readFileSync(templateFile, 'utf8'));
@@ -225,4 +238,15 @@ if (require.main === module) {
   console.log(`${result.name}: bundled ${result.bundled.length} libraries; needs from the system: ${result.system.join(' ')}`);
 }
 
-module.exports = { collectLibraries, componentOf, licenseExpression, parseNeeded, releaseOf };
+module.exports = {
+  assemble,
+  collectLibraries,
+  componentOf,
+  copyLicences,
+  findLibDir,
+  licenseExpression,
+  noticeMarkdown,
+  ortoolsLicence,
+  parseNeeded,
+  releaseOf,
+};
