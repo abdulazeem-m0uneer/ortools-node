@@ -243,10 +243,24 @@ describe('findPrebuilt', () => {
   });
 
   // A package that is there but broken must not read as "not installed".
-  test('a corrupt package.json is an error, not "not installed"', () => {
+  test('a corrupt package.json is an error naming the package and file, not "not installed"', () => {
     const root = moduleRootWith([X64_15]);
-    fs.writeFileSync(path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json'), '{');
-    assert.throws(() => findPrebuilt({ ...linuxX64, ...confinedTo(root) }), SyntaxError);
+    const manifest = path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json');
+    fs.writeFileSync(manifest, '{');
+    assert.throws(
+      () => findPrebuilt({ ...linuxX64, ...confinedTo(root) }),
+      (err) => {
+        assert.equal(err.message, `${X64_15} has an unreadable ${fs.realpathSync(manifest)}; reinstall it`);
+        assert.ok(err.cause instanceof SyntaxError);
+        return true;
+      },
+    );
+  });
+
+  test('a package directory without package.json is an error too', () => {
+    const root = moduleRootWith([X64_15]);
+    fs.rmSync(path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json'));
+    assert.throws(() => findPrebuilt({ ...linuxX64, ...confinedTo(root) }), (err) => /has an unreadable .*package\.json; reinstall it/.test(err.message) && err.cause.code === 'ENOENT');
   });
 
 });
