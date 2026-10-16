@@ -20,17 +20,28 @@ const unsupported = () => ({
 const notCalled = () => assert.fail('prebuilt lookup must not run');
 
 describe('buildFromSourceRequested', () => {
-  test('is set by npm --build-from-source', () => {
-    for (const value of ['true', 'TRUE', '1', 'ortools-node']) {
+  test('is set by npm --build-from-source and --build-from-source=ortools-node', () => {
+    for (const value of ['true', 'TRUE', 'ortools-node']) {
       assert.equal(buildFromSourceRequested({ npm_config_build_from_source: value }), true, value);
     }
   });
 
-  test('is off when unset, empty or false', () => {
-    assert.equal(buildFromSourceRequested({}), false);
-    for (const value of ['', 'false', 'False', '0']) {
+  test('ignores a flag naming another package', () => {
+    for (const value of ['sqlite3', 'ortools-node-extra', '@ortools-node/linux-x64-gnu-ortools9.15']) {
       assert.equal(buildFromSourceRequested({ npm_config_build_from_source: value }), false, value);
     }
+  });
+
+  test('is off when unset, empty, false or anything else', () => {
+    assert.equal(buildFromSourceRequested({}), false);
+    for (const value of ['', 'false', 'False', '0', '1', 'yes']) {
+      assert.equal(buildFromSourceRequested({ npm_config_build_from_source: value }), false, value);
+    }
+  });
+
+  test('another package named in the flag does not force a source build over a prebuilt', () => {
+    const decision = decideInstall({ env: { npm_config_build_from_source: 'sqlite3' }, lookupPrebuilt: found });
+    assert.equal(decision.action, 'skip');
   });
 });
 
