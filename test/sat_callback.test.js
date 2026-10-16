@@ -30,28 +30,35 @@ test('every solution of an enumeration reaches the callback before solve() resol
 });
 
 test('snapshots carry objective, bound, timing and values that stay readable later', async () => {
+  // A 15x15 assignment with spread-out costs: one worker finds several
+  // improving solutions before proving the optimum.
+  const n = 15;
   const m = new CpModel();
-  const x = m.newIntVar(0, 50, 'x');
-  const y = m.newIntVar(0, 50, 'y');
-  m.add(x.plus(y).ge(30));
-  m.minimize(x.times(3).plus(y.times(2)));
+  const x = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => m.newBoolVar(`x${i}_${j}`)));
+  for (let i = 0; i < n; ++i) {
+    m.addExactlyOne(x[i]);
+    m.addExactlyOne(x.map((row) => row[i]));
+  }
+  const costs = x.flat().map((_, k) => ((k * 7919) % 997) + 1);
+  const objective = CpLinearExpr.weightedSum(x.flat(), costs);
+  m.minimize(objective);
   const solver = new CpSolver();
   solver.parameters = { numWorkers: 1 };
   const snapshots = [];
   assert.equal(await solver.solve(m, { onSolution: (s) => snapshots.push(s) }), 'OPTIMAL');
-  assert.ok(snapshots.length >= 1);
+  assert.ok(snapshots.length >= 2, `${snapshots.length} solution(s): the improvement check needs several`);
   for (let i = 0; i < snapshots.length; ++i) {
     const s = snapshots[i];
     assert.equal(s.solutionIndex, i);
-    assert.ok(s.value(x) + s.value(y) >= 30);
-    assert.equal(s.objectiveValue, s.value(x.times(3).plus(y.times(2))));
+    for (let r = 0; r < n; ++r) assert.equal(x[r].filter((v) => s.booleanValue(v)).length, 1);
+    assert.equal(s.objectiveValue, s.value(objective));
     assert.ok(s.bestObjectiveBound <= s.objectiveValue);
     assert.ok(s.wallTime >= 0 && s.userTime >= 0 && s.deterministicTime >= 0);
     if (i > 0) assert.ok(s.objectiveValue < snapshots[i - 1].objectiveValue);
   }
   const last = snapshots.at(-1);
   assert.equal(last.objectiveValue, solver.objectiveValue);
-  assert.equal(last.value(x), solver.value(x));
+  assert.equal(last.value(objective), solver.value(objective));
   assert.throws(() => { last.objectiveValue = 0; }, TypeError);
   assert.throws(() => last.value(new CpModel().newIntVar(0, 1, 'z')), /different CpModel/);
 });
