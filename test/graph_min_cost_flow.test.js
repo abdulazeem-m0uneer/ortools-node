@@ -205,6 +205,16 @@ test('min cost flow: int64 extremes are reported, never wrapped', () => {
   m.setNodeSupply(3, -(2n ** 62n));
   assert.equal(m.solveSync(), 'BAD_CAPACITY_RANGE');
   assert.equal(m.solveMaxFlowWithMinCostSync(), 'BAD_CAPACITY_RANGE');
+  // Each side is checked on its own, up to a total of exactly int64 max.
+  const totals = (supplies) => {
+    const flow = new SimpleMinCostFlow();
+    supplies.forEach((supply, node) => flow.setNodeSupply(node, supply));
+    return [flow.solveSync(), flow.solveMaxFlowWithMinCostSync()];
+  };
+  assert.deepEqual(totals([1, -(2n ** 62n), -(2n ** 62n)]), ['BAD_CAPACITY_RANGE', 'BAD_CAPACITY_RANGE']);
+  assert.deepEqual(totals([1, -(2n ** 62n), -(2n ** 62n) + 1n]), ['UNBALANCED', 'OPTIMAL']);
+  assert.deepEqual(totals([INT64_MAX, 1, -INT64_MAX]), ['BAD_CAPACITY_RANGE', 'BAD_CAPACITY_RANGE']);
+  assert.deepEqual(totals([INT64_MAX - 1n, 1, -INT64_MAX]), ['INFEASIBLE', 'OPTIMAL']);
   // A safe-range total cost is exact.
   const big = new SimpleMinCostFlow();
   big.addArcWithCapacityAndUnitCost(0, 1, 2 ** 20, 2 ** 30);

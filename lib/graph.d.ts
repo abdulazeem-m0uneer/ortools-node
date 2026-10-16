@@ -150,7 +150,12 @@ export class SimpleLinearSumAssignment {
   /** Bulk addArcWithCost; returns the new arc indices. */
   addArcsWithCost(leftNodes: IntList, rightNodes: IntList, costs: IntList): Int32Array;
 
-  /** POSSIBLE_OVERFLOW when a cost magnitude exceeds 2^63 / (numNodes() + 1). */
+  /**
+   * POSSIBLE_OVERFLOW when costs are too large to scale safely. Any cost
+   * magnitude above (2^63 - 1) / (numNodes() + 1) is always rejected, and
+   * OR-Tools' own price bounds reject smaller costs too (from about 2^63 / 6
+   * with one node, less on larger graphs), so keep costs well below that.
+   */
   solve(): Promise<LinearSumAssignmentStatus>;
   solveSync(): LinearSumAssignmentStatus;
 
