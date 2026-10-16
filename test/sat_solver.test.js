@@ -312,7 +312,7 @@ test('one model solved by two solvers at once, then changed after the solve star
   assert.equal(a.value(x), 0);
 });
 
-test('dispose() drops the result, is idempotent, and later calls throw', () => {
+test('dispose(): later solves and reads throw, stopSearch() is false and busy is false', () => {
   const { m } = smallModel();
   const solver = new CpSolver();
   solver.solveSync(m);
@@ -320,6 +320,8 @@ test('dispose() drops the result, is idempotent, and later calls throw', () => {
   solver.dispose();
   assert.throws(() => solver.statusName(), /disposed/);
   assert.throws(() => solver.solveSync(m), /disposed/);
+  assert.throws(() => solver.value(1), /disposed/);
+  assert.throws(() => solver.wallTime, /disposed/);
   assert.equal(solver.stopSearch(), false);
   assert.equal(solver.busy, false);
 });
