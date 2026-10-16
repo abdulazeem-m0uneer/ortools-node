@@ -295,6 +295,13 @@ test('SAT parameters keep only the fields that were set', () => {
   assert.equal('randomSeed' in p, false);
 });
 
+test('SAT parameters list every repeated field, empty when not given', () => {
+  const p = validateSatParameters({});
+  assert.ok(Object.keys(p).length > 0);
+  for (const [key, value] of Object.entries(p)) assert.deepEqual(value, [], key);
+  assert.deepEqual(validateSatParameters({ subsolvers: ['default_lp'] }).subsolvers, ['default_lp']);
+});
+
 test('infinite SAT values round-trip as numbers', () => {
   assert.equal(validateSatParameters({ maxTimeInSeconds: Infinity }).maxTimeInSeconds, Infinity);
 });

@@ -54,6 +54,12 @@ export interface SatParameters {
   [field: string]: unknown;
 }
 
+/**
+ * Parameters as given to validate*(): like T, but null, like undefined, keeps a
+ * field's default. Naming one field in both camelCase and snake_case is a TypeError.
+ */
+export type Overrides<T> = { [K in keyof T]?: T[K] | null };
+
 /** A fresh copy of OR-Tools' DefaultRoutingSearchParameters(). */
 export function defaultRoutingSearchParameters(): RoutingSearchParameters;
 /**
@@ -61,10 +67,13 @@ export function defaultRoutingSearchParameters(): RoutingSearchParameters;
  * them. undefined or null keeps a default; setting one member of a oneof
  * replaces the default member.
  */
-export function validateRoutingSearchParameters(params?: RoutingSearchParameters): RoutingSearchParameters;
+export function validateRoutingSearchParameters(params?: Overrides<RoutingSearchParameters>): RoutingSearchParameters;
 /** A fresh copy of CP-SAT's default SatParameters, every field listed. */
 export function defaultSatParameters(): SatParameters;
-/** The fields set in `params` (undefined or null leaves a field unset), as CP-SAT validated them. */
-export function validateSatParameters(params?: SatParameters): SatParameters;
+/**
+ * The fields set in `params` (undefined or null leaves a field unset), as CP-SAT
+ * validated them, plus every repeated field: an empty array when not given.
+ */
+export function validateSatParameters(params?: Overrides<SatParameters>): SatParameters;
 /** Milliseconds as a Duration string, rounded to whole nanoseconds: durationMs(500) === '0.5s'. */
 export function durationMs(ms: number): Duration;
