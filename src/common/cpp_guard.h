@@ -19,9 +19,13 @@
 
 namespace ortools_node {
 
+// Ends every out-of-memory message, so PromiseWorker can reject with a RangeError
+// exactly as GuardCpp() throws one on the main thread.
+inline constexpr char kOutOfMemorySuffix[] = ": out of memory (the input is too large)";
+
 // Message for a caught exception: out-of-memory is reported as a too-large input.
 inline std::string DescribeCppFailure(const char* what, const std::exception& e, bool out_of_memory) {
-  if (out_of_memory) return std::string(what) + ": out of memory (the input is too large)";
+  if (out_of_memory) return std::string(what) + kOutOfMemorySuffix;
   return std::string(what) + ": " + e.what();
 }
 

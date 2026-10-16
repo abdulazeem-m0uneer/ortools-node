@@ -13,6 +13,8 @@
 #include <atomic>
 #include <string>
 
+#include "common/cpp_guard.h"
+
 namespace ortools_node {
 
 class AsyncSolveState {
@@ -68,9 +70,15 @@ class PromiseWorker : public Napi::AsyncWorker {
     }
   }
 
+  // SetError() messages from GuardCppOffThread() that report out-of-memory
+  // reject with a RangeError, matching GuardCpp() on the main thread.
   void OnError(const Napi::Error& error) override {
     Finish(false);
-    deferred_.Reject(error.Value());
+    const std::string message = error.Message();
+    const std::string suffix(kOutOfMemorySuffix);
+    const bool out_of_memory =
+        message.size() >= suffix.size() && message.compare(message.size() - suffix.size(), suffix.size(), suffix) == 0;
+    deferred_.Reject(out_of_memory ? Napi::RangeError::New(Env(), message).Value() : error.Value());
   }
 
  private:

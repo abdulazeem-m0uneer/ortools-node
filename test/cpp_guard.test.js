@@ -24,9 +24,9 @@ test('threadpool: no exception resolves', async () => {
 });
 
 test('threadpool: std::bad_alloc rejects the Promise with the out-of-memory message', async () => {
-  await assert.rejects(guardCppAsync('bad_alloc'), { message: /^guardCppAsync: out of memory/ });
+  await assert.rejects(guardCppAsync('bad_alloc'), { name: 'RangeError', message: /^guardCppAsync: out of memory/ });
 });
 
 test('threadpool: other std::exception rejects with its message', async () => {
-  await assert.rejects(guardCppAsync('runtime'), { message: 'guardCppAsync: boom' });
+  await assert.rejects(guardCppAsync('runtime'), (e) => e.constructor === Error && e.message === 'guardCppAsync: boom');
 });
