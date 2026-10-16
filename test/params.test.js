@@ -11,6 +11,7 @@ const {
   validateSatParameters,
   durationMs,
 } = require('..');
+const { routingSearchParametersJson, satParametersJson } = require('../lib/params');
 
 // ---- enums ------------------------------------------------------------------
 
@@ -64,6 +65,11 @@ test('no argument and {} both mean the defaults', () => {
   assert.deepEqual(validateRoutingSearchParameters({}), defaultRoutingSearchParameters());
 });
 
+test('a full parameter set read back from the library is accepted unchanged', () => {
+  assert.deepEqual(validateRoutingSearchParameters(defaultRoutingSearchParameters()), defaultRoutingSearchParameters());
+  assert.deepEqual(validateSatParameters(defaultSatParameters()), defaultSatParameters());
+});
+
 test('snake_case field names (as in Python) are accepted and override the default', () => {
   const p = validateRoutingSearchParameters({ first_solution_strategy: 'SAVINGS', log_search: true });
   assert.equal(p.firstSolutionStrategy, 'SAVINGS');
@@ -81,10 +87,54 @@ test('an explicit 0 overrides a non-zero default', () => {
   assert.equal(p.heuristicCloseNodesLnsNumNodes, 0);
 });
 
-test('an explicit false overrides an earlier true in the same object chain', () => {
-  assert.equal(validateRoutingSearchParameters({ logSearch: true }).logSearch, true);
-  assert.equal(validateRoutingSearchParameters({ ...validateRoutingSearchParameters({ logSearch: true }), logSearch: false })
-    .logSearch, false);
+test('an explicit false or 0 replaces a non-default true or non-zero nested default', () => {
+  const ils = defaultRoutingSearchParameters().iteratedLocalSearchParameters;
+  assert.equal(ils.improvePerturbedSolution, true);
+  assert.equal(ils.ruinRecreateParameters.routeSelectionMinNeighbors, 10);
+  const p = validateRoutingSearchParameters({
+    iteratedLocalSearchParameters: { improvePerturbedSolution: false, ruinRecreateParameters: { routeSelectionMinNeighbors: 0 } },
+  }).iteratedLocalSearchParameters;
+  assert.equal(p.improvePerturbedSolution, false);
+  assert.equal(p.ruinRecreateParameters.routeSelectionMinNeighbors, 0);
+  assert.equal(p.ruinRecreateParameters.routeSelectionMaxNeighbors, ils.ruinRecreateParameters.routeSelectionMaxNeighbors);
+});
+
+test('undefined and null overrides keep the OR-Tools default', () => {
+  const defaults = defaultRoutingSearchParameters();
+  for (const value of [undefined, null]) {
+    for (const key of ['guidedLocalSearchLambdaCoefficient', 'firstSolutionStrategy', 'solutionLimit', 'localSearchOperators',
+      'lnsTimeLimit']) {
+      assert.deepEqual(validateRoutingSearchParameters({ [key]: value }), defaults, `${key}: ${value}`);
+    }
+    assert.deepEqual(validateRoutingSearchParameters({ localSearchOperators: { useRelocate: value } }), defaults);
+    assert.deepEqual(validateSatParameters({ numWorkers: value, max_time_in_seconds: value }), validateSatParameters({}));
+  }
+});
+
+// Python's protobuf clears the other members when one member of a oneof is set.
+const ACCEPTANCE_MEMBERS = ['greedyDescent', 'simulatedAnnealing', 'allNodesPerformed', 'moreNodesPerformed'];
+const ils = defaultRoutingSearchParameters().iteratedLocalSearchParameters;
+for (const strategy of ['referenceSolutionAcceptanceStrategy', 'bestSolutionAcceptanceStrategy']) {
+  test(`${strategy} can switch away from its default oneof member`, {
+    skip: strategy in ils ? false : 'this OR-Tools version has no acceptance-strategy oneofs',
+  }, () => {
+    const annealing = ils.referenceSolutionAcceptanceStrategy.simulatedAnnealing;
+    const [defaultMember] = Object.keys(ils[strategy]);
+    for (const member of ACCEPTANCE_MEMBERS.filter((m) => m !== defaultMember)) {
+      const value = member === 'simulatedAnnealing' ? annealing : {};
+      const p = validateRoutingSearchParameters({ iteratedLocalSearchParameters: { [strategy]: { [member]: value } } });
+      assert.deepEqual(Object.keys(p.iteratedLocalSearchParameters[strategy]), [member]);
+      assert.equal(p.iteratedLocalSearchParameters.improvePerturbedSolution, ils.improvePerturbedSolution);
+    }
+  });
+}
+
+test('the same field given in snake_case and camelCase is a TypeError', () => {
+  assert.throws(() => validateRoutingSearchParameters({ logSearch: true, log_search: false }),
+    { name: 'TypeError', message: /log_search|logSearch/ });
+  assert.throws(() => validateRoutingSearchParameters({ localSearchOperators: { useRelocate: 'BOOL_FALSE', use_relocate: 'BOOL_TRUE' } }),
+    { name: 'TypeError', message: /localSearchOperators/ });
+  assert.throws(() => validateSatParameters({ numWorkers: 1, num_workers: 2 }), { name: 'TypeError', message: /num_?[wW]orkers/ });
 });
 
 test('nested routing parameters merge field by field', () => {
@@ -100,6 +150,17 @@ test('int64 routing fields accept numbers, bigints and strings', () => {
   assert.equal(validateRoutingSearchParameters({ solutionLimit: '7' }).solutionLimit, '7');
   assert.equal(validateRoutingSearchParameters({ solutionLimit: 9223372036854775807n }).solutionLimit,
     '9223372036854775807');
+});
+
+test('enum numbers without a named value are TypeErrors', () => {
+  for (const bad of [999, -5]) {
+    assert.throws(() => validateRoutingSearchParameters({ useCpSat: bad }), { name: 'TypeError', message: /useCpSat/ });
+    assert.throws(() => validateRoutingSearchParameters({ iteratedLocalSearchParameters: { perturbationStrategy: bad } }),
+      { name: 'TypeError', message: /iteratedLocalSearchParameters\.perturbationStrategy/ });
+    assert.throws(() => validateSatParameters({ searchBranching: bad }), { name: 'TypeError', message: /searchBranching/ });
+  }
+  assert.equal(validateRoutingSearchParameters({ firstSolutionStrategy: 3 }).firstSolutionStrategy,
+    validateRoutingSearchParameters({ firstSolutionStrategy: 'PATH_CHEAPEST_ARC' }).firstSolutionStrategy);
 });
 
 test('unknown routing fields and enum names are TypeErrors', () => {
@@ -127,6 +188,29 @@ test('routing parameters must be a plain object', () => {
 test('NaN parameter values are rejected before reaching OR-Tools', () => {
   assert.throws(() => validateRoutingSearchParameters({ guidedLocalSearchLambdaCoefficient: NaN }),
     { name: 'TypeError', message: /guidedLocalSearchLambdaCoefficient.*NaN/ });
+  assert.throws(() => validateRoutingSearchParameters({ guidedLocalSearchLambdaCoefficient: 'NaN' }),
+    { name: 'TypeError', message: /guidedLocalSearchLambdaCoefficient.*NaN/ });
+  assert.throws(() => validateRoutingSearchParameters({
+    iteratedLocalSearchParameters: { ruinRecreateParameters: { routeSelectionNeighborsRatio: 'NaN' } },
+  }), { name: 'TypeError', message: /iteratedLocalSearchParameters\.ruinRecreateParameters\.routeSelectionNeighborsRatio.*NaN/ });
+  assert.throws(() => validateSatParameters({ maxTimeInSeconds: 'NaN' }), { name: 'TypeError', message: /maxTimeInSeconds.*NaN/ });
+});
+
+test('string fields holding "Infinity" stay strings; double fields read back as numbers', () => {
+  assert.equal(validateRoutingSearchParameters({ logTag: 'Infinity' }).logTag, 'Infinity');
+  assert.equal(validateSatParameters({ name: '-Infinity' }).name, '-Infinity');
+  assert.equal(validateSatParameters({ maxTimeInSeconds: 'Infinity' }).maxTimeInSeconds, Infinity);
+  assert.equal(validateRoutingSearchParameters({ guidedLocalSearchLambdaCoefficient: '0.5' }).guidedLocalSearchLambdaCoefficient, 0.5);
+});
+
+test('routingSearchParametersJson returns the full validated set as JSON that OR-Tools parses back', () => {
+  const parsed = JSON.parse(routingSearchParametersJson({ solutionLimit: 3, logTag: 'Infinity', firstSolutionStrategy: null }));
+  assert.equal(parsed.solutionLimit, '3');
+  assert.equal(parsed.logTag, 'Infinity');
+  assert.equal(parsed.firstSolutionStrategy, 'AUTOMATIC');
+  assert.deepEqual(parsed.localSearchOperators, defaultRoutingSearchParameters().localSearchOperators);
+  assert.deepEqual(JSON.parse(satParametersJson({ numWorkers: 2, maxTimeInSeconds: Infinity, randomSeed: null })),
+    { ...JSON.parse(satParametersJson({})), numWorkers: 2, maxTimeInSeconds: 'Infinity' });
 });
 
 // ---- SatParameters --------------------------------------------------------------

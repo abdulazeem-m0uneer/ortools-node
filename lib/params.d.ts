@@ -56,11 +56,15 @@ export interface SatParameters {
 
 /** A fresh copy of OR-Tools' DefaultRoutingSearchParameters(). */
 export function defaultRoutingSearchParameters(): RoutingSearchParameters;
-/** The defaults with `params` merged on top, as OR-Tools validated them. */
+/**
+ * The defaults with `params` merged on top field by field, as OR-Tools validated
+ * them. undefined or null keeps a default; setting one member of a oneof
+ * replaces the default member.
+ */
 export function validateRoutingSearchParameters(params?: RoutingSearchParameters): RoutingSearchParameters;
 /** A fresh copy of CP-SAT's default SatParameters, every field listed. */
 export function defaultSatParameters(): SatParameters;
-/** The fields set in `params`, as CP-SAT validated them. */
+/** The fields set in `params` (undefined or null leaves a field unset), as CP-SAT validated them. */
 export function validateSatParameters(params?: SatParameters): SatParameters;
 /** Milliseconds as a Duration string, rounded to whole nanoseconds: durationMs(500) === '0.5s'. */
 export function durationMs(ms: number): Duration;

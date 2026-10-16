@@ -7,13 +7,15 @@
 
 namespace ortools_node {
 
-// Parses and validates RoutingSearchParameters sent as JSON. Throws a TypeError
-// for malformed JSON or unknown fields and a RangeError for values OR-Tools
-// rejects; returns false in both cases.
+// Parses and validates a full RoutingSearchParameters set sent as JSON (as
+// routingSearchParametersJson returns it). Throws a TypeError for malformed
+// JSON, unknown fields, NaN or unnamed enum numbers and a RangeError for values
+// OR-Tools rejects; returns false in both cases.
 bool ReadRoutingSearchParameters(Napi::Env env, const Napi::Value& json,
                                  operations_research::RoutingSearchParameters* out);
 
-// Registers defaultRoutingSearchParameters, canonicalRoutingSearchParameters
+// Registers defaultRoutingSearchParameters, validateRoutingSearchParameters,
+// routingSearchParametersJson (the last two take the caller's overrides as JSON)
 // and the FirstSolutionStrategy / LocalSearchMetaheuristic / RoutingSearchStatus enums.
 void InitRoutingSearchParameters(Napi::Env env, Napi::Object exports);
 
