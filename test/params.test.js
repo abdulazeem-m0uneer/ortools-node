@@ -264,7 +264,19 @@ test('durationMs rejects invalid input', () => {
   assert.throws(() => durationMs(NaN), TypeError);
   assert.throws(() => durationMs(-1), RangeError);
   assert.throws(() => durationMs(Infinity), RangeError);
-  assert.throws(() => durationMs(1e13), RangeError);
+  assert.throws(() => durationMs(MAX_DURATION_MS + 1), RangeError);
+});
+
+const MAX_DURATION_MS = 315_576_000_000_000; // protobuf Duration's maximum, 315,576,000,000 s
+
+test('durationMs covers the whole protobuf Duration range', () => {
+  assert.equal(durationMs(365 * 24 * 3600 * 1000), '31536000s');
+  assert.equal(durationMs(1e13), '10000000000s');
+  assert.equal(durationMs(1e13 + 0.5), '10000000000.0005s');
+  assert.equal(durationMs(MAX_DURATION_MS), '315576000000s');
+  assert.equal(durationMs(MAX_DURATION_MS - 0.5), '315575999999.9995s');
+  assert.equal(durationMs(999.9999999), '1s'); // nanosecond rounding carries into the seconds
+  assert.equal(validateRoutingSearchParameters({ timeLimit: durationMs(MAX_DURATION_MS) }).timeLimit, '315576000000s');
 });
 
 test('a "__proto__" key is rejected as an unknown field, not swallowed', () => {
