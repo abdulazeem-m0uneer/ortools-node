@@ -34,6 +34,10 @@ const char* StatusName(SimpleMaxFlow::Status status) {
 }
 
 SolveOutcome RunSolve(SimpleMaxFlow& model, int32_t source, int32_t sink) {
+  // OR-Tools only builds the graph when source and sink are distinct nodes of it.
+  if (source != sink && source < model.NumNodes() && sink < model.NumNodes()) {
+    ProbeFlowGraphMemory(model.NumNodes(), model.NumArcs());
+  }
   const SimpleMaxFlow::Status status = model.Solve(source, sink);
   return {StatusName(status), status == SimpleMaxFlow::OPTIMAL};
 }

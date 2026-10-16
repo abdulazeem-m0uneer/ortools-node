@@ -69,6 +69,18 @@ struct ArcSelection {
 bool ReadArcSelection(Napi::Env env, const Napi::Value& v, ArcSelection* out);
 bool ResolveArcSelection(Napi::Env env, int32_t num_arcs, ArcSelection* selection);
 
+// SimpleMaxFlow::Solve() and SimpleMinCostFlow::Solve() build a
+// util::ReverseArcStaticGraph, whose arc arrays (head_, opposite_) come from
+// malloc followed by CHECK(new_storage != nullptr): running out of memory there
+// aborts the process instead of throwing std::bad_alloc. Call this inside the
+// solve's GuardCpp / RunGuarded, right before Solve(), with the graph
+// OR-Tools will build. It mallocs together blocks the size of what is live when
+// the last of those mallocs runs (plus a 25% margin), frees them, and throws
+// std::bad_alloc if any failed, which the guard turns into a RangeError.
+// Residual race: memory the probe freed can be taken (by another thread or
+// process) before Solve() allocates it; then the abort is still possible.
+void ProbeFlowGraphMemory(int64_t num_nodes, int64_t num_arcs);
+
 // The arcs [first, first + count) as an Int32Array (what the bulk adders return).
 Napi::Value ArcRangeToJs(Napi::Env env, int32_t first, size_t count);
 
