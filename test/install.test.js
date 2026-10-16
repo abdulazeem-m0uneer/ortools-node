@@ -1,14 +1,16 @@
 'use strict';
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
+const { findPrebuilt } = require('../lib/loader');
 const { buildFromSourceRequested, compileFromSource, decideInstall, main } = require('../scripts/install');
+const { FAKE_VERSION, moduleRootWith } = require('./helpers/fake-packages');
 
 const X64_15 = '@ortools-node/linux-x64-gnu-ortools9.15';
 const found = () => ({ addon: { path: '/x/ortools_node.node', origin: X64_15 }, tried: [], suggested: null });
 const missing = () => ({
   addon: null,
   tried: [`prebuilt ${X64_15}: not installed`],
-  suggested: X64_15,
+  suggested: `${X64_15}@1.0.0`,
 });
 const unsupported = () => ({
   addon: null,
@@ -70,7 +72,7 @@ describe('decideInstall', () => {
     assert.equal(action, 'fail');
     assert.match(message, /ORTOOLS_ROOT is not set/);
     assert.match(message, /prebuilt @ortools-node\/linux-x64-gnu-ortools9\.15: not installed/);
-    assert.match(message, /npm install @ortools-node\/linux-x64-gnu-ortools9\.15/);
+    assert.match(message, /\(npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
     assert.match(message, /set ORTOOLS_ROOT/);
   });
 
@@ -118,6 +120,33 @@ describe('main', () => {
     const code = main({ env: { ORTOOLS_NODE_PIN: 'bogus' }, log: () => {}, logError: (m) => errors.push(m) });
     assert.equal(code, 1);
     assert.match(errors[0], /ORTOOLS_NODE_PIN=bogus/);
+  });
+});
+
+describe('a prebuilt at another version than ortools-node', () => {
+  const lookupIn = (root) => () =>
+    findPrebuilt({ platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: FAKE_VERSION, moduleRoot: root });
+
+  test('counts as not found: the install fails with the versioned install command', () => {
+    const errors = [];
+    const code = main({
+      env: {},
+      lookupPrebuilt: lookupIn(moduleRootWith([X64_15], { version: '0.9.0' })),
+      compile: () => assert.fail('compiled'),
+      log: () => assert.fail('logged success'),
+      logError: (m) => errors.push(m),
+    });
+    assert.equal(code, 1);
+    assert.match(errors[0], /version 0\.9\.0 is installed, but ortools-node is 1\.0\.0/);
+    assert.match(errors[0], /npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0/);
+  });
+
+  test('is built from source instead when ORTOOLS_ROOT is set', () => {
+    const decision = decideInstall({
+      env: { ORTOOLS_ROOT: '/opt/or-tools' },
+      lookupPrebuilt: lookupIn(moduleRootWith([X64_15], { version: '0.9.0' })),
+    });
+    assert.equal(decision.action, 'compile');
   });
 });
 

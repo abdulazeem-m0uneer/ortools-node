@@ -130,8 +130,9 @@ jobs:
 
       - name: glibc without a platform package names the package to install
         run: |
-          docker run --rm -v "$PWD/dist:/pkgs:ro" node:22-trixie-slim sh -c '
+          version=$(tar -xzOf dist/ortools-node-*.tgz package/package.json | jq -r .version)
+          docker run --rm -e VERSION="$version" -v "$PWD/dist:/pkgs:ro" node:22-trixie-slim sh -c '
             cd /tmp && npm init -y >/dev/null
             if npm install --omit=optional /pkgs/ortools-node-*.tgz >install.log 2>&1; then echo "install succeeded"; exit 1; fi
             cat install.log
-            grep -q "npm install @ortools-node/linux-x64-gnu-ortools9.15" install.log'
+            grep -qF "npm install @ortools-node/linux-x64-gnu-ortools9.15@$VERSION" install.log'

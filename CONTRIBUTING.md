@@ -45,8 +45,10 @@ release's packages in `optionalDependencies`; they are added by
 - **Loading** (`lib/loader.js`): a local build in `build/Release` or
   `build/Debug` wins, then the platform package for this OS, CPU and C library.
   With several OR-Tools releases installed, the newest loads unless
-  `ORTOOLS_NODE_PIN` names one (for example `ORTOOLS_NODE_PIN=9.14`). musl
-  (Alpine) gets an error saying it is not supported.
+  `ORTOOLS_NODE_PIN` names one (for example `ORTOOLS_NODE_PIN=9.14`). The
+  package must have exactly ortools-node's version; otherwise the error names
+  the `npm install <package>@<version>` to run. musl (Alpine) gets an error
+  saying it is not supported.
 - **Installing** (`scripts/install.js`, the npm `install` hook): skips the build
   when a platform package resolves, builds from source when `ORTOOLS_ROOT` is set
   or `npm install --build-from-source` is used, and otherwise fails with what to

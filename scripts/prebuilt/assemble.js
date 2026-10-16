@@ -127,7 +127,7 @@ function noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenc
   ].join('\n');
 }
 
-function readmeMarkdown(name, ortoolsVersion) {
+function readmeMarkdown(name, version, ortoolsVersion) {
   return [
     `# ${name}`,
     '',
@@ -135,6 +135,9 @@ function readmeMarkdown(name, ortoolsVersion) {
     'with the OR-Tools shared libraries it needs. Install `ortools-node`; it loads this package when it',
     'matches your system. With packages for several OR-Tools releases installed, ortools-node loads the',
     'newest unless `ORTOOLS_NODE_PIN` names one (for example `ORTOOLS_NODE_PIN=9.14`).',
+    '',
+    `ortools-node loads this package only when its version is ortools-node's version, so install it as`,
+    `\`npm install ${name}@<ortools-node version>\` (this is ${version}).`,
     '',
     'See THIRD_PARTY_NOTICES.md for the bundled libraries and their licences.',
     '',
@@ -197,10 +200,10 @@ function assemble({ target, ortoolsVersion, addon, ortoolsRoot, outDir }) {
   const licenceFiles = copyLicences(ortoolsRoot, outDir);
   fs.copyFileSync(path.join(REPO_ROOT, 'LICENSE'), path.join(outDir, 'LICENSE'));
   fs.writeFileSync(path.join(outDir, 'THIRD_PARTY_NOTICES.md'), noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenceFiles));
-  fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, ortoolsVersion));
+  const { version } = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
+  fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, version, ortoolsVersion));
 
   const template = JSON.parse(fs.readFileSync(templateFile, 'utf8'));
-  const { version } = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8'));
   const manifest = {
     name,
     version,
