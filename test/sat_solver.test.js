@@ -131,14 +131,22 @@ test('values from another model or added after the solve throw', () => {
   assert.equal(solver.value(x), 2);  // the rest of the result is untouched
 });
 
-test('an invalid model rejects with OR-Tools\' message and keeps the previous result', async () => {
-  const { m, x } = smallModel();
+test('an invalid model rejects with OR-Tools\' message and clears the previous result', async () => {
+  const { m } = smallModel();
   const solver = new CpSolver();
-  solver.solveSync(m);
+  const assertNoResult = () => {
+    assert.throws(() => solver.statusName(), /No solve result/);
+    assert.throws(() => solver.value(1), /No solve result/);
+    assert.throws(() => solver.objectiveValue, /No solve result/);
+  };
+  assert.equal(solver.solveSync(m), 'OPTIMAL');
   const bad = new CpModel();
   bad.newIntVar(-Infinity, Infinity, 'unbounded');
   await assert.rejects(solver.solve(bad), /Invalid CpModel: var #0 domain do not fall in/);
+  assertNoResult();
+  assert.equal(solver.solveSync(m), 'OPTIMAL');
   assert.throws(() => solver.solveSync(bad), /Invalid CpModel/);
+  assertNoResult();
   const emptyDomain = new CpModel();
   emptyDomain.newIntVar(5, 3, 'empty');
   assert.throws(() => solver.solveSync(emptyDomain), /Invalid CpModel: var #0 has no domain/);
@@ -146,7 +154,6 @@ test('an invalid model rejects with OR-Tools\' message and keeps the previous re
   const big = overflow.newIntVar(0, 2n ** 61n, 'big');
   overflow.add(big.times(2n ** 61n).le(5));
   assert.throws(() => solver.solveSync(overflow), /Invalid CpModel: Possible integer overflow/);
-  assert.equal(solver.value(x), 2);
   assert.equal(solver.busy, false);
 });
 
