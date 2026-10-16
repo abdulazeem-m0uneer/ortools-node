@@ -1,12 +1,12 @@
 #include "common/proto_to_js.h"
 
-#include <charconv>
 #include <string>
 
 #include "absl/status/status.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_cat.h"
 #include "common/proto_json.h"
+#include "google/protobuf/io/strtod.h"
 #include "google/protobuf/json/json.h"
 
 namespace ortools_node {
@@ -17,14 +17,11 @@ using google::protobuf::FieldDescriptor;
 using google::protobuf::Message;
 using google::protobuf::Reflection;
 
-// The shortest decimal that reads back as the same float (as protobuf JSON
-// prints it), so 0.1f becomes 0.1 rather than 0.10000000149011612.
+// The short decimal protobuf JSON prints for a float, read back as a double,
+// so 0.1f becomes 0.1 rather than 0.10000000149011612. Both steps are
+// locale-independent and portable.
 double FloatToDouble(float value) {
-  char buffer[32];
-  const auto printed = std::to_chars(buffer, buffer + sizeof(buffer), value);
-  double out = value;
-  std::from_chars(buffer, printed.ptr, out);
-  return out;
+  return google::protobuf::io::NoLocaleStrtod(google::protobuf::io::SimpleFtoa(value).c_str(), nullptr);
 }
 
 // protobuf's own JSON form, parsed by JS: e.g. "0.5s" for a Duration.
