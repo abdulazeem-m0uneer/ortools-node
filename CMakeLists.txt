@@ -68,6 +68,9 @@ target_include_directories(${PROJECT_NAME} PRIVATE
 target_compile_definitions(${PROJECT_NAME} PRIVATE
   NAPI_VERSION=8
   NAPI_DISABLE_CPP_EXCEPTIONS
+  # A Promise that settles while its worker thread is terminated cannot throw
+  # into JS any more; without this, node-addon-api aborts the whole process.
+  NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS
   # Compile-time OR-Tools version, for #if guards where 9.14 and 9.15 headers differ.
   ORTOOLS_VERSION_MAJOR=${ORTOOLS_VERSION_MAJOR}
   ORTOOLS_VERSION_MINOR=${ORTOOLS_VERSION_MINOR}
