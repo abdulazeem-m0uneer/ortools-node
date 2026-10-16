@@ -10,6 +10,7 @@
 
 #include "absl/log/initialize.h"
 #include "absl/log/internal/globals.h"
+#include "common/int64.h"
 #include "linear_solver/mp_solver.h"
 #include "ortools/base/version.h"
 #include "routing/search_parameters.h"
@@ -55,6 +56,9 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitializeAbseilLoggingOnce();
   if (!CheckLinkedVersion(env)) return exports;
   InitVersion(env, exports);
+  Napi::Object testing = Napi::Object::New(env);  // internal hooks for test/, not public API
+  InitInt64Testing(env, testing);
+  exports.Set("_testing", testing);
   InitRoutingSearchParameters(env, exports);
   InitSatParameters(env, exports);
   return InitMpSolver(env, exports);
