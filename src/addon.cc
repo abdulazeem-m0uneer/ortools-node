@@ -10,6 +10,7 @@
 
 #include "absl/log/initialize.h"
 #include "absl/log/internal/globals.h"
+#include "common/cpp_guard_testing.h"
 #include "common/int64.h"
 #include "linear_solver/mp_solver.h"
 #include "ortools/base/version.h"
@@ -58,6 +59,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitVersion(env, exports);
   Napi::Object testing = Napi::Object::New(env);  // internal hooks for test/, not public API
   InitInt64Testing(env, testing);
+  InitCppGuardTesting(env, testing);
   exports.Set("_testing", testing);
   InitRoutingSearchParameters(env, exports);
   InitSatParameters(env, exports);
