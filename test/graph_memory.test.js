@@ -11,7 +11,8 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const ADDRESS_SPACE_KB = 4000000; // ~4 GB: enough for Node, far too little for 2e9 nodes
-const skip = process.platform === 'win32' && 'needs a POSIX shell with ulimit';
+// Only Linux enforces RLIMIT_AS (`ulimit -v`); macOS rejects or ignores it.
+const skip = process.platform !== 'linux' && 'needs Linux ulimit -v (RLIMIT_AS)';
 
 function runCapped(body) {
   const script = `
