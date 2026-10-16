@@ -127,7 +127,22 @@ describe('platform package templates', () => {
   }
 });
 
-describe('copy_worktree (scripts/common.sh)', () => {
+// copy_worktree runs only in the Linux packaging scripts and uses bash and GNU
+// cp --parents, which macOS and Windows do not have.
+const hasBash = spawnSync('bash', ['-c', 'true']).status === 0;
+const worktreeSkip = process.platform !== 'linux' ? 'copy_worktree needs Linux (GNU cp)' : !hasBash && 'copy_worktree needs bash';
+
+// Git that ignores the developer's global and system config (signing, hooks,
+// templates), so the test commit works on any machine.
+function hermeticGitEnv() {
+  const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+  for (const key of Object.keys(env)) {
+    if (/^GIT_CONFIG_(COUNT|KEY_\d+|VALUE_\d+|PARAMETERS)$/.test(key)) delete env[key];
+  }
+  return env;
+}
+
+describe('copy_worktree (scripts/common.sh)', { skip: worktreeSkip }, () => {
   const commonSh = path.join(__dirname, '..', 'scripts', 'common.sh');
 
   test('copies the working tree and succeeds when the last tracked file was deleted', (t) => {
@@ -142,15 +157,20 @@ describe('copy_worktree (scripts/common.sh)', () => {
     fs.writeFileSync(path.join(repo, 'untracked.txt'), 'new');
     fs.writeFileSync(path.join(repo, '.gitignore'), 'ignored.txt\n');
     fs.writeFileSync(path.join(repo, 'ignored.txt'), 'ignored');
-    const git = (...args) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
+    const gitEnv = hermeticGitEnv();
+    const git = (...args) => execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe', env: gitEnv });
     git('init', '-q');
     git('add', '.gitignore', 'sub/kept.txt', 'zz-deleted.txt');
-    git('-c', 'user.name=test', '-c', 'user.email=test@example.com', 'commit', '-q', '-m', 'init');
+    git(
+      '-c', 'user.name=test', '-c', 'user.email=test@example.com',
+      '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null',
+      'commit', '-q', '-m', 'init',
+    );
     // git ls-files still lists it, and sorts it last.
     fs.rmSync(path.join(repo, 'zz-deleted.txt'));
 
     const script = 'set -euo pipefail; source "$1"; ortools_node_root=$2; copy_worktree "$3"; echo survived';
-    const result = spawnSync('bash', ['-c', script, 'bash', commonSh, repo, dest], { encoding: 'utf8' });
+    const result = spawnSync('bash', ['-c', script, 'bash', commonSh, repo, dest], { encoding: 'utf8', env: gitEnv });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stdout.trim(), 'survived');
     assert.equal(fs.readFileSync(path.join(dest, 'sub', 'kept.txt'), 'utf8'), 'kept');
