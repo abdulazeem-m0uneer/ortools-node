@@ -308,8 +308,18 @@ test('values that are not JSON data are TypeErrors naming the path', () => {
   for (const [params, message] of cases) {
     assert.throws(() => validateRoutingSearchParameters(params), { name: 'TypeError', message });
   }
-  // JSON.stringify's own conversions still apply.
-  assert.equal(validateRoutingSearchParameters({ timeLimit: { toJSON: () => '2s' } }).timeLimit, '2s');
+});
+
+test('values with a toJSON method are TypeErrors, at the root or nested', () => {
+  const root = { toJSON: () => ({}), solutionLimit: 0, logTag: () => 'x' };
+  assert.throws(() => validateRoutingSearchParameters(root), { name: 'TypeError', message: /toJSON/ });
+  assert.throws(() => validateSatParameters({ numWorkers: 1, toJSON: () => ({ maxTimeInSeconds: NaN }) }),
+    { name: 'TypeError', message: /toJSON/ });
+  assert.throws(() => validateRoutingSearchParameters({ timeLimit: { toJSON: () => '2s' } }),
+    { name: 'TypeError', message: /'timeLimit'.*toJSON/ });
+  assert.throws(() => validateRoutingSearchParameters({ timeLimit: new Date() }), { name: 'TypeError', message: /'timeLimit'/ });
+  assert.throws(() => validateSatParameters({ subsolverParams: [{ name: 'a', maxTimeInSeconds: { toJSON: () => 1 } }] }),
+    { name: 'TypeError', message: /'subsolverParams\[0\]\.maxTimeInSeconds'.*toJSON/ });
 });
 
 test('the same field twice inside a repeated message is a TypeError', () => {
