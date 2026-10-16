@@ -1,3 +1,4 @@
+/// <reference lib="esnext.disposable" />
 // Graph algorithms: min-cost flow, max flow and linear sum assignment
 // (Python's ortools.graph.python.{min_cost_flow,max_flow,linear_sum_assignment}).
 //
@@ -87,8 +88,10 @@ export class SimpleMinCostFlow {
 
   /** True while a solve() is pending. */
   readonly busy: boolean;
-  /** Frees the native graph now; later calls throw. Idempotent; throws while busy. Also bound to Symbol.dispose. */
+  /** Frees the native graph now; later calls throw. Idempotent; throws while busy. */
   dispose(): void;
+  /** Same as dispose(), so `using graph = new ...()` frees it at scope exit. */
+  [Symbol.dispose](): void;
 }
 
 /** Maximum flow from a source to a sink (OR-Tools SimpleMaxFlow). */
@@ -131,8 +134,10 @@ export class SimpleMaxFlow {
 
   /** True while a solve() is pending. */
   readonly busy: boolean;
-  /** Frees the native graph now; later calls throw. Idempotent; throws while busy. Also bound to Symbol.dispose. */
+  /** Frees the native graph now; later calls throw. Idempotent; throws while busy. */
   dispose(): void;
+  /** Same as dispose(), so `using graph = new ...()` frees it at scope exit. */
+  [Symbol.dispose](): void;
 }
 
 /**
@@ -175,6 +180,8 @@ export class SimpleLinearSumAssignment {
 
   /** True while a solve() is pending. */
   readonly busy: boolean;
-  /** Frees the native graph now; later calls throw. Idempotent; throws while busy. Also bound to Symbol.dispose. */
+  /** Frees the native graph now; later calls throw. Idempotent; throws while busy. */
   dispose(): void;
+  /** Same as dispose(), so `using graph = new ...()` frees it at scope exit. */
+  [Symbol.dispose](): void;
 }
