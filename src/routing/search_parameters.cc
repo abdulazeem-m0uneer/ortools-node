@@ -47,6 +47,14 @@ Napi::Value ParametersJson(const Napi::CallbackInfo& info) {
   return ProtoToJson(info.Env(), parameters);
 }
 
+// Test hook: the parameters a solver reads (via ReadRoutingSearchParameters) from the JSON
+// that routingSearchParametersJson returns.
+Napi::Value ReadParametersForTesting(const Napi::CallbackInfo& info) {
+  RoutingSearchParameters parameters;
+  if (!ReadRoutingSearchParameters(info.Env(), info[0], &parameters)) return info.Env().Undefined();
+  return MessageToJs(info.Env(), parameters);
+}
+
 }  // namespace
 
 bool ReadRoutingSearchParameters(Napi::Env env, const Napi::Value& json, RoutingSearchParameters* out) {
@@ -57,6 +65,7 @@ void InitRoutingSearchParameters(Napi::Env env, Napi::Object exports) {
   exports.Set("defaultRoutingSearchParameters", Napi::Function::New(env, DefaultParameters));
   exports.Set("validateRoutingSearchParameters", Napi::Function::New(env, ValidateParameters));
   exports.Set("routingSearchParametersJson", Napi::Function::New(env, ParametersJson));
+  exports.Set("readRoutingSearchParametersForTesting", Napi::Function::New(env, ReadParametersForTesting));
   exports.Set("FirstSolutionStrategy",
               EnumNames(env, operations_research::FirstSolutionStrategy::Value_descriptor()));
   exports.Set("LocalSearchMetaheuristic",

@@ -12,8 +12,9 @@ namespace ortools_node {
 // enum numbers and a RangeError for values CP-SAT rejects.
 bool ReadSatParameters(Napi::Env env, const Napi::Value& json, operations_research::sat::SatParameters* out);
 
-// Registers defaultSatParameters, validateSatParameters and satParametersJson
-// (the last two take the caller's overrides as JSON).
+// Registers defaultSatParameters, validateSatParameters, satParametersJson
+// (the last two take the caller's overrides as JSON) and the test hook
+// readSatParametersForTesting.
 void InitSatParameters(Napi::Env env, Napi::Object exports);
 
 }  // namespace ortools_node

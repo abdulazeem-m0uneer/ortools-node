@@ -15,7 +15,8 @@ bool ReadRoutingSearchParameters(Napi::Env env, const Napi::Value& json,
                                  operations_research::RoutingSearchParameters* out);
 
 // Registers defaultRoutingSearchParameters, validateRoutingSearchParameters,
-// routingSearchParametersJson (the last two take the caller's overrides as JSON)
+// routingSearchParametersJson (the last two take the caller's overrides as JSON),
+// the test hook readRoutingSearchParametersForTesting
 // and the FirstSolutionStrategy / LocalSearchMetaheuristic / RoutingSearchStatus enums.
 void InitRoutingSearchParameters(Napi::Env env, Napi::Object exports);
 

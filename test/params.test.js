@@ -12,6 +12,7 @@ const {
   durationMs,
 } = require('..');
 const { routingSearchParametersJson, satParametersJson } = require('../lib/params');
+const native = require('../lib/native');
 
 // ---- enums ------------------------------------------------------------------
 
@@ -246,7 +247,7 @@ test('string fields holding "Infinity" stay strings; double fields read back as 
   assert.equal(validateRoutingSearchParameters({ guidedLocalSearchLambdaCoefficient: '0.5' }).guidedLocalSearchLambdaCoefficient, 0.5);
 });
 
-test('routingSearchParametersJson returns the full validated set as JSON that OR-Tools parses back', () => {
+test('routingSearchParametersJson and satParametersJson return the full validated set as JSON', () => {
   const parsed = JSON.parse(routingSearchParametersJson({ solutionLimit: 3, logTag: 'Infinity', firstSolutionStrategy: null }));
   assert.equal(parsed.solutionLimit, '3');
   assert.equal(parsed.logTag, 'Infinity');
@@ -254,6 +255,22 @@ test('routingSearchParametersJson returns the full validated set as JSON that OR
   assert.deepEqual(parsed.localSearchOperators, defaultRoutingSearchParameters().localSearchOperators);
   assert.deepEqual(JSON.parse(satParametersJson({ numWorkers: 2, maxTimeInSeconds: Infinity, randomSeed: null })),
     { ...JSON.parse(satParametersJson({})), numWorkers: 2, maxTimeInSeconds: 'Infinity' });
+});
+
+// The solvers read these strings with ReadRoutingSearchParameters / ReadSatParameters.
+test('the JSON from routingSearchParametersJson and satParametersJson parses back natively unchanged', () => {
+  const { readRoutingSearchParametersForTesting, readSatParametersForTesting } = native;
+  for (const params of [{}, { solutionLimit: 1e18, timeLimit: '1.5s', logTag: 'Infinity', localSearchOperators: { useRelocate: 'BOOL_FALSE' } }]) {
+    assert.deepEqual(readRoutingSearchParametersForTesting(routingSearchParametersJson(params)), validateRoutingSearchParameters(params));
+  }
+  for (const params of [{}, { maxTimeInSeconds: Infinity, maxNumberOfConflicts: -(2 ** 60), subsolvers: ['default_lp'] }]) {
+    assert.deepEqual(readSatParametersForTesting(satParametersJson(params)), validateSatParameters(params));
+  }
+  const full = JSON.parse(routingSearchParametersJson({}));
+  assert.throws(() => readRoutingSearchParametersForTesting(JSON.stringify({ ...full, solutionLimit: '0' })),
+    { name: 'RangeError', message: /solution_limit/ });
+  assert.throws(() => readSatParametersForTesting('{"maxTimeInSeconds": "NaN"}'), { name: 'TypeError', message: /NaN/ });
+  assert.throws(() => readSatParametersForTesting(5), { name: 'TypeError', message: /JSON string/ });
 });
 
 // ---- input checks ---------------------------------------------------------------
