@@ -114,6 +114,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `interrupt()`. A domain change that empties a domain throws
   `CP solver failure` instead of aborting the process, and building or changing
   the model while a search is open throws.
+- Vehicle routing: `RoutingIndexManager` (single depot, or per-vehicle starts
+  and ends) and `RoutingModel` with transit matrices, vectors and callbacks
+  (evaluated once at registration, since solving runs off the JS thread), arc
+  and fixed costs, every `addDimension*` variant with span bounds, span costs
+  and soft cumul bounds, pickup and delivery pairs and sets with policies,
+  disjunctions, allowed vehicles, visit types with incompatibilities and
+  requirements, soft same-vehicle costs, `addSameActivityGroup` (OR-Tools
+  9.15+), finalizer variables, `applyLocks` / `applyLocksToAllVehicles`,
+  `readAssignmentFromRoutes`, and model variables (`nextVar`, `vehicleVar`,
+  `activeVar`, `cumulVar`...) usable as CP variables through `model.solver()`
+  (a `cp.CpSolver`).
+- `solveWithParameters` / `solveFromAssignmentWithParameters` on the threadpool
+  (plus `*Sync` variants) resolving to a `RoutingSolution` with bulk
+  `routes()`, `cumuls()` and `slacks()`; `status()`; `interrupt()`; and an
+  `onSolution` callback receiving a snapshot of each solution. Solutions become
+  invalid after the next solve or any model change. Model-definition calls
+  throw once the model is closed, and every argument OR-Tools would `CHECK` is
+  validated first, so misuse throws instead of aborting the process.
 
 ### Changed
 
