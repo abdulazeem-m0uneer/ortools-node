@@ -142,9 +142,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`npm install @ortools-node/linux-x64-gnu-ortools9.14@<version>`) and set
   `ORTOOLS_NODE_PIN=9.14` when both are present. A prebuilt at another version
   is not loaded; the error gives the exact install command.
-- The install step uses a matching prebuilt when one is installed, builds from
-  source when `ORTOOLS_ROOT` is set or `--build-from-source` is given, and
-  otherwise fails with instructions. Loading reports every place it looked when
+- The install step follows the loader's order: it keeps (or, with
+  `ORTOOLS_ROOT`, rebuilds) an existing source build, else uses a matching
+  prebuilt, else builds from source, and prints instructions only if that
+  build fails. Loading reports every place it looked when
   no addon is found, and says that musl (Alpine) is not supported.
 - `scripts/package-prebuilt.sh` builds a platform package in the
   manylinux_2_28 image, and the Prebuilt binaries workflow builds and

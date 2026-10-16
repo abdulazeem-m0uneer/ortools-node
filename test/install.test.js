@@ -93,22 +93,27 @@ describe('decideInstall', () => {
   });
 
   test('an empty ORTOOLS_ROOT counts as unset', () => {
-    assert.equal(decideInstall({ env: { ORTOOLS_ROOT: '' }, lookup: missing }).action, 'fail');
+    assert.ok(decideInstall({ env: { ORTOOLS_ROOT: '' }, lookup: missing }).helpOnFailure);
   });
 
-  test('fails with both fixes when nothing is available', () => {
-    const { action, message } = decideInstall({ env: {}, lookup: missing });
-    assert.equal(action, 'fail');
-    assert.match(message, /ORTOOLS_ROOT is not set/);
+  test('without ORTOOLS_ROOT, still tries a source build, since CMake may find OR-Tools elsewhere', () => {
+    const decision = decideInstall({ env: {}, lookup: missing });
+    assert.equal(decision.action, 'compile');
+    assert.match(decision.message, /ORTOOLS_ROOT is not set; trying a source build with CMake's own search/);
+  });
+
+  test('keeps both fixes for when that source build fails', () => {
+    const { helpOnFailure: message } = decideInstall({ env: {}, lookup: missing });
+    assert.match(message, /^no prebuilt addon for this system, and the source build failed/);
     assert.match(message, /source build .*: not found/);
     assert.match(message, /prebuilt @ortools-node\/linux-x64-gnu-ortools9\.15: not installed/);
     assert.match(message, /\(npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
     assert.match(message, /set ORTOOLS_ROOT/);
   });
 
-  test('on musl, fails with the reason and only the source-build fix', () => {
-    const { action, message } = decideInstall({ env: {}, lookup: unsupported });
-    assert.equal(action, 'fail');
+  test('on musl, tries a source build and keeps the reason and only the source-build fix', () => {
+    const { action, helpOnFailure: message } = decideInstall({ env: {}, lookup: unsupported });
+    assert.equal(action, 'compile');
     assert.match(message, /Alpine/);
     assert.doesNotMatch(message, /npm install/);
   });
@@ -125,11 +130,16 @@ describe('main', () => {
     assert.equal(main({ ...quiet, env, lookup: missing, compile: () => 2 }), 2);
   });
 
-  test('exits 1 with instructions when nothing is available', () => {
+  test('prints the instructions only when the fallback source build fails', () => {
     const errors = [];
-    const code = main({ env: {}, lookup: missing, compile: () => assert.fail('compiled'), log: () => {}, logError: (m) => errors.push(m) });
+    const code = main({ env: {}, lookup: missing, compile: () => 1, log: () => {}, logError: (m) => errors.push(m) });
     assert.equal(code, 1);
-    assert.match(errors.join('\n'), /^ortools-node: no prebuilt addon for this system/);
+    assert.match(errors.join('\n'), /^ortools-node: no prebuilt addon for this system, and the source build failed/);
+  });
+
+  test('succeeds quietly when the fallback source build finds OR-Tools', () => {
+    const code = main({ env: {}, lookup: missing, compile: () => 0, log: () => {}, logError: (m) => assert.fail(m) });
+    assert.equal(code, 0);
   });
 
   test('exits 1 when the lookup throws', () => {
@@ -190,7 +200,7 @@ describe('an existing source build', () => {
   });
 
   test('the failure lists the source build paths it looked at', () => {
-    const { message } = decideInstall({ env: {}, lookup: lookupIn(moduleRootWith([])) });
+    const { helpOnFailure: message } = decideInstall({ env: {}, lookup: lookupIn(moduleRootWith([])) });
     assert.match(message, /source build .*build[/\\]Release[/\\]ortools_node\.node: not found/);
   });
 });
@@ -215,9 +225,12 @@ describe('an ORTOOLS_NODE_PIN with no prebuilt', () => {
     assert.match(logged[0], /building from source against ORTOOLS_ROOT=\/opt\/or-tools-9\.16/);
   });
 
-  test('still fails without ORTOOLS_ROOT', () => {
+  test('without ORTOOLS_ROOT, warns, tries a source build and repeats the pin error if it fails', () => {
     const pin = { ORTOOLS_NODE_PIN: '9.16' };
-    assert.throws(() => decideInstall({ env: pin, lookup: lookupIn(moduleRootWith([]), pin) }), /ORTOOLS_NODE_PIN=9\.16/);
+    const decision = decideInstall({ env: pin, lookup: lookupIn(moduleRootWith([]), pin) });
+    assert.equal(decision.action, 'compile');
+    assert.match(decision.warning, /ORTOOLS_NODE_PIN=9\.16/);
+    assert.match(decision.helpOnFailure, /ORTOOLS_NODE_PIN=9\.16 is not an OR-Tools release/);
   });
 
   test('other lookup errors still fail even with ORTOOLS_ROOT', () => {
@@ -234,8 +247,8 @@ describe('a prebuilt at another version than ortools-node', () => {
     const code = main({
       env: {},
       lookup: lookupIn(moduleRootWith([X64_15], { version: '0.9.0' })),
-      compile: () => assert.fail('compiled'),
-      log: () => assert.fail('logged success'),
+      compile: () => 1,
+      log: () => {},
       logError: (m) => errors.push(m),
     });
     assert.equal(code, 1);

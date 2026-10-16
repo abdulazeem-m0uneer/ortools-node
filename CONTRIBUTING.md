@@ -51,13 +51,15 @@ release's packages in `optionalDependencies`; they are added by
   package must have exactly ortools-node's version; otherwise the error names
   the `npm install <package>@<version>` to run. musl (Alpine) gets an error
   saying it is not supported.
-- **Installing** (`scripts/install.js`, the npm `install` hook): skips the build
-  when a platform package resolves, builds from source when `ORTOOLS_ROOT` is set
-  or `npm install --build-from-source` is used, keeps an existing
-  `build/Release` or `build/Debug` addon otherwise, and fails with what to do
-  when there is none. An `ORTOOLS_NODE_PIN` without prebuilts only warns when
-  `ORTOOLS_ROOT` is set or a source build exists. `npm run build` and `npm run rebuild` always build
-  from source.
+- **Installing** (`scripts/install.js`, the npm `install` hook) decides with
+  the loader's own lookup (`findAddon`), so it acts on the addon that would
+  load. A source build is recompiled when `ORTOOLS_ROOT` is set and kept
+  otherwise. A matching prebuilt skips the build. With neither, it builds from
+  source: against `ORTOOLS_ROOT` when set, else with CMake's own search
+  (`CMAKE_PREFIX_PATH`, a system install), and prints what to do only if that
+  build fails. `npm install --build-from-source` always builds. An
+  `ORTOOLS_NODE_PIN` without prebuilts only warns. `npm run build` and
+  `npm run rebuild` always build from source.
 - **Building**: `scripts/package-prebuilt.sh <x64|arm64> <ortools-version>`
   builds the addon with `-DORTOOLS_NODE_PREBUILT=ON` in the
   `quay.io/pypa/manylinux_2_28` image against Google's AlmaLinux 8.10 archive,
