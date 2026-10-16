@@ -30,4 +30,12 @@ function moduleRootWith(packages, { withAddon = true, version = FAKE_VERSION } =
   return root;
 }
 
-module.exports = { FAKE_VERSION, moduleRootWith };
+/**
+ * Loader options that look for packages only in root/node_modules, so neither
+ * NODE_PATH nor node_modules folders above the temporary directory count.
+ */
+function confinedTo(root) {
+  return { moduleRoot: root, searchDirs: [path.join(root, 'node_modules')] };
+}
+
+module.exports = { FAKE_VERSION, confinedTo, moduleRootWith };

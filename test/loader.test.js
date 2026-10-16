@@ -9,12 +9,13 @@ const {
   findPrebuilt,
   findSourceBuild,
   loadAddon,
+  nodeModulesChain,
   parsePin,
   prebuiltPackageName,
   prebuiltTarget,
   resolveAddon,
 } = require('../lib/loader');
-const { FAKE_VERSION, moduleRootWith } = require('./helpers/fake-packages');
+const { FAKE_VERSION, confinedTo, moduleRootWith } = require('./helpers/fake-packages');
 
 const X64_15 = '@ortools-node/linux-x64-gnu-ortools9.15';
 const X64_14 = '@ortools-node/linux-x64-gnu-ortools9.14';
@@ -149,24 +150,24 @@ describe('findPrebuilt', () => {
   });
 
   test('picks the newest OR-Tools release when several are installed', () => {
-    const { addon } = findPrebuilt({ ...linuxX64, moduleRoot: both });
+    const { addon } = findPrebuilt({ ...linuxX64, ...confinedTo(both) });
     assert.equal(addon.origin, X64_15);
     assert.equal(addon.path, path.join(both, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', ADDON_FILE));
   });
 
   test('ORTOOLS_NODE_PIN selects an older release', () => {
-    const { addon } = findPrebuilt({ ...linuxX64, env: { ORTOOLS_NODE_PIN: '9.14' }, moduleRoot: both });
+    const { addon } = findPrebuilt({ ...linuxX64, env: { ORTOOLS_NODE_PIN: '9.14' }, ...confinedTo(both) });
     assert.equal(addon.origin, X64_14);
   });
 
   test('uses the only release installed', () => {
     const root = moduleRootWith([X64_14]);
-    assert.equal(findPrebuilt({ ...linuxX64, moduleRoot: root }).addon.origin, X64_14);
+    assert.equal(findPrebuilt({ ...linuxX64, ...confinedTo(root) }).addon.origin, X64_14);
   });
 
   test('refuses a prebuilt whose version is not ortools-node\'s, naming the exact install', () => {
     const root = moduleRootWith([X64_15], { version: '0.9.0' });
-    const result = findPrebuilt({ ...linuxX64, moduleRoot: root });
+    const result = findPrebuilt({ ...linuxX64, ...confinedTo(root) });
     assert.equal(result.addon, null);
     assert.deepEqual(result.tried, [`prebuilt ${X64_15}: version 0.9.0 is installed, but ortools-node is 1.0.0`]);
     assert.equal(result.suggested, `${X64_15}@1.0.0`);
@@ -175,7 +176,7 @@ describe('findPrebuilt', () => {
   test('a mismatched newest release does not fall back to an older one', () => {
     const root = moduleRootWith([X64_15], { version: '1.1.0' });
     fs.cpSync(moduleRootWith([X64_14]), root, { recursive: true });
-    const result = findPrebuilt({ ...linuxX64, moduleRoot: root });
+    const result = findPrebuilt({ ...linuxX64, ...confinedTo(root) });
     assert.equal(result.addon, null);
     assert.equal(result.suggested, `${X64_15}@1.0.0`);
   });
@@ -184,13 +185,13 @@ describe('findPrebuilt', () => {
     const own = require('../package.json').version;
     const { version, ...noVersion } = linuxX64;
     assert.equal(version, FAKE_VERSION);
-    assert.equal(findPrebuilt({ ...noVersion, moduleRoot: moduleRootWith([X64_15], { version: own }) }).addon.origin, X64_15);
-    assert.equal(findPrebuilt({ ...noVersion, moduleRoot: moduleRootWith([X64_15], { version: `${own}-other` }) }).addon, null);
+    assert.equal(findPrebuilt({ ...noVersion, ...confinedTo(moduleRootWith([X64_15], { version: own })) }).addon.origin, X64_15);
+    assert.equal(findPrebuilt({ ...noVersion, ...confinedTo(moduleRootWith([X64_15], { version: `${own}-other` })) }).addon, null);
   });
 
   test('a pin never falls back to another release', () => {
     const root = moduleRootWith([X64_15]);
-    const result = findPrebuilt({ ...linuxX64, env: { ORTOOLS_NODE_PIN: '9.14' }, moduleRoot: root });
+    const result = findPrebuilt({ ...linuxX64, env: { ORTOOLS_NODE_PIN: '9.14' }, ...confinedTo(root) });
     assert.equal(result.addon, null);
     assert.deepEqual(result.tried, [`prebuilt ${X64_14} (ORTOOLS_NODE_PIN=9.14): not installed`]);
     assert.equal(result.suggested, `${X64_14}@1.0.0`);
@@ -198,7 +199,7 @@ describe('findPrebuilt', () => {
 
   test('suggests the newest package when none is installed', () => {
     const root = moduleRootWith([]);
-    const result = findPrebuilt({ ...linuxX64, moduleRoot: root });
+    const result = findPrebuilt({ ...linuxX64, ...confinedTo(root) });
     assert.equal(result.addon, null);
     assert.deepEqual(result.tried, [`prebuilt ${X64_15}: not installed`, `prebuilt ${X64_14}: not installed`]);
     assert.equal(result.suggested, `${X64_15}@1.0.0`);
@@ -206,9 +207,9 @@ describe('findPrebuilt', () => {
 
   test('ignores packages for another CPU', () => {
     const root = moduleRootWith(['@ortools-node/linux-arm64-gnu-ortools9.15']);
-    assert.equal(findPrebuilt({ ...linuxX64, moduleRoot: root }).addon, null);
+    assert.equal(findPrebuilt({ ...linuxX64, ...confinedTo(root) }).addon, null);
     assert.equal(
-      findPrebuilt({ ...linuxX64, arch: 'arm64', moduleRoot: root }).addon.origin,
+      findPrebuilt({ ...linuxX64, arch: 'arm64', ...confinedTo(root) }).addon.origin,
       '@ortools-node/linux-arm64-gnu-ortools9.15',
     );
   });
@@ -226,11 +227,11 @@ describe('findPrebuilt', () => {
 
   test('fails loudly when an installed package has no addon', () => {
     const root = moduleRootWith([X64_15], { withAddon: false });
-    assert.throws(() => findPrebuilt({ ...linuxX64, moduleRoot: root }), /linux-x64-gnu-ortools9\.15 is installed at .* but has no ortools_node\.node; reinstall it/);
+    assert.throws(() => findPrebuilt({ ...linuxX64, ...confinedTo(root) }), /linux-x64-gnu-ortools9\.15 is installed at .* but has no ortools_node\.node; reinstall it/);
   });
 
   test('rejects an invalid pin even when a package is installed', () => {
-    assert.throws(() => findPrebuilt({ ...linuxX64, env: { ORTOOLS_NODE_PIN: '9' }, moduleRoot: both }), /ORTOOLS_NODE_PIN=9/);
+    assert.throws(() => findPrebuilt({ ...linuxX64, env: { ORTOOLS_NODE_PIN: '9' }, ...confinedTo(both) }), /ORTOOLS_NODE_PIN=9/);
   });
 
   test('propagates errors from an injected resolver', () => {
@@ -241,19 +242,39 @@ describe('findPrebuilt', () => {
     );
   });
 
-  // These go through the real require.resolve, so only MODULE_NOT_FOUND may
-  // read as "not installed"; a broken package must not be skipped silently.
+  // A package that is there but broken must not read as "not installed".
   test('a corrupt package.json is an error, not "not installed"', () => {
     const root = moduleRootWith([X64_15]);
     fs.writeFileSync(path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json'), '{');
-    assert.throws(() => findPrebuilt({ ...linuxX64, moduleRoot: root }), (err) => err.code === 'ERR_INVALID_PACKAGE_CONFIG');
+    assert.throws(() => findPrebuilt({ ...linuxX64, ...confinedTo(root) }), SyntaxError);
   });
 
-  test('a package that does not export its package.json is an error, not "not installed"', () => {
-    const root = moduleRootWith([X64_15]);
-    const manifest = { name: X64_15, version: FAKE_VERSION, exports: { '.': './ortools_node.node' } };
-    fs.writeFileSync(path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json'), JSON.stringify(manifest));
-    assert.throws(() => findPrebuilt({ ...linuxX64, moduleRoot: root }), (err) => err.code === 'ERR_PACKAGE_PATH_NOT_EXPORTED');
+});
+
+describe('package lookup', () => {
+  test('searches the node_modules chain of ortools-node, nearest first', () => {
+    const root = path.join(path.sep, 'app', 'node_modules', 'ortools-node');
+    assert.deepEqual(nodeModulesChain(root), [
+      path.join(root, 'node_modules'),
+      path.join(path.sep, 'app', 'node_modules'),
+      path.join(path.sep, 'node_modules'),
+    ]);
+  });
+
+  test('ignores NODE_PATH', (t) => {
+    const elsewhere = moduleRootWith([X64_15]);
+    const empty = moduleRootWith([]);
+    const script = `
+      const { findPrebuilt } = require(${JSON.stringify(require.resolve('../lib/loader'))});
+      const result = findPrebuilt({ platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: '1.0.0',
+        moduleRoot: ${JSON.stringify(empty)} });
+      process.stdout.write(JSON.stringify(result.addon));`;
+    const child = require('node:child_process').spawnSync(process.execPath, ['-e', script], {
+      env: { ...process.env, NODE_PATH: path.join(elsewhere, 'node_modules') },
+      encoding: 'utf8',
+    });
+    assert.equal(child.status, 0, child.stderr);
+    assert.equal(child.stdout, 'null');
   });
 });
 
@@ -263,13 +284,13 @@ describe('resolveAddon', () => {
     const built = path.join(root, 'build', 'Release', ADDON_FILE);
     fs.mkdirSync(path.dirname(built), { recursive: true });
     fs.writeFileSync(built, '');
-    assert.deepEqual(resolveAddon({ ...linuxX64, moduleRoot: root }), { path: built, origin: 'source build' });
+    assert.deepEqual(resolveAddon({ ...linuxX64, ...confinedTo(root) }), { path: built, origin: 'source build' });
   });
 
   test('without any addon, lists every place tried and both fixes', () => {
     const root = moduleRootWith([]);
     assert.throws(
-      () => resolveAddon({ ...linuxX64, moduleRoot: root }),
+      () => resolveAddon({ ...linuxX64, ...confinedTo(root) }),
       (err) => {
         assert.equal(err.code, 'ORTOOLS_NODE_ADDON_NOT_FOUND');
         assert.match(err.message, /build[/\\]Release[/\\]ortools_node\.node: not found/);
@@ -285,7 +306,7 @@ describe('resolveAddon', () => {
   test('with a mismatched prebuilt, gives the versioned install command', () => {
     const root = moduleRootWith([X64_15], { version: '0.9.0' });
     assert.throws(
-      () => resolveAddon({ ...linuxX64, moduleRoot: root }),
+      () => resolveAddon({ ...linuxX64, ...confinedTo(root) }),
       (err) => {
         assert.equal(err.code, 'ORTOOLS_NODE_ADDON_NOT_FOUND');
         assert.match(err.message, /version 0\.9\.0 is installed, but ortools-node is 1\.0\.0/);
@@ -298,7 +319,7 @@ describe('resolveAddon', () => {
   test('on an unsupported system, only suggests building from source', () => {
     const root = moduleRootWith([]);
     assert.throws(
-      () => resolveAddon({ ...linuxX64, libc: 'musl', moduleRoot: root }),
+      () => resolveAddon({ ...linuxX64, libc: 'musl', ...confinedTo(root) }),
       (err) => {
         assert.match(err.message, /musl-based Linux \(such as Alpine\) is not supported/);
         assert.doesNotMatch(err.message, /npm install/);
@@ -313,7 +334,7 @@ describe('loadAddon', () => {
   test('requires the resolved addon', () => {
     const root = moduleRootWith([X64_15]);
     const loaded = [];
-    const addon = loadAddon({ ...linuxX64, moduleRoot: root }, (file) => {
+    const addon = loadAddon({ ...linuxX64, ...confinedTo(root) }, (file) => {
       loaded.push(file);
       return { ok: true };
     });
@@ -325,7 +346,7 @@ describe('loadAddon', () => {
     const root = moduleRootWith([X64_15]);
     const cause = new Error('libortools.so.9: cannot open shared object file');
     assert.throws(
-      () => loadAddon({ ...linuxX64, moduleRoot: root }, () => { throw cause; }),
+      () => loadAddon({ ...linuxX64, ...confinedTo(root) }, () => { throw cause; }),
       (err) => {
         assert.match(err.message, /failed to load the addon from @ortools-node\/linux-x64-gnu-ortools9\.15 \(.*\): libortools\.so\.9/);
         assert.equal(err.cause, cause);
