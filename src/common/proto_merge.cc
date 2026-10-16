@@ -178,6 +178,10 @@ std::string CheckObject(Struct* object, const Descriptor* descriptor, const std:
     if (field == nullptr) return absl::StrCat("unknown field '", key_path, "'");
     const auto [previous, inserted] = keys.emplace(field, key_path);
     if (!inserted) return absl::StrCat("'", key_path, "' and '", previous->second, "' name the same field");
+    // protobuf's parser would wrap a bare value into a one-element list.
+    if (field->is_repeated() && value.kind_case() != Value::kListValue && value.kind_case() != Value::kNullValue) {
+      return absl::StrCat("'", key_path, "' must be an array");
+    }
     std::string error = CheckValue(&value, field, key_path);
     if (!error.empty()) return error;
   }
