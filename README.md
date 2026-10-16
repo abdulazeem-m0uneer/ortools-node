@@ -28,10 +28,12 @@ console.log(result.status, result.objectiveValue, x.value(), y.value());
 // OPTIMAL 38 10 2
 ```
 
-> **Status: 0.1.0, early release.** The API is tested on Linux x64 with
-> OR-Tools 9.15 and Node.js 22, 24 and 26. Installing builds the addon from source against
-> an OR-Tools C++ release you download yourself. Prebuilt binaries, macOS and
-> Windows CI are on the [roadmap](#roadmap).
+> **Status: 0.1.0, early release.** The API is tested on Linux x64 and arm64
+> with OR-Tools 9.14 and 9.15 and Node.js 22, 24 and 26. On Linux x64 and arm64
+> with glibc, `npm install` uses a prebuilt addon that bundles OR-Tools, so it
+> needs no compiler. Elsewhere it builds from source against an OR-Tools C++
+> release you download yourself. macOS and Windows CI are on the
+> [roadmap](#roadmap).
 
 ## Contents
 
@@ -168,7 +170,48 @@ mirrors, and `run.js` drives both and prints the tables above.
 
 ## Installation
 
-### 1. Prerequisites
+You need Node.js 22 or later. CI tests Node.js 22, 24 and 26.
+
+### Prebuilt binaries (Linux x64 and arm64)
+
+```bash
+npm install ortools-node
+```
+
+On Linux x64 and arm64 with glibc 2.28 or newer (for example Debian 10+,
+Ubuntu 20.04+, RHEL/AlmaLinux 8+), npm also installs a platform package with
+the addon built against OR-Tools 9.15 and the OR-Tools shared libraries it
+needs. There is nothing to compile and no OR-Tools to download. Check what
+loaded with `node -p "require('ortools-node').buildInfo"`.
+
+| Platform | OR-Tools 9.15 (installed automatically) | OR-Tools 9.14 (install it yourself) |
+|---|---|---|
+| Linux x64, glibc | `@ortools-node/linux-x64-gnu-ortools9.15` | `@ortools-node/linux-x64-gnu-ortools9.14` |
+| Linux arm64, glibc | `@ortools-node/linux-arm64-gnu-ortools9.15` | `@ortools-node/linux-arm64-gnu-ortools9.14` |
+
+- **The platform package must have the same version as ortools-node.** A
+  prebuilt at another version is not loaded, and the error prints the exact
+  `npm install <package>@<version>` to run. Install one yourself the same way,
+  for example when npm skipped optional dependencies (`--omit=optional`, or a
+  lockfile made on another platform).
+- **OR-Tools 9.14:** install the 9.14 package for your CPU at ortools-node's
+  version, for example
+  `npm install @ortools-node/linux-x64-gnu-ortools9.14@0.1.0`. When several
+  releases are installed, the newest loads, so set `ORTOOLS_NODE_PIN=9.14` to
+  pick 9.14.
+- **Alpine and other musl systems** are not supported by the prebuilts: use a
+  glibc-based image such as `node:22-trixie-slim`, or build from source.
+
+### Building from source
+
+Other platforms, other OR-Tools builds, and musl systems build the addon from
+source. `npm install` builds from source when no matching prebuilt is installed
+and `ORTOOLS_ROOT` is set. `npm install --build-from-source` (or
+`--build-from-source=ortools-node`) builds from source even when a prebuilt is
+installed. A local build always takes precedence over a prebuilt when the addon
+loads.
+
+#### 1. Prerequisites
 
 | Platform | Toolchain |
 |---|---|
@@ -176,9 +219,7 @@ mirrors, and `run.js` drives both and prints the tables above.
 | macOS | Xcode Command Line Tools, CMake ≥ 3.18 |
 | Windows | Visual Studio 2022 Build Tools (C++ workload), CMake ≥ 3.18 |
 
-You also need Node.js 22 or later. CI tests Node.js 22, 24 and 26.
-
-### 2. OR-Tools C++ release
+#### 2. OR-Tools C++ release
 
 Download the **C++** archive (`_cpp_` in the file name) for your platform from
 the [OR-Tools releases page](https://github.com/google/or-tools/releases), for
@@ -190,21 +231,23 @@ tar -xzf or-tools_amd64_ubuntu-24.04_cpp_v9.15.6755.tar.gz -C ~/or-tools --strip
 export ORTOOLS_ROOT=~/or-tools        # add this to your shell profile
 ```
 
-The directory must contain `include/`, `lib/` and `lib/cmake/ortools/`. An
-OR-Tools build installed from source with `cmake --install` works as well.
+The directory must contain `include/` and `lib/cmake/ortools/` (the libraries
+are in `lib/`, or `lib64/` in the AlmaLinux archives). An OR-Tools build
+installed from source with `cmake --install` works as well.
 
-### 3. Build and verify
+#### 3. Build and verify
 
 ```bash
-npm install            # compiles the addon with cmake-js
-npm test
-npm run example
+npm install ortools-node --build-from-source   # in a project
+npm install && npm test && npm run example     # in a clone of this repository
 ```
 
-On Linux and macOS the addon records the path to `$ORTOOLS_ROOT/lib`, so it
-finds `libortools` at runtime without `LD_LIBRARY_PATH`. On Windows, add
-`%ORTOOLS_ROOT%\bin` to `PATH` or copy the DLLs next to
-`build/Release/ortools_node.node`.
+Without a prebuilt or `ORTOOLS_ROOT`, the install fails and says what to do.
+In a clone that already has a build in `build/Release`, `npm install` keeps it;
+`npm run build` recompiles. On Linux and macOS the addon records the path to the
+OR-Tools libraries, so it finds `libortools` at runtime without
+`LD_LIBRARY_PATH`. On Windows, add `%ORTOOLS_ROOT%\bin` to `PATH` or copy the
+DLLs next to `build/Release/ortools_node.node`.
 
 ## Usage
 
