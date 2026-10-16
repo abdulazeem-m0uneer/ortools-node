@@ -6,10 +6,16 @@
 const { spawnSync } = require('node:child_process');
 const { findPrebuilt, notFoundMessage } = require('../lib/loader');
 
-/** True for `npm install --build-from-source` (npm exports it as npm_config_build_from_source). */
+const PACKAGE_NAME = require('../package.json').name;
+
+/**
+ * True for `npm install --build-from-source` or `--build-from-source=ortools-node`
+ * (npm exports it as npm_config_build_from_source). A flag naming another
+ * package, as node-pre-gyp allows, is not for this one.
+ */
 function buildFromSourceRequested(env) {
   const value = env.npm_config_build_from_source;
-  return value !== undefined && !['', '0', 'false'].includes(value.toLowerCase());
+  return value !== undefined && (value.toLowerCase() === 'true' || value === PACKAGE_NAME);
 }
 
 /**
