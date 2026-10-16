@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ADDON_FILE, findPrebuilt, findSourceBuild } = require('../lib/loader');
 const { buildFromSourceRequested, compileFromSource, decideInstall, main } = require('../scripts/install');
-const { FAKE_VERSION, moduleRootWith } = require('./helpers/fake-packages');
+const { FAKE_VERSION, confinedTo, moduleRootWith } = require('./helpers/fake-packages');
 
 const X64_15 = '@ortools-node/linux-x64-gnu-ortools9.15';
 const found = () => ({ addon: { path: '/x/ortools_node.node', origin: X64_15 }, tried: [], suggested: null });
@@ -221,7 +221,7 @@ describe('an ORTOOLS_NODE_PIN with no prebuilt', () => {
 
 describe('a prebuilt at another version than ortools-node', () => {
   const lookupIn = (root) => () =>
-    findPrebuilt({ platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: FAKE_VERSION, moduleRoot: root });
+    findPrebuilt({ platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: FAKE_VERSION, ...confinedTo(root) });
 
   test('counts as not found: the install fails with the versioned install command', () => {
     const errors = [];
