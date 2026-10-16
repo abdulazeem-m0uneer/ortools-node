@@ -400,6 +400,18 @@ test('repeated fields must be arrays, not a bare value', () => {
   assert.deepEqual(validateSatParameters({ subsolvers: null }).subsolvers, []);
 });
 
+test('arrays nested inside a repeated field are TypeErrors, not flattened', () => {
+  assert.throws(() => validateSatParameters({ subsolvers: [['default_lp', ['no_lp']]] }),
+    { name: 'TypeError', message: /'subsolvers\[0\]' must not be an array/ });
+  assert.throws(() => validateSatParameters({ subsolvers: ['default_lp', []] }),
+    { name: 'TypeError', message: /'subsolvers\[1\]' must not be an array/ });
+  assert.throws(() => validateSatParameters({ subsolvers: [[]] }), { name: 'TypeError', message: /'subsolvers\[0\]' must not be an array/ });
+  assert.throws(() => validateSatParameters({ restartAlgorithms: [['LUBY_RESTART']] }),
+    { name: 'TypeError', message: /'restartAlgorithms\[0\]' must not be an array/ });
+  assert.throws(() => validateSatParameters({ subsolverParams: [[{ name: 'a' }]] }),
+    { name: 'TypeError', message: /'subsolverParams\[0\]' must not be an array/ });
+});
+
 // ---- SatParameters --------------------------------------------------------------
 
 test('default SAT parameters list every field with its default', () => {

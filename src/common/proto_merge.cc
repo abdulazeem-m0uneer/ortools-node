@@ -136,6 +136,10 @@ std::string CheckValue(Value* value, const FieldDescriptor* field, const std::st
         Value* element = value->mutable_list_value()->mutable_values(i);
         const std::string element_path = absl::StrCat(path, "[", i, "]");
         if (element->kind_case() == Value::kNullValue) return absl::StrCat("'", element_path, "' must not be null");
+        // protobuf's parser would flatten a nested array into the outer one.
+        if (element->kind_case() == Value::kListValue) {
+          return absl::StrCat("'", element_path, "' must not be an array");
+        }
         std::string error = CheckValue(element, field, element_path);
         if (!error.empty()) return error;
       }
