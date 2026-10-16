@@ -19,15 +19,26 @@ function buildFromSourceRequested(env) {
 }
 
 /**
- * What the install hook does: { action: 'compile' | 'skip' | 'fail', message }.
- * `lookupPrebuilt` is findPrebuilt (injected for tests); it is not called when
- * a source build was requested, so a stale ORTOOLS_NODE_PIN cannot block it.
+ * What the install hook does: { action: 'compile' | 'skip' | 'fail', message,
+ * warning? }. `lookupPrebuilt` is findPrebuilt (injected for tests). A stale
+ * ORTOOLS_NODE_PIN cannot block a source build: the lookup is skipped for
+ * --build-from-source, and an invalid pin only warns when ORTOOLS_ROOT is set.
  */
 function decideInstall({ env, lookupPrebuilt }) {
   if (buildFromSourceRequested(env)) {
     return { action: 'compile', message: 'building from source (--build-from-source)' };
   }
-  const prebuilt = lookupPrebuilt();
+  let prebuilt;
+  try {
+    prebuilt = lookupPrebuilt();
+  } catch (err) {
+    if (err.code !== 'ORTOOLS_NODE_INVALID_PIN' || !env.ORTOOLS_ROOT) throw err;
+    return {
+      action: 'compile',
+      message: `building from source against ORTOOLS_ROOT=${env.ORTOOLS_ROOT}`,
+      warning: `${err.message}; ignoring it and building from source`,
+    };
+  }
   if (prebuilt.addon) {
     return { action: 'skip', message: `using the prebuilt addon from ${prebuilt.addon.origin}` };
   }
@@ -73,6 +84,7 @@ function main({
     logError(`ortools-node: ${decision.message}`);
     return 1;
   }
+  if (decision.warning) logError(`ortools-node: warning: ${decision.warning}`);
   log(`ortools-node: ${decision.message}`);
   return decision.action === 'compile' ? compile() : 0;
 }

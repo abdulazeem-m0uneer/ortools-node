@@ -89,7 +89,11 @@ describe('parsePin', () => {
 
   test('rejects anything else, naming the valid values', () => {
     for (const value of ['9.13', '9.14.6206', ' 9.14', 'latest']) {
-      assert.throws(() => parsePin(value), /ORTOOLS_NODE_PIN=.* set it to one of 9\.15, 9\.14/, value);
+      assert.throws(
+        () => parsePin(value),
+        (err) => err.code === 'ORTOOLS_NODE_INVALID_PIN' && /ORTOOLS_NODE_PIN=.* set it to one of 9\.15, 9\.14/.test(err.message),
+        value,
+      );
     }
   });
 });

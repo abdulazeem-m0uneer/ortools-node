@@ -134,6 +134,38 @@ describe('main', () => {
   });
 });
 
+describe('an ORTOOLS_NODE_PIN with no prebuilt', () => {
+  const env = { ORTOOLS_ROOT: '/opt/or-tools-9.16', ORTOOLS_NODE_PIN: '9.16' };
+
+  test('does not block a source build against ORTOOLS_ROOT, and is reported', () => {
+    const logged = [];
+    const errors = [];
+    let compiled = 0;
+    const code = main({
+      env,
+      compile: () => ++compiled && 0,
+      log: (m) => logged.push(m),
+      logError: (m) => errors.push(m),
+    });
+    assert.equal(code, 0);
+    assert.equal(compiled, 1);
+    assert.match(errors[0], /^ortools-node: warning: ORTOOLS_NODE_PIN=9\.16 is not an OR-Tools release with prebuilt binaries.*; ignoring it/);
+    assert.match(logged[0], /building from source against ORTOOLS_ROOT=\/opt\/or-tools-9\.16/);
+  });
+
+  test('still fails without ORTOOLS_ROOT', () => {
+    const decision = () => decideInstall({ env: { ORTOOLS_NODE_PIN: '9.16' }, lookupPrebuilt: () => findPrebuilt({ env: { ORTOOLS_NODE_PIN: '9.16' } }) });
+    assert.throws(decision, /ORTOOLS_NODE_PIN=9\.16/);
+  });
+
+  test('other lookup errors still fail even with ORTOOLS_ROOT', () => {
+    const broken = () => {
+      throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    };
+    assert.throws(() => decideInstall({ env, lookupPrebuilt: broken }), /EACCES/);
+  });
+});
+
 describe('a prebuilt at another version than ortools-node', () => {
   const lookupIn = (root) => () =>
     findPrebuilt({ platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: FAKE_VERSION, moduleRoot: root });
