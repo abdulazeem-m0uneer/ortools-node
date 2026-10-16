@@ -138,7 +138,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   packages such as `@ortools-node/linux-x64-gnu-ortools9.15` bundle the addon
   and the OR-Tools libraries, so installing needs no compiler and no
   `ORTOOLS_ROOT`. The OR-Tools 9.15 packages install automatically; 9.14 users
-  install theirs and set `ORTOOLS_NODE_PIN=9.14` when both are present.
+  install theirs at the same version as ortools-node
+  (`npm install @ortools-node/linux-x64-gnu-ortools9.14@<version>`) and set
+  `ORTOOLS_NODE_PIN=9.14` when both are present. A prebuilt at another version
+  is not loaded; the error gives the exact install command.
 - The install step uses a matching prebuilt when one is installed, builds from
   source when `ORTOOLS_ROOT` is set or `--build-from-source` is given, and
   otherwise fails with instructions. Loading reports every place it looked when
