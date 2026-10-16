@@ -108,33 +108,45 @@ test('reading the solver inside the callback throws busy (use the snapshot inste
   assert.match(message, /busy/);
 });
 
-test('callbacks from a multi-worker search arrive one at a time with improving objectives', async () => {
-  const n = 12;
+test('a multi-worker search waits for each callback: solutions found later carry later wall times', async () => {
+  // Each callback holds the main thread for HOLD_MS. The solver thread waits
+  // for it, so the next solution cannot be found earlier than HOLD_MS later in
+  // the solver's own clock. Without that wait, workers keep finding solutions
+  // during the callback, and their snapshots carry earlier wall times.
+  const HOLD_MS = 30;
+  const n = 30;
+  let seed = 7;
+  const random = () => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed / 2147483648;
+  };
   const m = new CpModel();
   const x = Array.from({ length: n }, (_, i) => Array.from({ length: n }, (__, j) => m.newBoolVar(`x${i}_${j}`)));
   for (let i = 0; i < n; ++i) {
     m.addExactlyOne(x[i]);
     m.addExactlyOne(x.map((row) => row[i]));
   }
-  const cost = (i, j) => ((i * 7 + j * 13) % 17) + 1;
-  m.minimize(CpLinearExpr.weightedSum(x.flat(), x.flatMap((row, i) => row.map((_, j) => cost(i, j)))));
+  const costs = x.flat().map(() => 1 + Math.floor(random() * 1000));
+  m.minimize(CpLinearExpr.weightedSum(x.flat(), costs));
   const solver = new CpSolver();
-  solver.parameters = { numWorkers: 8, maxTimeInSeconds: 10 };
-  const objectives = [];
-  let inCallback = false;
+  solver.parameters = { numWorkers: 8, maxTimeInSeconds: 5 };
+  const snapshots = [];
   const status = await solver.solve(m, {
     onSolution(s) {
-      assert.equal(inCallback, false);
-      inCallback = true;
-      objectives.push(s.objectiveValue);
+      snapshots.push({ wallTime: s.wallTime, objective: s.objectiveValue });
       for (let i = 0; i < n; ++i) assert.equal(x[i].filter((v) => s.booleanValue(v)).length, 1);
-      inCallback = false;
+      const until = performance.now() + HOLD_MS;
+      while (performance.now() < until) { /* hold the main thread */ }
     },
   });
-  assert.equal(status, 'OPTIMAL');
-  assert.ok(objectives.length >= 1);
-  for (let i = 1; i < objectives.length; ++i) assert.ok(objectives[i] < objectives[i - 1]);
-  assert.equal(objectives.at(-1), solver.objectiveValue);
+  assert.ok(status === 'OPTIMAL' || status === 'FEASIBLE', status);
+  assert.ok(snapshots.length >= 2, `only ${snapshots.length} solution(s): the check needs several`);
+  for (let i = 1; i < snapshots.length; ++i) {
+    const gapMs = (snapshots[i].wallTime - snapshots[i - 1].wallTime) * 1000;
+    assert.ok(gapMs >= HOLD_MS * 0.9, `solution ${i} came ${gapMs.toFixed(1)} ms after the previous one`);
+    assert.ok(snapshots[i].objective < snapshots[i - 1].objective);
+  }
+  assert.equal(snapshots.at(-1).objective, solver.objectiveValue);
 });
 
 test('concurrent solves each deliver to their own callback', async () => {
