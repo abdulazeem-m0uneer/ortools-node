@@ -49,3 +49,39 @@ test('array errors name the offending element', () => {
   assert.throws(() => many(new Uint8Array([1]), false), { name: 'TypeError', message: /Int32Array/ });
   assert.throws(() => many('1,2', false), TypeError);
 });
+
+// Reading an Array runs user code. A regression here aborts the process, so
+// run each case in a child process and require a clean exit.
+const { spawnSync } = require('node:child_process');
+const path = require('node:path');
+
+function runIsolated(body) {
+  const script = `const { native } = require(${JSON.stringify(path.join(__dirname, '..'))});\n${body}`;
+  return spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+}
+
+test('an element getter that throws propagates its error instead of aborting', () => {
+  const r = runIsolated(`
+    const a = [1, 2];
+    Object.defineProperty(a, 1, { get() { throw new Error('from getter'); } });
+    try { native._testing.int64ArrayRoundTrip(a, false); console.log('no error'); }
+    catch (e) { console.log('caught:' + e.message); }`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'caught:from getter');
+});
+
+test('a Proxy is rejected as a non-array without reading it', () => {
+  // N-API does not treat a Proxy as an Array, so its traps never run.
+  const r = runIsolated(`
+    const p = new Proxy([1, 2], { get(t, k) { if (k === 'length') throw new Error('from length'); return t[k]; } });
+    try { native._testing.int64ArrayRoundTrip(p, false); console.log('no error'); }
+    catch (e) { console.log(e.name + ':' + e.message); }`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout.trim(), /^TypeError:values must be an Array/);
+});
+
+test('an element getter that returns a non-integer is a normal TypeError', () => {
+  const a = [1, 2];
+  Object.defineProperty(a, 1, { get: () => 'two' });
+  assert.throws(() => many(a, false), { name: 'TypeError', message: /values\[1\]/ });
+});

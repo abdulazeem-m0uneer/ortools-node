@@ -104,11 +104,17 @@ bool ReadInt64Array(Napi::Env env, const Napi::Value& v, bool allow_infinite, co
     Napi::TypeError::New(env, std::string(what) + kArrayTypes).ThrowAsJavaScriptException();
     return false;
   }
+  // Length() and Get() can run user code (a Proxy, a getter) that throws: stop
+  // and let that exception propagate. Throwing a second one while it is
+  // pending would abort the process.
   Napi::Array array = v.As<Napi::Array>();
   const uint32_t n = array.Length();
+  if (env.IsExceptionPending()) return false;
   out->resize(n);
   for (uint32_t i = 0; i < n; ++i) {
-    Int64Error error = ConvertValue(array.Get(i), allow_infinite, &(*out)[i]);
+    Napi::Value item = array.Get(i);
+    if (env.IsExceptionPending()) return false;
+    Int64Error error = ConvertValue(item, allow_infinite, &(*out)[i]);
     if (error != Int64Error::kNone) return Throw(env, error, ElementName(what, i));
   }
   return true;
