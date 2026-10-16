@@ -77,6 +77,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `enableOutput: true` (OR-Tools would always enable it). On OR-Tools 9.14
   HiGHS prints only its banner whatever `enableOutput` says (that release's
   HiGHS interface ignores it); `new Solver('HIGHS')` prints that banner too.
+- CP-SAT: `CpModel` builds a `CpModelProto` the way Python's `cp_model` does,
+  with integer, Boolean, constant and interval variables, `Domain`, linear
+  expressions (`CpLinearExpr.sum()`, `weightedSum()`, `.plus()`, `.times()`,
+  `.le()`, `.eq()`...), every CP-SAT constraint (linear, Boolean, all-different,
+  element, circuit, routes, table, automaton, inverse, reservoir, min / max /
+  abs / product / division / modulo, NoOverlap, NoOverlap2D, cumulative) with
+  `onlyEnforceIf()`, objectives, hints, assumptions and decision strategies.
+  int64 values are exact: numbers, or BigInts beyond 2^53.
+- `CpSolver`: `solve()` on the threadpool and `solveSync()`, `SatParameters` as
+  a plain object, `stopSearch()`, values, objective, bound and statistics.
+  Invalid models throw OR-Tools' own message instead of aborting the process;
+  values throw when the last solve found no solution.
+- CP-SAT solution callbacks: `solve(model, { onSolution })` passes each solution
+  to JS while the search runs; `stopSearch()` works from inside it, and an
+  exception stops the search and rejects `solve()`.
 
 ### Changed
 
