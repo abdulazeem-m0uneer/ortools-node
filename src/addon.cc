@@ -12,6 +12,7 @@
 #include "absl/log/internal/globals.h"
 #include "common/cpp_guard_testing.h"
 #include "common/int64.h"
+#include "graph/graph.h"
 #include "linear_solver/mp_solver.h"
 #include "ortools/base/version.h"
 #include "routing/search_parameters.h"
@@ -63,6 +64,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   exports.Set("_testing", testing);
   InitRoutingSearchParameters(env, exports);
   InitSatParameters(env, exports);
+  InitGraph(env, exports);
   return InitMpSolver(env, exports);
 }
 
