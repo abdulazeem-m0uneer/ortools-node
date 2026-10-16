@@ -4,7 +4,7 @@
 // otherwise compile the addon from source against ORTOOLS_ROOT.
 
 const { spawnSync } = require('node:child_process');
-const { findPrebuilt, notFoundMessage } = require('../lib/loader');
+const { findPrebuilt, findSourceBuild, notFoundMessage } = require('../lib/loader');
 
 const PACKAGE_NAME = require('../package.json').name;
 
@@ -20,11 +20,13 @@ function buildFromSourceRequested(env) {
 
 /**
  * What the install hook does: { action: 'compile' | 'skip' | 'fail', message,
- * warning? }. `lookupPrebuilt` is findPrebuilt (injected for tests). A stale
+ * warning? }. `lookupPrebuilt` and `lookupSourceBuild` are findPrebuilt and
+ * findSourceBuild (injected for tests). Without a prebuilt or ORTOOLS_ROOT, an
+ * existing source build is kept, as `cmake-js compile` used to. A stale
  * ORTOOLS_NODE_PIN cannot block a source build: the lookup is skipped for
  * --build-from-source, and an invalid pin only warns when ORTOOLS_ROOT is set.
  */
-function decideInstall({ env, lookupPrebuilt }) {
+function decideInstall({ env, lookupPrebuilt, lookupSourceBuild }) {
   if (buildFromSourceRequested(env)) {
     return { action: 'compile', message: 'building from source (--build-from-source)' };
   }
@@ -45,9 +47,17 @@ function decideInstall({ env, lookupPrebuilt }) {
   if (env.ORTOOLS_ROOT) {
     return { action: 'compile', message: `no prebuilt addon; building from source against ORTOOLS_ROOT=${env.ORTOOLS_ROOT}` };
   }
+  const source = lookupSourceBuild();
+  if (source.addon) {
+    return {
+      action: 'skip',
+      message: `keeping the source build at ${source.addon.path} (run \`npm run build\` to recompile it)`,
+    };
+  }
+  const tried = [...source.tried, ...prebuilt.tried];
   return {
     action: 'fail',
-    message: `no prebuilt addon for this system and ORTOOLS_ROOT is not set. ${notFoundMessage(prebuilt.tried, prebuilt.suggested)}`,
+    message: `no prebuilt addon for this system and ORTOOLS_ROOT is not set. ${notFoundMessage(tried, prebuilt.suggested)}`,
   };
 }
 
@@ -70,13 +80,14 @@ function compileFromSource(spawn = spawnSync) {
 function main({
   env = process.env,
   lookupPrebuilt = () => findPrebuilt({ env }),
+  lookupSourceBuild = () => findSourceBuild(),
   compile = compileFromSource,
   log = console.log,
   logError = console.error,
 } = {}) {
   let decision;
   try {
-    decision = decideInstall({ env, lookupPrebuilt });
+    decision = decideInstall({ env, lookupPrebuilt, lookupSourceBuild });
   } catch (err) {
     decision = { action: 'fail', message: err.message };
   }
