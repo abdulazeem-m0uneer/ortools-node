@@ -102,23 +102,43 @@ describe('findSourceBuild', () => {
   const root = path.join(path.sep, 'pkg');
   const release = path.join(root, 'build', 'Release', ADDON_FILE);
   const debug = path.join(root, 'build', 'Debug', ADDON_FILE);
+  const mtimes = (map) => (file) => map[file] ?? null;
 
-  test('prefers the Release build', () => {
-    const exists = new Set([release, debug]);
-    assert.deepEqual(findSourceBuild({ moduleRoot: root, fileExists: (f) => exists.has(f) }).addon, {
-      path: release,
-      origin: 'source build',
-    });
+  test('loads the newer build when both exist: a Release build made after a Debug one', () => {
+    const found = findSourceBuild({ moduleRoot: root, mtimeOf: mtimes({ [debug]: 1000, [release]: 2000 }) });
+    assert.deepEqual(found.addon, { path: release, origin: 'source build' });
   });
 
-  test('falls back to the Debug build', () => {
-    assert.equal(findSourceBuild({ moduleRoot: root, fileExists: (f) => f === debug }).addon.path, debug);
+  test('loads the newer build when both exist: `npm run build:debug` after `npm run build`', () => {
+    const found = findSourceBuild({ moduleRoot: root, mtimeOf: mtimes({ [release]: 1000, [debug]: 2000 }) });
+    assert.deepEqual(found.addon, { path: debug, origin: 'source build' });
+  });
+
+  test('prefers Debug on a tie, as the bindings package did', () => {
+    assert.equal(findSourceBuild({ moduleRoot: root, mtimeOf: mtimes({ [release]: 1000, [debug]: 1000 }) }).addon.path, debug);
+  });
+
+  test('uses whichever single build exists', () => {
+    assert.equal(findSourceBuild({ moduleRoot: root, mtimeOf: mtimes({ [release]: 1 }) }).addon.path, release);
+    assert.equal(findSourceBuild({ moduleRoot: root, mtimeOf: mtimes({ [debug]: 1 }) }).addon.path, debug);
   });
 
   test('lists both places when there is no build', () => {
-    const { addon, tried } = findSourceBuild({ moduleRoot: root, fileExists: () => false });
+    const { addon, tried } = findSourceBuild({ moduleRoot: root, mtimeOf: () => null });
     assert.equal(addon, null);
-    assert.deepEqual(tried, [`source build ${release}: not found`, `source build ${debug}: not found`]);
+    assert.deepEqual(tried, [`source build ${debug}: not found`, `source build ${release}: not found`]);
+  });
+
+  test('reads real modification times by default', (t) => {
+    const real = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'ortools-node-build-'));
+    t.after(() => fs.rmSync(real, { recursive: true, force: true }));
+    for (const [dir, seconds] of [['Release', 1000], ['Debug', 2000]]) {
+      const file = path.join(real, 'build', dir, ADDON_FILE);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, '');
+      fs.utimesSync(file, seconds, seconds);
+    }
+    assert.equal(findSourceBuild({ moduleRoot: real }).addon.path, path.join(real, 'build', 'Debug', ADDON_FILE));
   });
 });
 

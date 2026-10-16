@@ -153,7 +153,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Changed
 
 - The addon is located by `lib/loader.js` instead of the `bindings` package,
-  which is no longer a dependency.
+  which is no longer a dependency. With both a Debug and a Release build, the
+  newer one loads (bindings always took Debug).
 - Native sources are split by OR-Tools component under `src/`, and the JS layer
   under `lib/`. The public API is unchanged.
 

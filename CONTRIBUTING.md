@@ -42,8 +42,10 @@ release's packages in `optionalDependencies`; they are added by
 `scripts/prebuilt/set-optional-deps.js` when packing a release, because
 `npm ci` fails on dependencies the registry does not have yet.
 
-- **Loading** (`lib/loader.js`): a local build in `build/Release` or
-  `build/Debug` wins, then the platform package for this OS, CPU and C library.
+- **Loading** (`lib/loader.js`): a local build wins, then the platform package
+  for this OS, CPU and C library. With both `build/Debug` (`npm run build:debug`)
+  and `build/Release` (`npm run build`), the newer addon file loads, and Debug
+  on a tie.
   With several OR-Tools releases installed, the newest loads unless
   `ORTOOLS_NODE_PIN` names one (for example `ORTOOLS_NODE_PIN=9.14`). The
   package must have exactly ortools-node's version; otherwise the error names
