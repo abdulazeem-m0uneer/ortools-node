@@ -113,7 +113,10 @@ export class SimpleMaxFlow {
   addArcsWithCapacity(tails: IntList, heads: IntList, capacities: IntList): Int32Array;
   setArcCapacity(arc: number, capacity: Int64Input): void;
 
-  /** BAD_INPUT when source === sink; a source or sink outside the graph gives a flow of 0. */
+  /**
+   * BAD_INPUT when source === sink. A source or sink outside the graph (no arc
+   * touches it) gives an OPTIMAL flow of 0, with both min cuts empty.
+   */
   solve(source: number, sink: number): Promise<MaxFlowStatus>;
   solveSync(source: number, sink: number): MaxFlowStatus;
 
@@ -121,9 +124,12 @@ export class SimpleMaxFlow {
   flow(arc: number): number;
   /** Flows of the given arcs, or of every arc. */
   flows(arcs?: IntList): number[];
-  /** Nodes reachable from the source through non-saturated arcs. */
+  /**
+   * Nodes reachable from the source through non-saturated arcs. Empty when the
+   * source or sink was outside the graph (OR-Tools builds no flow network then).
+   */
   getSourceSideMinCut(): Int32Array;
-  /** Nodes that reach the sink through non-saturated arcs. */
+  /** Nodes that reach the sink through non-saturated arcs. Empty in the same case. */
   getSinkSideMinCut(): Int32Array;
 
   numNodes(): number;

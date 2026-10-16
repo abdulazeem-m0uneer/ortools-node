@@ -89,7 +89,16 @@ test('max flow: source or sink outside the graph gives a flow of 0', () => {
   assert.equal(m.solveSync(0, 99), 'OPTIMAL');
   assert.equal(m.optimalFlow(), 0);
   assert.deepEqual(m.flows(), new Array(9).fill(0));
+  // OR-Tools builds no flow network then, so both cuts are empty, even though
+  // the source itself and the nodes it reaches are in the graph.
   assert.deepEqual([...m.getSourceSideMinCut()], []);
+  assert.deepEqual([...m.getSinkSideMinCut()], []);
+  const path = new SimpleMaxFlow();
+  path.addArcsWithCapacity([0, 1], [1, 2], [5, 5]);
+  assert.equal(path.solveSync(0, 7), 'OPTIMAL');
+  assert.deepEqual([...path.getSourceSideMinCut()], []);
+  assert.equal(path.solveSync(7, 2), 'OPTIMAL');
+  assert.deepEqual([...path.getSinkSideMinCut()], []);
 });
 
 test('max flow: empty graph, single self loop, zero capacities', () => {
