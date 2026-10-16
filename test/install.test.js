@@ -167,6 +167,19 @@ describe('an existing source build', () => {
     assert.equal(decision.action, 'compile');
   });
 
+  test('is kept even when ORTOOLS_NODE_PIN names a release without prebuilts', () => {
+    const errors = [];
+    const code = main({
+      env: { ORTOOLS_NODE_PIN: '9.16' },
+      lookupSourceBuild: sourceBuildIn(builtRoot()),
+      compile: () => assert.fail('compiled'),
+      log: () => {},
+      logError: (m) => errors.push(m),
+    });
+    assert.equal(code, 0);
+    assert.match(errors[0], /^ortools-node: warning: ORTOOLS_NODE_PIN=9\.16 .*; ignoring it/);
+  });
+
   test('the failure lists the source build paths it looked at', () => {
     const { message } = decideInstall({ env: {}, lookupPrebuilt: missing, lookupSourceBuild: sourceBuildIn(moduleRootWith([])) });
     assert.match(message, /source build .*build[/\\]Release[/\\]ortools_node\.node: not found/);
