@@ -66,6 +66,11 @@ IntVar* MakeIsComparisonVar(Solver* s, Comparison op, IntExpr* left, IntExpr* ri
 }
 
 IntVar* MakeIsComparisonCstVar(Solver* s, Comparison op, IntExpr* left, int64_t right) {
+  // OR-Tools computes right - 1 / right + 1 here, which overflows at the limits.
+  if ((op == Comparison::kLt && right == std::numeric_limits<int64_t>::min()) ||
+      (op == Comparison::kGt && right == std::numeric_limits<int64_t>::max())) {
+    return s->MakeIntConst(0);
+  }
   switch (op) {
     case Comparison::kEq: return s->MakeIsEqualCstVar(left, right);
     case Comparison::kNe: return s->MakeIsDifferentCstVar(left, right);
@@ -282,6 +287,10 @@ Napi::Value CpSolver::IsCompareVar(const Napi::CallbackInfo& info) {
   if (a == nullptr) return env.Undefined();
   IntExpr* b = context_->ExprById(env, args.right, "right expression");
   if (b == nullptr) return env.Undefined();
+  // A bound right side takes OR-Tools' constant path: apply the overflow guard.
+  if (b->Bound()) {
+    BUILD_EXPR(env, "a reified comparison", MakeIsComparisonCstVar(context_->solver(), args.op, a, b->Min()));
+  }
   BUILD_EXPR(env, "a reified comparison", MakeIsComparisonVar(context_->solver(), args.op, a, b));
 }
 

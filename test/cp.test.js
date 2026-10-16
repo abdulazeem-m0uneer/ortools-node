@@ -79,6 +79,9 @@ test('a domain change that empties the domain throws a CP solver failure', () =>
   assert.throws(() => x.setMin(6), /CP solver failure/);
   assert.throws(() => x.setValue(9), /CP solver failure/);
   assert.throws(() => x.setRange(7, 9), /CP solver failure/);
+  const y = s.intVar(0, 10, 'y');
+  assert.throws(() => x.plus(y).setRange(15, 4), /min must be <= max/);
+  assert.deepEqual([y.min(), y.max()], [0, 10], 'an empty range is rejected before narrowing anything');
   assert.throws(() => x.removeValues([0, 1, 2, 3, 4, 5]), /CP solver failure/);
   assert.throws(() => s.intConst(1).removeValue(1), /CP solver failure/);
   // The solver stays usable.

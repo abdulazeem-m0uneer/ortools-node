@@ -148,6 +148,16 @@ test('every reified comparison and isMemberVar', () => {
   assert.deepEqual(flags.map((f) => first.value(0, f)), [0, 0, 1, 0, 1, 1, 1]);
 });
 
+test('reified strict comparisons at the int64 limits do not overflow', () => {
+  const s = new CpSolver();
+  const x = s.intVar(0, 10, 'x');
+  const flags = [s.isLessVar(x, -(2n ** 63n)), s.isGreaterVar(x, 2n ** 63n - 1n),
+    s.isLessVar(x, s.intConst(-(2n ** 63n)))];
+  const first = s.firstSolutionCollector().add(flags);
+  assert.equal(s.solve(s.phase([x, ...flags], FIRST, MIN), [first]), true);
+  assert.deepEqual(flags.map((f) => first.value(0, f)), [0, 0, 0]);
+});
+
 test('element constraint selects by index', () => {
   const s = new CpSolver();
   const i = s.intVar(0, 3, 'i');
