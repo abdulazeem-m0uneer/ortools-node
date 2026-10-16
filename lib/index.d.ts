@@ -1,5 +1,6 @@
 /// <reference lib="esnext.disposable" />
 export * from './params';
+export * from './graph';
 
 export type Backend =
   | 'GLOP' | 'PDLP' | 'CLP'              // LP

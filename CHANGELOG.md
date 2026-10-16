@@ -26,6 +26,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `RoutingSearchStatus`, read from the OR-Tools build in use, and
   `durationMs(ms)` for protobuf Duration strings.
 - `npm run typecheck` also compiles usage checks in `test/types/`.
+- Graph algorithms, mirroring Python's `ortools.graph.python` modules:
+  `SimpleMinCostFlow`, `SimpleMaxFlow` and `SimpleLinearSumAssignment`, with
+  bulk adders that take typed arrays, `solve()` on the threadpool (plus
+  `solveSync()`), status constants on each class, and `dispose()`.
+- The graph classes validate every index, capacity, supply and cost before it
+  reaches OR-Tools, so bad input throws a JS error instead of aborting the
+  process, and results throw unless the last solve was OPTIMAL on the current
+  graph.
 
 ### Changed
 
