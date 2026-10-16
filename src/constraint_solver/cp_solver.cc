@@ -332,9 +332,12 @@ Napi::Value CpSolver::ExprSetRange(const Napi::CallbackInfo& info) {
   uint32_t id;
   int64_t lo, hi;
   if (!ReadId(env, info[0], "expression", &id) || !ReadInt64(env, info[1], true, "min", &lo) ||
-      !ReadInt64(env, info[2], true, "max", &hi) || !CheckMutable(env)) {
+      !ReadInt64(env, info[2], true, "max", &hi)) {
     return env.Undefined();
   }
+  // An empty range would fail after narrowing the operands of a sum.
+  if (lo > hi) THROW_AND_RETURN(env, "setRange(min, max): min must be <= max", env.Undefined());
+  if (!CheckMutable(env)) return env.Undefined();
   IntExpr* expr = context_->ExprById(env, id, "expression");
   if (expr == nullptr) return env.Undefined();
   if (!context_->RunGuarded(env, "setRange()", [&] { expr->SetRange(lo, hi); })) return env.Undefined();
