@@ -12,6 +12,8 @@
 #include "absl/log/internal/globals.h"
 #include "linear_solver/mp_solver.h"
 #include "ortools/base/version.h"
+#include "routing/search_parameters.h"
+#include "sat/sat_parameters.h"
 
 #ifndef ORTOOLS_VERSION_STRING
 #error "ORTOOLS_VERSION_STRING must be defined by the build (see CMakeLists.txt)"
@@ -53,6 +55,8 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitializeAbseilLoggingOnce();
   if (!CheckLinkedVersion(env)) return exports;
   InitVersion(env, exports);
+  InitRoutingSearchParameters(env, exports);
+  InitSatParameters(env, exports);
   return InitMpSolver(env, exports);
 }
 
