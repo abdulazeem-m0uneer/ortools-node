@@ -40,6 +40,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   or several dimensions, `solve()` off the main thread or `solveSync()`, time
   limit and reduction settings. `KnapsackSolverType` lists the solver types this
   build can run. Malformed problems throw JS errors instead of aborting.
+- `modelBuilder` (Python's `model_builder`): `Model` with variables, linear and
+  enforced (indicator) constraints, objective, hints, `clone()`, LP / MPS export
+  and import; `LinearExpr` builders (`sum`, `weightedSum`, `plus`, `times`,
+  `le` / `ge` / `eq`...); `Solver` for any compiled-in backend with `solve()` off
+  the main thread, `interrupt()`, time limit, values, duals, reduced costs and
+  activities. Duals from HiGHS are withheld: OR-Tools reports them wrong.
 
 ### Changed
 

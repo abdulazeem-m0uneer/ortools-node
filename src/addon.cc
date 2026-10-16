@@ -14,6 +14,7 @@
 #include "common/cpp_guard_testing.h"
 #include "common/int64.h"
 #include "graph/graph.h"
+#include "linear_solver/model_builder.h"
 #include "linear_solver/mp_solver.h"
 #include "ortools/base/version.h"
 #include "routing/search_parameters.h"
@@ -67,6 +68,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitSatParameters(env, exports);
   InitGraph(env, exports);
   InitKnapsackSolver(env, exports);
+  InitModelBuilder(env, exports);
   return InitMpSolver(env, exports);
 }
 
