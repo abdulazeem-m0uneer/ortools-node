@@ -1,6 +1,8 @@
 #include "graph/graph_common.h"
 
+#include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "common/int64.h"
 #include "common/napi_util.h"
@@ -23,6 +25,28 @@ bool CheckIndicesBelow(Napi::Env env, const std::vector<int32_t>& indices, int64
 }
 
 }  // namespace
+
+void ProbeFlowGraphMemory(int64_t num_nodes, int64_t num_arcs) {
+  const uint64_t arcs = static_cast<uint64_t>(num_arcs);
+  const uint64_t nodes = static_cast<uint64_t>(num_nodes) + 1;
+  // SVector<int32_t> reserves 2 * capacity entries: head_ and opposite_.
+  const uint64_t head = 2 * arcs * sizeof(int32_t);
+  const uint64_t opposite = head;
+  // Live when opposite_ is allocated: the per-arc flows (int64), the new and
+  // the previous arc permutation (int32 each), and start_ / reverse_start_.
+  const uint64_t per_arc = arcs * (sizeof(int64_t) + 2 * sizeof(int32_t));
+  const uint64_t per_node = 2 * nodes * sizeof(int32_t);
+  const uint64_t margin = (head + opposite + per_arc + per_node) / 4;
+  const uint64_t blocks[] = {head, opposite, per_arc, per_node, margin};
+  void* taken[sizeof(blocks) / sizeof(blocks[0])] = {};
+  bool ok = true;
+  for (size_t i = 0; ok && i < sizeof(blocks) / sizeof(blocks[0]); ++i) {
+    ok = blocks[i] <= std::numeric_limits<size_t>::max() &&
+         (taken[i] = std::malloc(static_cast<size_t>(blocks[i]))) != nullptr;
+  }
+  for (void* block : taken) std::free(block);
+  if (!ok) throw std::bad_alloc();
+}
 
 bool ReadIndexBelow(Napi::Env env, const Napi::Value& v, int64_t limit, const char* what, int32_t* out) {
   size_t index;

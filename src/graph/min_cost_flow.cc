@@ -63,6 +63,10 @@ bool SuppliesFitInt64(const SimpleMinCostFlow& model) {
 
 SolveOutcome RunSolve(SimpleMinCostFlow& model, bool max_flow_with_min_cost) {
   if (!SuppliesFitInt64(model)) return {"BAD_CAPACITY_RANGE", false};
+  // Solve() adds a source, a sink and an arc per node with a non-zero supply.
+  int64_t supply_arcs = 0;
+  for (int32_t node = 0; node < model.NumNodes(); ++node) supply_arcs += model.Supply(node) != 0;
+  ProbeFlowGraphMemory(int64_t{model.NumNodes()} + 2, int64_t{model.NumArcs()} + supply_arcs);
   const SimpleMinCostFlow::Status status =
       max_flow_with_min_cost ? model.SolveMaxFlowWithMinCost() : model.Solve();
   return {StatusName(status), status == SimpleMinCostFlow::OPTIMAL};

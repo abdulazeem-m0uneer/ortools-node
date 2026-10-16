@@ -84,3 +84,36 @@ test('bulk adders: a huge sparse array throws instead of aborting', { skip }, ()
   assert.match(out.sparse.error, /^tails\[0\] must be an integer/);
   assert.equal(out.after.value, 0);
 });
+
+// OR-Tools builds the max-flow / min-cost-flow graph with malloc + CHECK (not
+// std::bad_alloc), so a solve on a graph too large for memory must be refused
+// before OR-Tools allocates. 60M arcs fit in the capped child but their
+// solve does not.
+test('max flow and min cost flow: a solve too large for memory throws, sync and async', { skip }, () => {
+  const out = runCapped(`
+    const chunk = 1000000, arcs = 60000000;
+    const tails = new Int32Array(chunk).map((_, i) => i % 1000);
+    const heads = new Int32Array(chunk).map((_, i) => (i * 7 + 1) % 1000);
+    const capacities = new Int32Array(chunk).fill(5);
+    const settle = async (name, p) => { try { out[name] = { value: await p }; } catch (e) { out[name] = { type: e.name, error: e.message }; } };
+
+    const mf = new SimpleMaxFlow();
+    for (let n = 0; n < arcs; n += chunk) mf.addArcsWithCapacity(tails, heads, capacities);
+    attempt('maxFlowSync', () => mf.solveSync(0, 999));
+    await settle('maxFlowAsync', mf.solve(0, 999));
+    attempt('maxFlowArcs', () => mf.numArcs());
+    mf.dispose();
+
+    const mcf = new SimpleMinCostFlow();
+    for (let n = 0; n < arcs; n += chunk) mcf.addArcsWithCapacityAndUnitCost(tails, heads, capacities, capacities);
+    mcf.setNodesSupplies([0, 999], [5, -5]);
+    attempt('minCostSync', () => mcf.solveSync());
+    await settle('minCostAsync', mcf.solve());
+    attempt('minCostArcs', () => mcf.numArcs());`);
+  for (const name of ['maxFlowSync', 'maxFlowAsync', 'minCostSync', 'minCostAsync']) {
+    assert.equal(out[name].type, 'RangeError', name);
+    assert.match(out[name].error, OUT_OF_MEMORY, name);
+  }
+  assert.equal(out.maxFlowArcs.value, 60000000);
+  assert.equal(out.minCostArcs.value, 60000000);
+});
