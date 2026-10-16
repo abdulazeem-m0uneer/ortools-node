@@ -58,7 +58,7 @@ export interface SatParameters {
  * Parameters as given to validate*(): like T, but null, like undefined, keeps a
  * field's default. Naming one field in both camelCase and snake_case is a TypeError.
  */
-export type Overrides<T> = { [K in keyof T]?: T[K] | null };
+export type Overrides<T> = { [K in keyof T]?: T[K] | null | undefined };
 
 /** A fresh copy of OR-Tools' DefaultRoutingSearchParameters(). */
 export function defaultRoutingSearchParameters(): RoutingSearchParameters;
