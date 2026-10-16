@@ -205,8 +205,8 @@ loaded with `node -p "require('ortools-node').buildInfo"`.
 ### Building from source
 
 Other platforms, other OR-Tools builds, and musl systems build the addon from
-source. `npm install` builds from source when no matching prebuilt is installed
-and `ORTOOLS_ROOT` is set. `npm install --build-from-source` (or
+source. `npm install` builds from source when no matching prebuilt is installed,
+against `ORTOOLS_ROOT` when it is set. `npm install --build-from-source` (or
 `--build-from-source=ortools-node`) builds from source even when a prebuilt is
 installed. A local build always takes precedence over a prebuilt when the addon
 loads.
@@ -242,9 +242,11 @@ npm install ortools-node --build-from-source   # in a project
 npm install && npm test && npm run example     # in a clone of this repository
 ```
 
-Without a prebuilt or `ORTOOLS_ROOT`, the install fails and says what to do.
-In a clone that already has a build in `build/Release`, `npm install` keeps it;
-`npm run build` recompiles. On Linux and macOS the addon records the path to the
+Without a prebuilt or `ORTOOLS_ROOT`, the install still tries a source build,
+which works when CMake finds OR-Tools another way (`CMAKE_PREFIX_PATH`, a system
+install); if that fails, it says what to do. In a clone that already has a
+build in `build/Release` or `build/Debug`, `npm install` keeps it (or rebuilds
+it when `ORTOOLS_ROOT` is set); `npm run build` recompiles. On Linux and macOS the addon records the path to the
 OR-Tools libraries, so it finds `libortools` at runtime without
 `LD_LIBRARY_PATH`. On Windows, add `%ORTOOLS_ROOT%\bin` to `PATH` or copy the
 DLLs next to `build/Release/ortools_node.node`.
