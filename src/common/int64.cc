@@ -11,89 +11,105 @@ constexpr double kMaxSafeInteger = 9007199254740991.0;  // 2^53 - 1
 constexpr int64_t kInt64Max = std::numeric_limits<int64_t>::max();
 constexpr int64_t kInt64Min = std::numeric_limits<int64_t>::min();
 
-bool Fail(Napi::Env env, bool range, const std::string& message) {
-  if (range) {
-    Napi::RangeError::New(env, message).ThrowAsJavaScriptException();
-  } else {
-    Napi::TypeError::New(env, message).ThrowAsJavaScriptException();
+enum class Int64Error { kNone, kNaN, kInfinite, kFraction, kUnsafe, kTooBig, kNotInteger };
+
+// The hot path: no allocation, no message. Callers build the message (with the
+// element name) only when this returns an error.
+Int64Error ConvertDouble(double d, bool allow_infinite, int64_t* out) {
+  if (std::isnan(d)) return Int64Error::kNaN;
+  if (std::isinf(d)) {
+    if (!allow_infinite) return Int64Error::kInfinite;
+    *out = d > 0 ? kInt64Max : kInt64Min;
+    return Int64Error::kNone;
+  }
+  if (d != std::floor(d)) return Int64Error::kFraction;
+  if (std::fabs(d) > kMaxSafeInteger) return Int64Error::kUnsafe;
+  *out = static_cast<int64_t>(d);
+  return Int64Error::kNone;
+}
+
+Int64Error ConvertValue(const Napi::Value& v, bool allow_infinite, int64_t* out) {
+  if (v.IsNumber()) return ConvertDouble(v.As<Napi::Number>().DoubleValue(), allow_infinite, out);
+  if (v.IsBigInt()) {
+    bool lossless = false;
+    *out = v.As<Napi::BigInt>().Int64Value(&lossless);
+    return lossless ? Int64Error::kNone : Int64Error::kTooBig;
+  }
+  return Int64Error::kNotInteger;
+}
+
+bool Throw(Napi::Env env, Int64Error error, const std::string& what) {
+  switch (error) {
+    case Int64Error::kNone: return true;
+    case Int64Error::kNaN: Napi::TypeError::New(env, what + " must not be NaN").ThrowAsJavaScriptException(); break;
+    case Int64Error::kInfinite: Napi::TypeError::New(env, what + " must be finite").ThrowAsJavaScriptException(); break;
+    case Int64Error::kFraction: Napi::TypeError::New(env, what + " must be an integer").ThrowAsJavaScriptException(); break;
+    case Int64Error::kUnsafe:
+      Napi::RangeError::New(env, what + " is outside the safe integer range; pass a BigInt").ThrowAsJavaScriptException();
+      break;
+    case Int64Error::kTooBig:
+      Napi::RangeError::New(env, what + " does not fit in a 64-bit integer").ThrowAsJavaScriptException();
+      break;
+    case Int64Error::kNotInteger:
+      Napi::TypeError::New(env, what + " must be an integer number or a BigInt").ThrowAsJavaScriptException();
+      break;
   }
   return false;
 }
 
-bool ReadDouble(Napi::Env env, double d, bool allow_infinite, const std::string& what, int64_t* out) {
-  if (std::isnan(d)) return Fail(env, false, what + " must not be NaN");
-  if (std::isinf(d)) {
-    if (!allow_infinite) return Fail(env, false, what + " must be finite");
-    *out = d > 0 ? kInt64Max : kInt64Min;
-    return true;
-  }
-  if (d != std::floor(d)) return Fail(env, false, what + " must be an integer");
-  if (std::fabs(d) > kMaxSafeInteger) {
-    return Fail(env, true, what + " is outside the safe integer range; pass a BigInt");
-  }
-  *out = static_cast<int64_t>(d);
-  return true;
-}
-
-bool ReadBigInt(Napi::Env env, const Napi::BigInt& b, const std::string& what, int64_t* out) {
-  bool lossless = false;
-  int64_t value = b.Int64Value(&lossless);
-  if (!lossless) return Fail(env, true, what + " does not fit in a 64-bit integer");
-  *out = value;
-  return true;
-}
+std::string ElementName(const char* what, size_t i) { return std::string(what) + "[" + std::to_string(i) + "]"; }
 
 template <typename T>
-bool ReadNumericTypedArray(Napi::Env env, const Napi::TypedArray& typed, bool allow_infinite, const std::string& what,
+bool ReadNumericTypedArray(Napi::Env env, const Napi::TypedArray& typed, bool allow_infinite, const char* what,
                            std::vector<int64_t>* out) {
   Napi::TypedArrayOf<T> array = typed.As<Napi::TypedArrayOf<T>>();
+  const T* data = array.Data();
   const size_t n = array.ElementLength();
   out->resize(n);
   for (size_t i = 0; i < n; ++i) {
-    if (!ReadDouble(env, static_cast<double>(array[i]), allow_infinite, what + "[" + std::to_string(i) + "]",
-                    &(*out)[i])) {
-      return false;
-    }
+    Int64Error error = ConvertDouble(static_cast<double>(data[i]), allow_infinite, &(*out)[i]);
+    if (error != Int64Error::kNone) return Throw(env, error, ElementName(what, i));
   }
   return true;
 }
+
+const char kArrayTypes[] = " must be an Array, Int32Array, Uint32Array, Float64Array or BigInt64Array";
 
 }  // namespace
 
 bool ReadInt64(Napi::Env env, const Napi::Value& v, bool allow_infinite, const char* what, int64_t* out) {
-  if (v.IsNumber()) return ReadDouble(env, v.As<Napi::Number>().DoubleValue(), allow_infinite, what, out);
-  if (v.IsBigInt()) return ReadBigInt(env, v.As<Napi::BigInt>(), what, out);
-  return Fail(env, false, std::string(what) + " must be an integer number or a BigInt");
+  Int64Error error = ConvertValue(v, allow_infinite, out);
+  return error == Int64Error::kNone || Throw(env, error, what);
 }
 
 bool ReadInt64Array(Napi::Env env, const Napi::Value& v, bool allow_infinite, const char* what,
                     std::vector<int64_t>* out) {
-  const std::string name(what);
   if (v.IsTypedArray()) {
     Napi::TypedArray typed = v.As<Napi::TypedArray>();
     switch (typed.TypedArrayType()) {
-      case napi_int32_array: return ReadNumericTypedArray<int32_t>(env, typed, allow_infinite, name, out);
-      case napi_uint32_array: return ReadNumericTypedArray<uint32_t>(env, typed, allow_infinite, name, out);
-      case napi_float64_array: return ReadNumericTypedArray<double>(env, typed, allow_infinite, name, out);
+      case napi_int32_array: return ReadNumericTypedArray<int32_t>(env, typed, allow_infinite, what, out);
+      case napi_uint32_array: return ReadNumericTypedArray<uint32_t>(env, typed, allow_infinite, what, out);
+      case napi_float64_array: return ReadNumericTypedArray<double>(env, typed, allow_infinite, what, out);
       case napi_bigint64_array: {
         Napi::TypedArrayOf<int64_t> array = typed.As<Napi::TypedArrayOf<int64_t>>();
         out->assign(array.Data(), array.Data() + array.ElementLength());
         return true;
       }
       default:
-        return Fail(env, false,
-                    name + " must be an Array, Int32Array, Uint32Array, Float64Array or BigInt64Array");
+        Napi::TypeError::New(env, std::string(what) + kArrayTypes).ThrowAsJavaScriptException();
+        return false;
     }
   }
   if (!v.IsArray()) {
-    return Fail(env, false, name + " must be an Array, Int32Array, Uint32Array, Float64Array or BigInt64Array");
+    Napi::TypeError::New(env, std::string(what) + kArrayTypes).ThrowAsJavaScriptException();
+    return false;
   }
   Napi::Array array = v.As<Napi::Array>();
   const uint32_t n = array.Length();
   out->resize(n);
   for (uint32_t i = 0; i < n; ++i) {
-    const std::string element = name + "[" + std::to_string(i) + "]";
-    if (!ReadInt64(env, array.Get(i), allow_infinite, element.c_str(), &(*out)[i])) return false;
+    Int64Error error = ConvertValue(array.Get(i), allow_infinite, &(*out)[i]);
+    if (error != Int64Error::kNone) return Throw(env, error, ElementName(what, i));
   }
   return true;
 }
