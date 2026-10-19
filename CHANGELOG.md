@@ -95,7 +95,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `MODEL_INVALID` as Python does); values and `objectiveValue` throw when the
   last solve found no solution, and `bestObjectiveBound` after `INFEASIBLE`.
   Comparing with `==` either int64 extreme, `>= INT64_MAX` or `<= INT64_MIN`
-  throws a `RangeError`, as Python's `ValueError`.
+  throws a `RangeError`, as Python's `ArithmeticError`. Unlike Python,
+  `< INT64_MIN` and `> INT64_MAX` are accepted and always false (empty domain,
+  so the model is `INFEASIBLE`).
 - CP-SAT solution callbacks: `solve(model, { onSolution })` passes each solution
   to JS while the search runs; `stopSearch()` works from inside it, and an
   exception stops the search and rejects `solve()`.
