@@ -83,3 +83,10 @@ function scopedSolve(): CpSolverStatusName {
   return scoped.solveSync(model);
 }
 export { scopedSolve };
+
+// A literal of either kind takes a literal hint.
+const eitherLiteral: IntVar | NotBooleanVariable = syncStatus === 'OPTIMAL' ? b : notB;
+model.addHint(eitherLiteral, true);
+model.addHint(eitherLiteral, 0n);
+// @ts-expect-error only 0 / 1 (or a boolean) fits every literal
+model.addHint(eitherLiteral, 2);
