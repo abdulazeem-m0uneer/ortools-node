@@ -307,31 +307,41 @@ test('concurrent solves are independent', async () => {
 });
 
 test('a SolveInterrupter stops a running solve and stays interrupted', async () => {
+  // Reference: the same hard model under a 2 s limit runs the full 2 s.
+  const parameters = { timeLimit: 2 };
+  let started = Date.now();
+  const limited = solveSync(marketSplit(), 'CP_SAT', { parameters });
+  const limitedMs = Date.now() - started;
+  assert.notEqual(limited.termination.limit, 'INTERRUPTED');
+  assert.ok(limitedMs >= 1500, `the reference run ended after ${limitedMs} ms: the model is too easy`);
+
   const interrupter = new SolveInterrupter();
   assert.equal(interrupter.interrupted, false);
-  const started = Date.now();
-  const pending = solve(marketSplit(), 'CP_SAT', { interrupter });
-  interrupter.interrupt();
+  started = Date.now();
+  const pending = solve(marketSplit(), 'CP_SAT', { parameters, interrupter });
+  setTimeout(() => interrupter.interrupt(), 100);
   const result = await pending;
+  const interruptedMs = Date.now() - started;
   assert.equal(interrupter.interrupted, true);
-  assert.ok(Date.now() - started < 10000, 'interrupted solve took too long');
-  assert.ok(['NO_SOLUTION_FOUND', 'FEASIBLE', 'INFEASIBLE', 'OPTIMAL'].includes(result.termination.reason));
-  if (result.termination.reason !== 'OPTIMAL' && result.termination.reason !== 'INFEASIBLE') {
-    assert.equal(result.termination.limit, 'INTERRUPTED');
-  }
+  assert.equal(result.termination.limit, 'INTERRUPTED');
+  assert.equal(result.termination.reason, 'NO_SOLUTION_FOUND');
+  assert.ok(interruptedMs < limitedMs / 2, `interrupted after ${interruptedMs} ms vs ${limitedMs} ms uninterrupted`);
+
   // Already interrupted: the next solve stops at once.
-  const again = await solve(marketSplit(), 'CP_SAT', { interrupter });
-  assert.notEqual(again.termination.reason, 'OPTIMAL');
+  started = Date.now();
+  const again = await solve(marketSplit(), 'CP_SAT', { parameters, interrupter });
+  assert.equal(again.termination.limit, 'INTERRUPTED');
+  assert.ok(Date.now() - started < limitedMs / 2);
   assert.throws(() => solve(gettingStarted().model, 'GLOP', { interrupter: {} }), /interrupter must be a SolveInterrupter/);
 });
 
 test('a time limit stops a hard model early', () => {
   const started = Date.now();
   const result = solveSync(marketSplit(), 'CP_SAT', { parameters: { timeLimit: 0.2 } });
-  assert.ok(Date.now() - started < 10000, 'time limit ignored');
-  if (result.termination.reason !== 'OPTIMAL' && result.termination.reason !== 'INFEASIBLE') {
-    assert.ok(['TIME', 'UNDETERMINED'].includes(result.termination.limit), result.termination.limit);
-  }
+  // Proving the model infeasible takes CP-SAT about 10 s: 0.2 s cannot settle it.
+  assert.equal(result.termination.reason, 'NO_SOLUTION_FOUND');
+  assert.ok(['TIME', 'UNDETERMINED'].includes(result.termination.limit), result.termination.limit);
+  assert.ok(Date.now() - started < 2000, 'time limit ignored');
 });
 
 // Runs `body` in a child process, so a native crash fails the test instead of the run.
