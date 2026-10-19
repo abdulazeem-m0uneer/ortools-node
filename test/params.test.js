@@ -1,5 +1,6 @@
 'use strict';
 const { test } = require('node:test');
+const { spawnSync } = require('node:child_process');
 const assert = require('node:assert/strict');
 const {
   FirstSolutionStrategy,
@@ -221,6 +222,28 @@ test('protobuf parse errors keep the field and expected type but not positions i
     assert.doesNotMatch(error.message, /near|offset|\d+:\d+/);
     assert.doesNotMatch(error.message, /\s{2}/);
   }
+});
+
+// In a child process: a crash here (e.g. a regex executor overflowing the
+// stack on caller-controlled text) must fail this test, not kill the runner.
+test('huge values echoed in parse errors neither crash nor flood the message', () => {
+  const script = `
+    const assert = require('node:assert/strict');
+    const { validateRoutingSearchParameters, validateSatParameters } = require(${JSON.stringify(require.resolve('..'))});
+    const native = require(${JSON.stringify(require.resolve('../lib/native'))});
+    for (const huge of [' '.repeat(1e6), '9'.repeat(1e6), ' near 1:2 (offset '.repeat(5e4) + '9'.repeat(1e6)]) {
+      for (const call of [
+        () => validateRoutingSearchParameters({ firstSolutionStrategy: huge }),
+        () => validateSatParameters({ searchBranching: huge }),
+        () => native.readSatParametersForTesting(JSON.stringify({ searchBranching: huge })),
+      ]) {
+        assert.throws(call, (error) => error instanceof TypeError && error.message.length < 1000);
+      }
+    }
+  `;
+  const child = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+  assert.equal(child.signal, null, child.stderr);
+  assert.equal(child.status, 0, child.stderr);
 });
 
 test('integer fields given as strings take only canonical decimals that fit the field type', () => {
