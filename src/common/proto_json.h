@@ -23,7 +23,8 @@ bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, go
 bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, google::protobuf::Message* out);
 
 // A protobuf JSON parse error without its "near L:C (offset N)" part, which
-// points into JSON the caller never saw, and with protobuf's irregular
+// points into JSON the caller never saw, without google.protobuf.Struct's
+// internal paths ("<struct>[0].struct_value..."), and with protobuf's irregular
 // whitespace collapsed, cut to 500 bytes (protobuf echoes the caller's value).
 // The field path and expected type stay.
 std::string JsonParseErrorMessage(const absl::Status& status);
