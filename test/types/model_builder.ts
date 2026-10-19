@@ -33,5 +33,11 @@ model.add(x);
 x.times('2');
 // @ts-expect-error read-only
 solver.objectiveValue = 1;
+// @ts-expect-error an enforced constraint is not a linear constraint
+const linear: modelBuilder.LinearConstraint = enforced;
+// @ts-expect-error duals and activities exist only for linear constraints
+solver.dualValue(enforced);
+// @ts-expect-error nor the other way round
+const reversed: modelBuilder.EnforcedLinearConstraint = ct;
 
-export { enforced, proto, lp, status, optimal, values, objective, supported };
+export { linear, reversed, enforced, proto, lp, status, optimal, values, objective, supported };
