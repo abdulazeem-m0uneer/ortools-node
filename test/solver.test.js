@@ -48,6 +48,12 @@ test('bad backend name throws a clear error', () => {
   assert.throws(() => new Solver('NOT_A_SOLVER'), /Unsupported or unavailable/);
 });
 
+test('backend errors point to the exported supportsBackend()', () => {
+  assert.throws(() => new Solver('NOT_A_SOLVER'), /try supportsBackend\(\)\)$/);
+  assert.throws(() => supportsBackend(1), { name: 'TypeError', message: 'supportsBackend(name: string)' });
+  assert.equal(supportsBackend('NOT_A_SOLVER'), false);
+});
+
 test('native index arguments must be in-range integers', () => {
   const s = new Solver('GLOP');
   s.numVar(0, 1, 'x');
