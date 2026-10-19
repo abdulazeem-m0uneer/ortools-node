@@ -23,14 +23,6 @@ function queens(n) {
   return { s, q, db: s.phase(q, IntVarStrategy.CHOOSE_MIN_SIZE_LOWEST_MIN, MIN) };
 }
 
-// Hard for the search: n + 1 pigeons in n holes with only pairwise !=.
-function pigeons(holes) {
-  const s = new CpSolver('pigeons');
-  const p = Array.from({ length: holes + 1 }, (_, i) => s.intVar(0, holes - 1, `p${i}`));
-  for (let i = 0; i < p.length; i++) for (let j = i + 1; j < p.length; j++) s.add(p[i].ne(p[j]));
-  return { s, p, db: s.phase(p, FIRST, MIN) };
-}
-
 test('newSearch / nextSolution iterates every solution, values readable at each', () => {
   const { s, x, y, z, db } = simpleProgram();
   s.newSearch(db);
@@ -194,10 +186,27 @@ test('search limits stop the search deterministically', () => {
   assert.equal(all.solutionCount(), 3);
   s.solve(db, [all, s.limit({ solutions: 5, branches: 1000 })]);
   assert.equal(all.solutionCount(), 5);
-  const { s: hard, db: hardDb } = pigeons(8);
-  assert.equal(hard.solve(hardDb, [hard.failuresLimit(10)]), false);
-  assert.equal(hard.solve(hardDb, [hard.branchesLimit(20)]), false);
-  assert.equal(hard.solve(hardDb, [hard.timeLimit(1)]), false);
+});
+
+// Each limit must be what ends the search: 8 queens has 92 solutions, so a
+// search that ignored its limit would collect all of them.
+test('failure, branch and time limits stop a feasible search early', () => {
+  const runs = [
+    ['failuresLimit', (s) => s.failuresLimit(10), (s) => s.failures() <= 12],
+    ['branchesLimit', (s) => s.branchesLimit(20), (s) => s.branches() <= 22],
+    ['timeLimit', (s) => s.timeLimit(0), () => true],
+  ];
+  const full = queens(8);
+  const everything = full.s.allSolutionCollector().add(full.q);
+  full.s.solve(full.db, [everything]);
+  assert.equal(everything.solutionCount(), 92);
+  for (const [name, limit, withinLimit] of runs) {
+    const { s, q, db } = queens(8);
+    const all = s.allSolutionCollector().add(q);
+    s.solve(db, [all, limit(s)]);
+    assert.ok(all.solutionCount() < 92, `${name}: ${all.solutionCount()} solutions, the limit did not stop the search`);
+    assert.ok(withinLimit(s), `${name}: ${s.failures()} failures, ${s.branches()} branches`);
+  }
 });
 
 test('searchLog is accepted as a monitor', () => {
@@ -329,11 +338,15 @@ test('solveAsync rejects JS monitors', () => {
   assert.throws(() => s.solve(db, 'x'), /must be an array/);
 });
 
-test('interrupt() stops a running solveAsync', async () => {
-  const { s, db } = pigeons(12);
-  const pending = s.solveAsync(db);
+// 13 queens has 73712 solutions and takes seconds to enumerate: the interrupt
+// must end it early, and a lost interrupt fails on the timeout instead of hanging.
+test('interrupt() stops a running solveAsync', { timeout: 15000 }, async () => {
+  const { s, q, db } = queens(13);
+  const all = s.allSolutionCollector().add(q);
+  const pending = s.solveAsync(db, [all]);
   assert.equal(s.interrupt(), true);
-  assert.equal(await pending, false);
+  await pending;
+  assert.ok(all.solutionCount() < 73712, `${all.solutionCount()} solutions: the interrupt did not stop the search`);
   assert.equal(s.interrupt(), false);
 });
 
