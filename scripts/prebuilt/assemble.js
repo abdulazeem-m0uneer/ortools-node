@@ -106,7 +106,10 @@ function findLibDir(ortoolsRoot) {
  */
 function licenseExpression(addonLicense, components) {
   const addonIds = typeof addonLicense === 'string' ? addonLicense.split(' AND ') : [];
-  if (addonIds.length === 0 || !addonIds.every((id) => /^[A-Za-z0-9.+-]+$/.test(id))) {
+  if (addonIds.some((id) => /^UNLICENSED$/i.test(id))) {
+    throw new Error(`ortools-node must be licensed to ship prebuilts, but its package.json licence is ${JSON.stringify(addonLicense)}`);
+  }
+  if (addonIds.length === 0 || !addonIds.every((id) => /^[A-Za-z0-9][A-Za-z0-9.+-]*$/.test(id))) {
     throw new Error(`Cannot combine the package.json licence ${JSON.stringify(addonLicense)}: only SPDX ids joined by AND are supported`);
   }
   return [...new Set([...addonIds, ...components.map((c) => c.spdx)])].join(' AND ');
@@ -120,7 +123,7 @@ function noticeMarkdown({ ortoolsVersion, addonLicense, addonLicenceFiles, compo
     '# Third-party notices',
     '',
     `This package bundles shared libraries from the OR-Tools ${ortoolsVersion} C++ release`,
-    `(https://github.com/google/or-tools/releases). The addon itself is licensed under ${addonLicense} (${addonLicenceFiles.filter((f) => f !== 'LICENSES').join(', ')}).`,
+    `(https://github.com/google/or-tools/releases). The addon itself is licensed under ${addonLicense} (${addonLicenceFiles.join(', ')}).`,
     'The libraries may also contain code that their projects link statically.',
     '',
     '| Component | Licence | Libraries |',
@@ -158,35 +161,50 @@ function ortoolsLicence(ortoolsRoot) {
 /** ortools-node's own licence files: LICENSE always, NOTICE and LICENSES/ when the repository has them. */
 const ADDON_LICENCE_FILES = ['LICENSE', 'NOTICE', 'LICENSES'];
 
+/** The files under `dir` (relative to `root`, following symlinks), as sorted paths relative to `root`. */
+function filesUnder(root, dir) {
+  const files = [];
+  const walk = (rel) => {
+    for (const name of fs.readdirSync(path.join(root, rel))) {
+      const child = path.join(rel, name);
+      if (fs.statSync(path.join(root, child)).isDirectory()) walk(child);
+      else files.push(child);
+    }
+  };
+  walk(dir);
+  return files.sort();
+}
+
+/**
+ * Copies the file or tree `src` to `dest` as regular files, following every
+ * symlink (npm pack leaves symlinks out; fs.cpSync's `dereference` follows
+ * only `src` itself) and failing with EEXIST rather than overwrite a file.
+ */
+function copyFollowingLinks(src, dest) {
+  if (fs.statSync(src).isDirectory()) {
+    for (const name of fs.readdirSync(src)) copyFollowingLinks(path.join(src, name), path.join(dest, name));
+    return;
+  }
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.copyFileSync(src, dest, fs.constants.COPYFILE_EXCL);
+}
+
 /**
  * Copies ortools-node's licence files, failing rather than overwrite one from
- * the OR-Tools archive; returns the top-level entries copied.
+ * the OR-Tools archive; returns the files copied, in ADDON_LICENCE_FILES order.
  */
 function copyAddonLicences(repoRoot, outDir) {
-  const copied = ADDON_LICENCE_FILES.filter((entry) => fs.existsSync(path.join(repoRoot, entry)));
-  for (const entry of copied) {
-    fs.cpSync(path.join(repoRoot, entry), path.join(outDir, entry), { recursive: true, force: false, errorOnExist: true });
-  }
-  return copied;
+  const entries = ADDON_LICENCE_FILES.filter((entry) => fs.existsSync(path.join(repoRoot, entry)));
+  for (const entry of entries) copyFollowingLinks(path.join(repoRoot, entry), path.join(outDir, entry));
+  return entries.flatMap((entry) => (fs.statSync(path.join(repoRoot, entry)).isDirectory() ? filesUnder(repoRoot, entry) : [entry]));
 }
 
 /** Copies the licence files of the OR-Tools archive; returns their paths in the package. */
 function copyLicences(ortoolsRoot, outDir) {
-  fs.cpSync(ortoolsLicence(ortoolsRoot), path.join(outDir, 'LICENSES', 'or-tools', 'LICENSE'));
+  copyFollowingLinks(ortoolsLicence(ortoolsRoot), path.join(outDir, 'LICENSES', 'or-tools', 'LICENSE'));
   const thirdParty = path.join(ortoolsRoot, 'share', 'licenses');
-  if (fs.existsSync(thirdParty)) {
-    fs.cpSync(thirdParty, path.join(outDir, 'LICENSES'), { recursive: true, dereference: true });
-  }
-  const files = [];
-  const walk = (dir) => {
-    for (const entry of fs.readdirSync(path.join(outDir, dir), { withFileTypes: true })) {
-      const rel = path.join(dir, entry.name);
-      if (entry.isDirectory()) walk(rel);
-      else files.push(rel);
-    }
-  };
-  walk('LICENSES');
-  return files.sort();
+  if (fs.existsSync(thirdParty)) copyFollowingLinks(thirdParty, path.join(outDir, 'LICENSES'));
+  return filesUnder(outDir, 'LICENSES');
 }
 
 function releaseOf(ortoolsVersion) {
@@ -231,29 +249,35 @@ function assemble({
   if (!fs.existsSync(path.join(repoRoot, 'LICENSE'))) throw new Error(`ortools-node has no licence at ${path.join(repoRoot, 'LICENSE')}`);
   if (fs.existsSync(outDir)) throw new Error(`${outDir} already exists`);
   fs.mkdirSync(outDir, { recursive: true });
-  fs.copyFileSync(addon, path.join(outDir, ADDON_FILE));
-  // Copy each library's real file under its SONAME: npm pack does not keep symlinks.
-  for (const soname of bundled) fs.copyFileSync(path.join(libDir, soname), path.join(outDir, soname));
+  try {
+    fs.copyFileSync(addon, path.join(outDir, ADDON_FILE));
+    // Copy each library's real file under its SONAME: npm pack does not keep symlinks.
+    for (const soname of bundled) fs.copyFileSync(path.join(libDir, soname), path.join(outDir, soname));
 
-  const licenceFiles = copyLicences(ortoolsRoot, outDir);
-  const addonLicenceFiles = copyAddonLicences(repoRoot, outDir);
-  fs.writeFileSync(
-    path.join(outDir, 'THIRD_PARTY_NOTICES.md'),
-    noticeMarkdown({ ortoolsVersion, addonLicense, addonLicenceFiles, components, librariesByComponent, licenceFiles }),
-  );
-  fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, version, ortoolsVersion));
+    const licenceFiles = copyLicences(ortoolsRoot, outDir);
+    const addonLicenceFiles = copyAddonLicences(repoRoot, outDir);
+    fs.writeFileSync(
+      path.join(outDir, 'THIRD_PARTY_NOTICES.md'),
+      noticeMarkdown({ ortoolsVersion, addonLicense, addonLicenceFiles, components, librariesByComponent, licenceFiles }),
+    );
+    fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, version, ortoolsVersion));
 
-  const template = JSON.parse(fs.readFileSync(templateFile, 'utf8'));
-  // A template cannot set the identity or licence: those are computed here.
-  const { name: _name, version: _version, license: _license, ...templateFields } = template;
-  const manifest = {
-    name,
-    version,
-    ...templateFields,
-    description: `${template.description}, built against OR-Tools ${ortoolsVersion}`,
-    license,
-  };
-  fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+    const template = JSON.parse(fs.readFileSync(templateFile, 'utf8'));
+    // A template cannot set the identity or licence: those are computed here.
+    const { name: _name, version: _version, license: _license, ...templateFields } = template;
+    const manifest = {
+      name,
+      version,
+      ...templateFields,
+      description: `${template.description}, built against OR-Tools ${ortoolsVersion}`,
+      license,
+    };
+    fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
+  } catch (err) {
+    // outDir did not exist before this run: remove the partial package so a rerun is not blocked.
+    fs.rmSync(outDir, { recursive: true, force: true });
+    throw err;
+  }
   return { name, bundled, system };
 }
 
