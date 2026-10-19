@@ -12,6 +12,7 @@
 #include "common/int64.h"
 #include "common/napi_util.h"
 #include "constraint_solver/cp_solver.h"
+#include "constraint_solver/domain_guard.h"
 #include "ortools/util/tuple_set.h"
 
 namespace ortools_node {
@@ -357,6 +358,15 @@ Napi::Value CpSolver::Member(const Napi::CallbackInfo& info) {
   }
   IntExpr* expr = context_->ExprById(env, expr_id, "expression");
   if (expr == nullptr) return env.Undefined();
+  // In search these keep (member, true isMember) or remove (notMember, false
+  // isMember) values, which may need a bitset OR-Tools CHECKs.
+  const bool keeps = kind == "member" || kind == "isMember";
+  const bool removes = kind == "notMember" || kind == "isMember";
+  if ((keeps && KeepingNeedsHugeBitset(expr->Min(), expr->Max(), values)) ||
+      (removes && RemovalNeedsHugeBitset(expr->Min(), expr->Max(), values))) {
+    Napi::RangeError::New(env, kind + "()" + HugeBitsetMessage()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
   Solver* s = context_->solver();
   if (kind == "member") BUILD_CONSTRAINT(env, "memberCt()", s->MakeMemberCt(expr, values));
   if (kind == "notMember") BUILD_CONSTRAINT(env, "notMemberCt()", s->MakeNotMemberCt(expr, values));

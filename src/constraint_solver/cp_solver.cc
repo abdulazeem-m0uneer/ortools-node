@@ -9,6 +9,7 @@
 
 #include "common/int64.h"
 #include "common/napi_util.h"
+#include "constraint_solver/domain_guard.h"
 
 namespace ortools_node {
 
@@ -297,6 +298,10 @@ static Napi::Value ApplyDomainOp(const Napi::CallbackInfo& info, CpContext* cont
   IntExpr* expr = op == DomainOp::kRemoveValue ? context->VarById(env, id, "variable")
                                                : context->ExprById(env, id, "expression");
   if (expr == nullptr) return env.Undefined();
+  if (op == DomainOp::kRemoveValue && RemovalNeedsHugeBitset(expr->Min(), expr->Max(), {value})) {
+    Napi::RangeError::New(env, std::string("removeValue()") + HugeBitsetMessage()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
   if (!context->RunGuarded(env, DomainOpName(op), [&] {
         switch (op) {
           case DomainOp::kSetMin: expr->SetMin(value); break;
@@ -355,6 +360,10 @@ Napi::Value CpSolver::VarRemoveValues(const Napi::CallbackInfo& info) {
   }
   operations_research::IntVar* var = context_->VarById(env, id, "variable");
   if (var == nullptr) return env.Undefined();
+  if (RemovalNeedsHugeBitset(var->Min(), var->Max(), values)) {
+    Napi::RangeError::New(env, std::string("removeValues()") + HugeBitsetMessage()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
   if (!context_->RunGuarded(env, "removeValues()", [&] { var->RemoveValues(values); })) return env.Undefined();
   context_->NotifyMutation();
   return env.Undefined();

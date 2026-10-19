@@ -89,3 +89,36 @@ test('argument getters that dispose, solve or throw cannot crash a CP call', () 
   assert.match(results.getterThrows, /getter/);
   assert.match(results.monitorGetterThrows, /monitor getter/);
 });
+
+// Review findings 4 and 5: a hole in a domain wider than 2^32 values needs a
+// bitset OR-Tools CHECKs against ("Bitset too large"), at the call or later
+// during propagation. Each case would abort the child without the guards.
+test('holes in domains wider than 2^32 values throw instead of aborting', () => {
+  const setup = `
+    const s = new ortools.cp.CpSolver('wide');
+    const W = 1e10;
+    const wide = () => s.intVar(0, W, 'x');
+    const solve = (vars) => s.solve(s.phase(vars, 'CHOOSE_FIRST_UNBOUND', 'ASSIGN_MIN_VALUE'));`;
+  const cases = {
+    removeValue: 'wide().removeValue(5)',
+    removeValueUnbounded: 's.intVar(-Infinity, Infinity).removeValue(5)',
+    removeValues: 'wide().removeValues([5, 7])',
+    removeValueOnExpressionVar: 'wide().plus(3).var().removeValue(8)',
+    notMemberCt: 'const x = wide(); s.add(s.notMemberCt(x, [1, 5])); solve([x])',
+    memberCt: 'const x = wide(); s.add(s.memberCt(x, [1, 5, 9e9])); solve([x])',
+    isMemberVar: 'const x = wide(); const b = s.isMemberVar(x, [1, 2]); s.add(b.eq(0)); solve([x])',
+    isMemberVarWideValues: 'const x = wide(); const b = s.isMemberVar(x, [1, 9e9]); s.add(b.eq(1)); solve([x])',
+    routingCumul: `const manager = new ortools.RoutingIndexManager(3, 1, 0);
+      const model = new ortools.RoutingModel(manager);
+      const t = model.registerTransitMatrix([[0, 1, 1], [1, 0, 1], [1, 1, 0]]);
+      model.addDimension(t, 0, 1e10, false, 'D');
+      model.getDimensionOrDie('D').cumulVar(1).removeValue(5);`,
+  };
+  const { status, signal, stderr, results } = runIsolated(setup, cases);
+  assert.equal(signal, null, `child crashed: ${stderr}`);
+  assert.equal(status, 0, `child failed: ${stderr}`);
+  for (const name of Object.keys(cases)) {
+    assert.equal(typeof results[name], 'string', `${name} did not throw`);
+    assert.match(results[name], /2\^32/, name);
+  }
+});

@@ -209,3 +209,18 @@ test('raw native ids are range checked', () => {
   assert.throws(() => s._n.member('nope', 0, [1]), /unknown membership/);
   assert.throws(() => s._n.collector('nope'), /unknown collector/);
 });
+
+test('wide domains still allow bound removals and narrow membership', () => {
+  const s = new CpSolver();
+  const x = s.intVar(0, 1e10, 'x');
+  x.removeValue(0).removeValues([1, 2, 1e10]);
+  assert.deepEqual([x.min(), x.max()], [3, 1e10 - 1], 'values at the bounds only move the bounds');
+  s.add(s.memberCt(x, [5, 9, 11]));
+  const all = s.allSolutionCollector().add(x);
+  s.solve(s.phase([x], 'CHOOSE_FIRST_UNBOUND', 'ASSIGN_MIN_VALUE'), [all]);
+  assert.deepEqual([0, 1, 2].map((n) => all.value(n, x)), [5, 9, 11]);
+  const y = s.intVar(0, 100);
+  y.removeValue(50);
+  assert.equal(y.contains(50), false, 'narrow domains keep their holes');
+  assert.throws(() => x.removeValue(7), RangeError);
+});
