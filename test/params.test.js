@@ -234,9 +234,21 @@ test('protobuf parse errors keep the field and expected type but not positions i
 });
 
 test('cleaning protobuf errors never rewrites the caller\'s echoed value', () => {
+  const position = ' near 1:2 (offset 3)';
+  const combined = [];
+  // Quotes, a lookalike position (with and without the ':' real ones have),
+  // ':' and '@ <struct>' in every order inside the value.
+  for (const quote of ['', "'", "';", " '"]) {
+    for (const fake of [position, `${position}:`, `${position}: y`, `,${position}: y`]) {
+      for (const tail of ['', ': z', ' @ <struct>q: z', "' @ <struct>q: z"]) {
+        combined.push(`x${quote}${fake}${tail}`, `${quote}x @ <struct>p${fake}${tail}`);
+      }
+    }
+  }
   for (const value of ['A near 1:2 (offset 3)', 'A  B', ' lead\ttab  ', "it's  x", 'x, near 1:2 (offset 3)',
-    'x @ <struct>y: z', "x' near 1:2 (offset 3)"]) {
+    'x @ <struct>y: z', "x' near 1:2 (offset 3)", "x' near 1:2 (offset 3): y", ...combined]) {
     for (const call of [
+      () => validateRoutingSearchParameters({ firstSolutionStrategy: value }),
       () => validateSatParameters({ searchBranching: value }),
       () => native.readSatParametersForTesting(JSON.stringify({ searchBranching: value })),
     ]) {

@@ -151,15 +151,18 @@ bool ClosesQuote(absl::string_view text, size_t i) {
   return IsSpace(next) || next == ';' || next == ',' || next == ')';
 }
 
-// Collapses protobuf's irregular spacing and drops its one "near L:C (offset N)"
-// position (which points into JSON the binding prints internally), but only
-// outside quoted values, so the caller's echoed text stays exactly as given.
+// Collapses protobuf's irregular spacing outside quoted values, so the caller's
+// echoed text stays exactly as given, and drops protobuf's one "near L:C
+// (offset N)" position (which points into JSON the binding prints internally).
+// protobuf writes that position in its own prefix, before any quoted value, so
+// the search for it ends at the first opening quote and never looks inside the
+// caller's text.
 std::string NormalizeProtobufMessage(absl::string_view text) {
   std::string out;
   out.reserve(text.size());
   bool quoted = false;
   bool pending_space = false;
-  bool position_removed = false;
+  bool position_possible = true;
   for (size_t i = 0; i < text.size();) {
     if (quoted) {
       quoted = !ClosesQuote(text, i);
@@ -169,10 +172,10 @@ std::string NormalizeProtobufMessage(absl::string_view text) {
     // Only where a position can begin (a comma, or the first of a run of
     // spaces), so a long run is scanned once and the loop stays linear.
     const bool may_start = text[i] == ',' || (IsSpace(text[i]) && (i == 0 || !IsSpace(text[i - 1])));
-    if (!position_removed && may_start) {
+    if (position_possible && may_start) {
       const size_t end = MatchJsonPosition(text, i);
       if (end != i) {
-        position_removed = true;
+        position_possible = false;
         i = end;
         continue;
       }
@@ -185,6 +188,7 @@ std::string NormalizeProtobufMessage(absl::string_view text) {
     if (pending_space) out += ' ';
     pending_space = false;
     quoted = OpensQuote(text, i);
+    if (quoted) position_possible = false;
     out += text[i++];
   }
   return out;
