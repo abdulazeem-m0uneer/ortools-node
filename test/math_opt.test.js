@@ -388,3 +388,26 @@ test('an invalid timeLimit is reported in seconds, under its own name', () => {
   assert.equal(solveSync(model, 'GLOP', { parameters: { timeLimit: 315576000000 } }).termination.reason, 'OPTIMAL');
   assert.equal(solveSync(model, 'GLOP', { parameters: { timeLimit: 0.0015 } }).termination.reason, 'OPTIMAL');
 });
+
+test('unknown option keys are a TypeError naming the key, not silently ignored', () => {
+  const model = new Model();
+  const x = model.addVariable({ lb: 0, ub: 1 });
+  const cases = [
+    [() => model.addVariable({ lowerBound: 0, upperBound: 10 }), /addVariable: unknown option "lowerBound"/],
+    [() => model.addIntegerVariable({ lb: 0, isInteger: false }), /addIntegerVariable: unknown option "isInteger"/],
+    [() => model.addBinaryVariable({ ub: 5 }), /addBinaryVariable: unknown option "ub"/],
+    [() => model.addLinearConstraint({ expression: x, ub: 1 }), /addLinearConstraint: unknown option "expression"/],
+    [() => solveSync(model, 'GLOP', { params: {} }), /solve options: unknown option "params"/],
+    [() => model.addVariable({ ['k'.repeat(1000)]: 1 }), /unknown option "k{64}\.\.\."/],
+  ];
+  for (const [call, message] of cases) assert.throws(call, { name: 'TypeError', message });
+  assert.equal(model.numVariables, 1);
+  assert.equal(model.numLinearConstraints, 0);
+  // Every documented key, and undefined values, still work.
+  model.addVariable({ lb: 0, ub: 2, isInteger: true, name: 'y' });
+  model.addIntegerVariable({ lb: 0, ub: 2, name: 'z' });
+  model.addBinaryVariable({ name: 'b' });
+  model.addLinearConstraint({ lb: 0, ub: 1, expr: x, name: 'c' });
+  model.addVariable({ lb: undefined });
+  assert.equal(model.numVariables, 5);
+});
