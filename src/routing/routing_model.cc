@@ -159,11 +159,15 @@ RoutingModelWrap::RoutingModelWrap(const Napi::CallbackInfo& info) : Napi::Objec
   if (manager == nullptr) return;
   if (!GuardCpp(env, "new RoutingModel()", [&] {
         model_ = std::make_unique<RoutingModel>(*manager);
-        // The interrupt limit and the solution hook must be in place before the
-        // model closes; both stay idle unless a solve asks for them.
+        // The interrupt limit, the progress monitor and the solution hook must
+        // be in place before the model closes; all stay idle unless a solve
+        // asks for them.
         AsyncSolveState* state = &solve_state_;
         model_->AddSearchMonitor(model_->solver()->MakeCustomLimit([state] { return state->stop_requested(); }));
+        progress_ = model_->solver()->RevAlloc(new ProgressMonitor(model_.get()));
+        model_->AddSearchMonitor(progress_);
         model_->AddAtSolutionCallback([this] {
+          progress_->RecordSolution();
           if (listener_ != nullptr) listener_->OnSolution(*model_);
         });
         context_ = std::make_shared<CpContext>(model_->solver(), &solve_state_, "RoutingModel");

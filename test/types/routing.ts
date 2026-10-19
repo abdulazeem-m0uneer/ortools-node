@@ -6,6 +6,7 @@ import {
   RoutingDimension,
   RoutingIndexManager,
   RoutingModel,
+  RoutingProgress,
   RoutingSolution,
   RoutingSolutionSnapshot,
   VisitTypePolicy,
@@ -43,6 +44,14 @@ async function run(): Promise<void> {
     const warm = model.solveFromAssignmentWithParametersSync(solution);
   }
   const initial = model.readAssignmentFromRoutes([[1, 2], [3]], true);
+  await model.solveWithParameters({}, {
+    onProgress: (p: RoutingProgress) => {
+      const best: number | bigint | null = p.objective;
+      const counters: number = p.solutions + p.branches + p.failures + p.wallTimeMs;
+      const last: boolean = p.done;
+    },
+    progressIntervalMs: 250,
+  });
 }
 
 {
@@ -56,6 +65,10 @@ model.setVisitType(3, 0, 'TYPE_MAYBE');
 model.solveWithParametersSync({ firstSolutionStrategy: 'NOPE' });
 // @ts-expect-error onSolution receives a snapshot, not a number
 model.solveWithParametersSync({}, { onSolution: (s: number) => s });
+// @ts-expect-error the progress objective is null before the first solution
+model.solveWithParametersSync({}, { onProgress: (p) => { const o: number | bigint = p.objective; } });
+// @ts-expect-error progressIntervalMs is a number of milliseconds
+model.solveWithParametersSync({}, { onProgress() {}, progressIntervalMs: '1s' });
 // @ts-expect-error objective values may be bigints
 const exact: number = model.solveWithParametersSync()!.objectiveValue();
 // @ts-expect-error the manager is required

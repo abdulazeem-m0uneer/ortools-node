@@ -8,6 +8,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Routing progress events: `onProgress` and `progressIntervalMs` in the solve
+  options report `{ solutions, objective, branches, failures, wallTimeMs, done }`
+  from a native search monitor, at most once per interval and once more with
+  `done: true` when the search ends. During an async solve progress events
+  coalesce (at most one queued, carrying the latest values), so a slow listener
+  never stalls the solver or grows memory. A throw stops the search and rejects.
 - Classic CP JS search monitors take 13 OR-Tools `SearchMonitor` hooks,
   camelCased: besides `enterSearch`, `exitSearch` and `atSolution`, now
   `beginNextDecision`, `endNextDecision`, `applyDecision`, `refuteDecision`,

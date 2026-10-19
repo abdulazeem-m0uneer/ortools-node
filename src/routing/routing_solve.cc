@@ -1,28 +1,38 @@
 // RoutingModel: solving (synchronous, or on the libuv threadpool) with optional
-// solution callbacks, and reading solutions.
+// solution and progress callbacks, and reading solutions.
 //
-// Solution callbacks: the model registers one AddAtSolutionCallback hook when
-// it is built; during a solve with onSolution it forwards each solution to a
-// SolutionListener as a snapshot (objective, optionally routes):
-// * synchronously, calling the JS function directly;
-// * asynchronously, through a Napi::ThreadSafeFunction (NonBlockingCall). The
-//   Promise settles only once the solve has ended AND the thread-safe function
-//   has been finalized, so every snapshot is delivered before it settles.
-// A throw in the callback stops the search (like interrupt()) and rejects.
+// Callbacks: the model registers one AddAtSolutionCallback hook and one
+// ProgressMonitor when it is built; during a solve with onSolution / onProgress
+// they forward snapshots of plain values (never live native objects):
+// * synchronously, calling the JS functions directly;
+// * asynchronously, through one Napi::ThreadSafeFunction per callback
+//   (NonBlockingCall: the solver never waits for JS). Every solution snapshot
+//   is queued (memory grows with the solutions found while JS is busy); progress
+//   snapshots coalesce, at most one is queued and it carries the latest values.
+//   The Promise settles only once the solve has ended AND every thread-safe
+//   function has been finalized, so the final progress event and every
+//   solution are delivered before it settles.
+// The first throw in a callback stops the search (like interrupt()), no
+// callback runs after it, and the solve rejects (or rethrows) with it.
 
 #include <napi.h>
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
+#include "absl/time/time.h"
 #include "common/cpp_guard.h"
 #include "common/int64.h"
 #include "common/napi_util.h"
 #include "routing/routing_guards.h"
 #include "routing/routing_model.h"
+#include "routing/routing_progress.h"
 #include "routing/search_parameters.h"
 
 namespace ortools_node {
@@ -36,6 +46,19 @@ using operations_research::RoutingSearchParameters;
 namespace {
 
 constexpr int64_t kMaxHandle = INT32_MAX;
+constexpr int64_t kDefaultProgressIntervalMs = 500;
+
+// native._testing.failNextRoutingSolves(n): the next n solves throw a C++
+// exception once OR-Tools has returned, to test the failure paths. Test-only
+// and process-wide: shared by every worker thread's addon instance.
+std::atomic<int64_t> solves_to_fail_for_testing{0};
+
+void MaybeFailForTesting() {
+  int64_t n = solves_to_fail_for_testing.load();
+  while (n > 0 && !solves_to_fail_for_testing.compare_exchange_weak(n, n - 1)) {
+  }
+  if (n > 0) throw std::runtime_error("injected routing solve failure");
+}
 
 struct SolutionSnapshot {
   int64_t objective = 0;
@@ -98,11 +121,13 @@ Napi::ObjectReference CaptureException(Napi::Env env) {
   return Napi::Persistent(holder);
 }
 
-// Calls `fn(snapshot)`; on a throw records it, asks the solve to stop and returns false.
-bool DeliverSnapshot(Napi::Env env, const Napi::Function& fn, const SolutionSnapshot& snapshot, bool include_routes,
-                     Napi::ObjectReference* error, AsyncSolveState* state) {
+// Calls `fn(to_js(env))`; on a throw records it, asks the solve to stop and
+// returns false.
+template <typename ToJs>
+bool Deliver(Napi::Env env, const Napi::Function& fn, ToJs&& to_js, Napi::ObjectReference* error,
+             AsyncSolveState* state) {
   Napi::HandleScope scope(env);
-  Napi::Value value = SnapshotToJs(env, snapshot, include_routes);
+  Napi::Value value = to_js(env);
   if (!env.IsExceptionPending()) fn.Call(env.Undefined(), {value});
   if (!env.IsExceptionPending()) return true;
   *error = CaptureException(env);
@@ -117,6 +142,8 @@ struct SolveRequest {
   int64_t initial = -1;
   Napi::Function on_solution;  // empty when there is no callback
   bool include_routes = false;
+  Napi::Function on_progress;  // empty when there is no callback
+  int64_t progress_interval_ms = kDefaultProgressIntervalMs;
 };
 
 bool ReadSolveRequest(const Napi::CallbackInfo& info, SolveRequest* out) {
@@ -136,18 +163,39 @@ bool ReadSolveRequest(const Napi::CallbackInfo& info, SolveRequest* out) {
     out->on_solution = fn.As<Napi::Function>();
   }
   out->include_routes = routes.ToBoolean();
-  return true;
+  Napi::Value progress = options.As<Napi::Object>().Get("onProgress");
+  if (env.IsExceptionPending()) return false;
+  Napi::Value interval = options.As<Napi::Object>().Get("progressIntervalMs");
+  if (env.IsExceptionPending()) return false;
+  if (!progress.IsUndefined()) {
+    if (!progress.IsFunction()) THROW_TYPE_AND_RETURN(env, "options.onProgress must be a function", false);
+    out->on_progress = progress.As<Napi::Function>();
+  }
+  return interval.IsUndefined() ||
+         ReadIntInRange(env, interval, 0, INT32_MAX, "options.progressIntervalMs", &out->progress_interval_ms);
 }
 
-class SyncListener : public SolutionListener {
+// The callbacks of a synchronous solve, called directly on the main thread.
+class SyncCallbacks : public SolutionListener, public ProgressSink {
  public:
-  SyncListener(Napi::Env env, Napi::Function fn, bool include_routes, AsyncSolveState* state)
-      : env_(env), fn_(fn), include_routes_(include_routes), state_(state) {}
+  SyncCallbacks(Napi::Env env, const SolveRequest& request, AsyncSolveState* state)
+      : env_(env),
+        on_solution_(request.on_solution),
+        on_progress_(request.on_progress),
+        include_routes_(request.include_routes),
+        state_(state) {}
 
   void OnSolution(const RoutingModel& model) override {
     if (failed_) return;
     const SolutionSnapshot snapshot = TakeSnapshot(model, count_++, include_routes_);
-    if (!DeliverSnapshot(env_, fn_, snapshot, include_routes_, &error_, state_)) failed_ = true;
+    failed_ = !Deliver(
+        env_, on_solution_, [&](Napi::Env env) { return SnapshotToJs(env, snapshot, include_routes_); }, &error_,
+        state_);
+  }
+  void OnProgress(const ProgressSnapshot& snapshot) override {
+    if (failed_) return;
+    failed_ = !Deliver(
+        env_, on_progress_, [&](Napi::Env env) { return ProgressToJs(env, snapshot); }, &error_, state_);
   }
   bool RethrowIfFailed() {
     if (!failed_) return false;
@@ -157,17 +205,18 @@ class SyncListener : public SolutionListener {
 
  private:
   Napi::Env env_;
-  Napi::Function fn_;  // a handle of the solveSync() call, valid during it
+  Napi::Function on_solution_;  // handles of the solveSync() call, valid during it
+  Napi::Function on_progress_;
   bool include_routes_;
   AsyncSolveState* state_;
-  Napi::ObjectReference error_;
+  Napi::ObjectReference error_;  // the first throw
   bool failed_ = false;
   int count_ = 0;
 };
 
-// One async solve. Shared by the worker and the thread-safe function's
-// finalizer; settles the Promise when both are done (main thread).
-class AsyncSession : public SolutionListener {
+// One async solve. Shared by the worker and the thread-safe functions'
+// finalizers; settles the Promise when all are done (main thread).
+class AsyncSession : public SolutionListener, public ProgressSink {
  public:
   AsyncSession(Napi::Env env, Napi::Object owner, RoutingModelWrap* wrap, bool include_routes)
       : deferred_(Napi::Promise::Deferred::New(env)),
@@ -178,24 +227,51 @@ class AsyncSession : public SolutionListener {
   Napi::Promise Promise() const { return deferred_.Promise(); }
 
   // Main thread, before the solve starts.
-  void AttachCallback(Napi::ThreadSafeFunction tsfn) {
-    tsfn_ = tsfn;
-    has_tsfn_ = true;
+  void AttachSolutionCallback(Napi::ThreadSafeFunction tsfn) {
+    solution_tsfn_ = tsfn;
+    has_solution_tsfn_ = true;
+    ++live_tsfns_;
+  }
+  void AttachProgressCallback(Napi::ThreadSafeFunction tsfn) {
+    progress_tsfn_ = tsfn;
+    has_progress_tsfn_ = true;
+    ++live_tsfns_;
   }
 
   // Solving thread.
   void OnSolution(const RoutingModel& model) override {
-    if (!has_tsfn_) return;
+    if (!has_solution_tsfn_) return;
     auto* snapshot = new SolutionSnapshot(TakeSnapshot(model, count_++, include_routes_));
-    const napi_status status = tsfn_.NonBlockingCall(
-        snapshot, [this](Napi::Env env, Napi::Function fn, SolutionSnapshot* data) { Deliver(env, fn, data); });
+    const napi_status status = solution_tsfn_.NonBlockingCall(
+        snapshot, [this](Napi::Env env, Napi::Function fn, SolutionSnapshot* data) { DeliverSolution(env, fn, data); });
     if (status != napi_ok) delete snapshot;
   }
-  // Solving thread, once the solve has returned.
+  // Solving thread. Coalesces: while a call is queued, newer snapshots replace
+  // the pending one instead of queuing more calls. ProgressMonitor throttles
+  // before calling this, so the uncontended lock is taken at most once per
+  // interval; only progressIntervalMs 0 takes it on every search event.
+  void OnProgress(const ProgressSnapshot& snapshot) override {
+    if (!has_progress_tsfn_) return;
+    {
+      std::lock_guard<std::mutex> lock(progress_mutex_);
+      pending_progress_ = snapshot;
+      if (progress_queued_) return;
+      progress_queued_ = true;
+    }
+    const napi_status status =
+        progress_tsfn_.NonBlockingCall([this](Napi::Env env, Napi::Function fn) { DeliverProgress(env, fn); });
+    if (status != napi_ok) {
+      std::lock_guard<std::mutex> lock(progress_mutex_);
+      progress_queued_ = false;
+    }
+  }
+  // Solving thread, once the solve has returned and the final progress
+  // snapshot is published.
   void SolveEnded(const Assignment* result, std::optional<CppFailure> failure) {
     result_ = result;
     worker_failure_ = std::move(failure);
-    if (has_tsfn_) tsfn_.Release();
+    if (has_solution_tsfn_) solution_tsfn_.Release();
+    if (has_progress_tsfn_) progress_tsfn_.Release();
   }
 
   // Main thread.
@@ -204,21 +280,34 @@ class AsyncSession : public SolutionListener {
     MaybeSettle(env);
   }
   void CallbackFinalized(Napi::Env env) {
-    tsfn_done_ = true;
+    --live_tsfns_;
     MaybeSettle(env);
   }
 
  private:
-  void Deliver(Napi::Env env, Napi::Function fn, SolutionSnapshot* data) {
+  void DeliverSolution(Napi::Env env, Napi::Function fn, SolutionSnapshot* data) {
     std::unique_ptr<SolutionSnapshot> snapshot(data);
-    if (env == nullptr || callback_failed_ || settled_) return;  // tearing down, or already failed
-    if (!DeliverSnapshot(env, fn, *snapshot, include_routes_, &callback_error_, &wrap_->solve_state())) {
-      callback_failed_ = true;
-    }
+    if (!CanCall(env)) return;
+    callback_failed_ = !Deliver(
+        env, fn, [&](Napi::Env e) { return SnapshotToJs(e, *snapshot, include_routes_); }, &callback_error_,
+        &wrap_->solve_state());
   }
+  void DeliverProgress(Napi::Env env, Napi::Function fn) {
+    ProgressSnapshot snapshot;
+    {
+      std::lock_guard<std::mutex> lock(progress_mutex_);
+      snapshot = pending_progress_;
+      progress_queued_ = false;
+    }
+    if (!CanCall(env)) return;
+    callback_failed_ = !Deliver(
+        env, fn, [&](Napi::Env e) { return ProgressToJs(e, snapshot); }, &callback_error_, &wrap_->solve_state());
+  }
+  // False while tearing down, after a callback threw, or once settled.
+  bool CanCall(Napi::Env env) const { return env != nullptr && !callback_failed_ && !settled_; }
 
   void MaybeSettle(Napi::Env env) {
-    if (settled_ || !worker_done_ || (has_tsfn_ && !tsfn_done_)) return;
+    if (settled_ || !worker_done_ || live_tsfns_ > 0) return;
     settled_ = true;
     Napi::HandleScope scope(env);
     int handle = -1;
@@ -240,25 +329,31 @@ class AsyncSession : public SolutionListener {
   Napi::ObjectReference owner_;  // keeps the JS model (and with it the native model) alive
   RoutingModelWrap* wrap_;
   const bool include_routes_;
-  Napi::ThreadSafeFunction tsfn_;
-  bool has_tsfn_ = false;
-  int count_ = 0;  // solving thread
+  Napi::ThreadSafeFunction solution_tsfn_;
+  Napi::ThreadSafeFunction progress_tsfn_;
+  bool has_solution_tsfn_ = false;
+  bool has_progress_tsfn_ = false;
+  int live_tsfns_ = 0;  // main thread: thread-safe functions not finalized yet
+  int count_ = 0;       // solving thread
+  std::mutex progress_mutex_;
+  ProgressSnapshot pending_progress_;  // guarded by progress_mutex_
+  bool progress_queued_ = false;       // guarded by progress_mutex_
   const Assignment* result_ = nullptr;
   std::optional<CppFailure> worker_failure_;
-  Napi::ObjectReference callback_error_;
+  Napi::ObjectReference callback_error_;  // the first throw
   bool callback_failed_ = false;
   bool worker_done_ = false;
-  bool tsfn_done_ = false;
   bool settled_ = false;
 };
 
 class RoutingSolveWorker : public Napi::AsyncWorker {
  public:
   RoutingSolveWorker(Napi::Env env, std::shared_ptr<AsyncSession> session, RoutingModel* model,
-                     RoutingSearchParameters parameters, const Assignment* initial)
+                     ProgressMonitor* progress, RoutingSearchParameters parameters, const Assignment* initial)
       : Napi::AsyncWorker(env),
         session_(std::move(session)),
         model_(model),
+        progress_(progress),
         parameters_(std::move(parameters)),
         initial_(initial) {}
 
@@ -267,7 +362,12 @@ class RoutingSolveWorker : public Napi::AsyncWorker {
     const Assignment* result = nullptr;
     std::optional<CppFailure> failure = GuardCppOffThread("solveWithParameters()", [&] {
       result = model_->SolveFromAssignmentWithParameters(initial_, parameters_);
+      MaybeFailForTesting();
     });
+    // Published even after a failure; the Promise settles after it is delivered.
+    std::optional<CppFailure> publish_failure =
+        GuardCppOffThread("solveWithParameters()", [&] { progress_->PublishFinal(); });
+    if (!failure) failure = std::move(publish_failure);
     session_->SolveEnded(result, std::move(failure));
   }
   void OnOK() override { session_->WorkerDone(Env()); }
@@ -275,6 +375,7 @@ class RoutingSolveWorker : public Napi::AsyncWorker {
  private:
   std::shared_ptr<AsyncSession> session_;
   RoutingModel* model_;
+  ProgressMonitor* progress_;
   RoutingSearchParameters parameters_;
   const Assignment* initial_;
 };
@@ -292,6 +393,7 @@ int RoutingModelWrap::RecordAssignment(const Assignment* assignment) {
 
 int RoutingModelWrap::FinishSolve(const Assignment* solution) {
   listener_ = nullptr;
+  progress_->Detach();
   solve_state_.End();
   return solution == nullptr ? -1 : RecordAssignment(solution);
 }
@@ -300,6 +402,14 @@ int RoutingModelWrap::FinishSolve(const Assignment* solution) {
 Napi::Value RoutingModelWrap::Solve(const Napi::CallbackInfo& info) { return StartSolve(info, true); }
 
 // (paramsJson, initialHandle?, options?) -> handle | null
+void InitRoutingSolveTesting(Napi::Env env, Napi::Object testing) {
+  testing.Set("failNextRoutingSolves", Napi::Function::New(env, [](const Napi::CallbackInfo& info) {
+                int64_t n;
+                if (ReadIntInRange(info.Env(), info[0], 0, INT32_MAX, "n", &n)) solves_to_fail_for_testing.store(n);
+                return info.Env().Undefined();
+              }));
+}
+
 Napi::Value RoutingModelWrap::SolveSync(const Napi::CallbackInfo& info) { return StartSolve(info, false); }
 
 Napi::Value RoutingModelWrap::StartSolve(const Napi::CallbackInfo& info, bool async) {
@@ -315,36 +425,63 @@ Napi::Value RoutingModelWrap::StartSolve(const Napi::CallbackInfo& info, bool as
   if (!EnsureClosed(env, request.parameters)) return env.Undefined();
   MarkChanged();  // earlier solutions become invalid
   const bool has_callback = !request.on_solution.IsEmpty();
+  const bool has_progress = !request.on_progress.IsEmpty();
+  const absl::Duration interval = absl::Milliseconds(request.progress_interval_ms);
 
   if (!async) {
-    SyncListener listener(env, request.on_solution, request.include_routes, &solve_state_);
-    listener_ = has_callback ? &listener : nullptr;
+    SyncCallbacks callbacks(env, request, &solve_state_);
+    listener_ = has_callback ? &callbacks : nullptr;
+    if (has_progress) progress_->Attach(&callbacks, interval);
     solve_state_.Begin();
     const Assignment* result = nullptr;
     const bool solved = GuardCpp(env, "solveWithParametersSync()", [&] {
       result = model_->SolveFromAssignmentWithParameters(initial, request.parameters);
+      MaybeFailForTesting();
     });
+    // The final progress event is published even after a failure, which then
+    // wins over anything the event's listener throws.
+    std::optional<Napi::Error> failure;
+    if (!solved) failure = env.GetAndClearPendingException();
+    const bool published = GuardCpp(env, "solveWithParametersSync()", [&] { progress_->PublishFinal(); });
     int handle = -1;
-    if (!solved) {
+    if (failure || !published) {
       FinishSolve(nullptr);
+      if (failure) {
+        if (env.IsExceptionPending()) env.GetAndClearPendingException();
+        failure->ThrowAsJavaScriptException();
+      }
       return env.Undefined();
     }
     if (!GuardCpp(env, "recording the solution", [&] { handle = FinishSolve(result); })) return env.Undefined();
-    if (listener.RethrowIfFailed()) return env.Undefined();
+    if (callbacks.RethrowIfFailed()) return env.Undefined();
     return handle >= 0 ? Napi::Value(Napi::Number::New(env, handle)) : env.Null();
   }
 
   auto session = std::make_shared<AsyncSession>(env, info.This().As<Napi::Object>(), this, request.include_routes);
+  // Unbounded queues (0): solution calls are never dropped, and at most one
+  // progress call is queued at a time (AsyncSession::OnProgress).
+  Napi::ThreadSafeFunction solution_tsfn;
   if (has_callback) {
-    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
+    solution_tsfn = Napi::ThreadSafeFunction::New(
         env, request.on_solution, "ortools-node routing onSolution", 0, 1,
         [session](Napi::Env finalize_env) { session->CallbackFinalized(finalize_env); });
     if (env.IsExceptionPending()) return env.Undefined();
-    session->AttachCallback(tsfn);
+    session->AttachSolutionCallback(solution_tsfn);
+  }
+  if (has_progress) {
+    Napi::ThreadSafeFunction tsfn = Napi::ThreadSafeFunction::New(
+        env, request.on_progress, "ortools-node routing onProgress", 0, 1,
+        [session](Napi::Env finalize_env) { session->CallbackFinalized(finalize_env); });
+    if (env.IsExceptionPending()) {
+      if (has_callback) solution_tsfn.Release();  // the solve never starts
+      return env.Undefined();
+    }
+    session->AttachProgressCallback(tsfn);
   }
   listener_ = has_callback ? session.get() : nullptr;
+  if (has_progress) progress_->Attach(session.get(), interval);
   solve_state_.Begin();
-  auto* worker = new RoutingSolveWorker(env, session, model_.get(), request.parameters, initial);
+  auto* worker = new RoutingSolveWorker(env, session, model_.get(), progress_, request.parameters, initial);
   worker->Queue();
   return session->Promise();
 }

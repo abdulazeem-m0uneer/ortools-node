@@ -477,7 +477,7 @@ builds the model:
 | `addDimension(id, slackMax, capacity, fixStartCumulToZero, name)` and its `WithVehicle…`, `Constant`, `Vector` and `Matrix` variants | Dimensions; `getDimensionOrDie(name)` returns one with `cumulVar(i)`, span bounds and costs, and soft bounds. |
 | `addDisjunction(indices, penalty?, maxCardinality?)`, `addPickupAndDelivery(p, d)`, `setAllowedVehiclesForIndex`, visit types | Routing constraints. |
 | `nextVar(i)`, `vehicleVar(i)`, `activeVar(i)`, `costVar()` | Model variables; constrain them through `model.solver()`, the model's `cp.CpSolver`. |
-| `solveWithParameters(params?, { onSolution?, includeRoutes? })` → `Promise<RoutingSolution \| null>` | Solves on the libuv threadpool; `interrupt()` stops it with the best solution so far. `…Sync` variants and `solveFromAssignmentWithParameters` exist too. |
+| `solveWithParameters(params?, { onSolution?, includeRoutes?, onProgress?, progressIntervalMs? })` → `Promise<RoutingSolution \| null>` | Solves on the libuv threadpool; `interrupt()` stops it with the best solution so far. `…Sync` variants and `solveFromAssignmentWithParameters` exist too. See [Callbacks and search monitors](#callbacks-and-search-monitors). |
 | `closeModelWithParameters(params?)`, `applyLocks`, `readAssignmentFromRoutes(routes, ignoreInactive)` | Close the model, fix route prefixes, build a solution from routes. |
 | `status()`, `busy`, `dispose()` | Search status, lifetime. |
 
@@ -583,6 +583,45 @@ solver.solve(db, [fails, { atSolution: () => x.value() < 3 }]);
   OR-Tools has unwound. The solver stays usable.
 - `solveAsync()` takes `SearchMonitor` handles only: JS cannot run on the
   threadpool.
+
+**Routing.** `solveWithParameters(params, options)` and its `…Sync` variants
+take two callbacks:
+
+- `onSolution({ objective, solutionIndex, routes? })` for each solution
+  (`includeRoutes: true` adds the routes), from OR-Tools' at-solution hook.
+- `onProgress({ solutions, objective, branches, failures, wallTimeMs, done })`
+  from a native search monitor, at most every `progressIntervalMs` (default
+  500, `0` for every check) while the search runs, then once with `done: true`
+  after it ends. `objective` is the best so far, `null` before the first
+  solution; the counters cover this solve only.
+
+```js
+const solution = await model.solveWithParameters({ timeLimit: '30s', localSearchMetaheuristic: 'GUIDED_LOCAL_SEARCH' }, {
+  progressIntervalMs: 1000,
+  onProgress: ({ objective, solutions, wallTimeMs, done }) => console.log({ objective, solutions, wallTimeMs, done }),
+});
+```
+
+During an async solve the solver never waits for JS (`NonBlockingCall`):
+
+- **Solutions are all delivered.** A snapshot is queued per solution, so a slow
+  `onSolution` costs memory (with `includeRoutes`, one route list per
+  solution), never solver time.
+- **Progress coalesces.** At most one progress call is queued; while it waits,
+  newer values replace the queued ones. A slow `onProgress` sees fewer events,
+  each with the latest values. The final `done: true` event arrives even when
+  the solve fails natively, unless a callback threw or the worker thread is
+  terminating.
+- The Promise settles after the last callback has run.
+
+In both modes the first throw in either callback stops the search (like
+`interrupt()`), no callback runs after it, and the solve rejects or rethrows
+with it. Inside a callback, the model is busy: every model call throws except
+`busy` and `interrupt()`, which stops the search and keeps the best solution.
+
+**CP-SAT.** `solve(model, { onSolution })` waits for each callback before the
+search continues, like Python's solution callback, so `stopSearch()` inside it
+takes effect before the next solution. See `lib/sat.d.ts`.
 
 ## How it works
 
