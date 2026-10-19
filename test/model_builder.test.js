@@ -514,3 +514,24 @@ test('an imported model listing a variable twice in a row or hint is refused, no
   proto.solutionHint = { varIndex: [0, 0], varValue: [1, 2] };
   assert.throws(() => new Model()._loadProto(proto), /solution hint: variable 0 appears several times/);
 });
+
+test('HiGHS writes nothing to stdout unless output is enabled', { skip: !isSolverSupported('HIGHS') && 'no HiGHS' }, () => {
+  const out = runIsolated(`
+    const model = new mb.Model();
+    const x = model.newIntVar(0, 10, 'x');
+    model.add(x.le(5));
+    model.maximize(x);
+    const results = [];
+    for (const name of ['HIGHS', 'HIGHS_LP']) {
+      results.push(new mb.Solver(name).solveSync(model));
+      // A caller's own parameters still apply.
+      results.push(new mb.Solver(name).setSolverSpecificParameters('presolve=off').solveSync(model));
+    }
+    process.stdout.write(JSON.stringify(results));`);
+  assert.deepEqual(JSON.parse(out), ['OPTIMAL', 'OPTIMAL', 'OPTIMAL', 'OPTIMAL']);
+  const verbose = runIsolated(`
+    const model = new mb.Model();
+    model.maximize(model.newNumVar(0, 1, 'x'));
+    new mb.Solver('HIGHS').enableOutput().solveSync(model);`);
+  assert.match(verbose, /HiGHS/);
+});

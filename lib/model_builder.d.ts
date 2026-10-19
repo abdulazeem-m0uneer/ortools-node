@@ -126,6 +126,7 @@ export class Solver {
   /** Infinity removes the limit. */
   setTimeLimitInSeconds(seconds: number): this;
   setSolverSpecificParameters(parameters: string): this;
+  /** The backend's log, off by default. With it off, HiGHS gets output_flag=false before the caller's own parameters. */
   enableOutput(enabled?: boolean): this;
 
   solve(model: Model): Promise<SolveStatusName>;
