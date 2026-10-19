@@ -22,7 +22,7 @@ Open an issue that includes:
    ```bash
    npm install        # builds the addon
    npm test           # node:test suite, including every README and docs/ example
-   npm run typecheck  # checks lib/**/*.d.ts and test/types/
+   npm run typecheck  # checks lib/**/*.d.ts and types-test/
    ```
 
 The native code is in `src/`, one directory per OR-Tools component (for example

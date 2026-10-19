@@ -2,7 +2,7 @@
 import {
   VectorBinPackingProblem, VectorBinPackingSolution, VectorBinPackingSolverType, solveVectorBinPacking,
   solveVectorBinPackingSync,
-} from '../../lib/index';
+} from '../lib/index';
 
 const problem: VectorBinPackingProblem = {
   resourceCapacity: [10, 10n],

@@ -6,7 +6,7 @@ import {
   SimpleLinearSumAssignment,
   SimpleMaxFlow,
   SimpleMinCostFlow,
-} from '../../lib/index';
+} from '../lib/index';
 
 const mcf = new SimpleMinCostFlow();
 const arc: number = mcf.addArcWithCapacityAndUnitCost(0, 1, Infinity, 5n);

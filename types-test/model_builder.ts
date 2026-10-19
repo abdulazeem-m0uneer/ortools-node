@@ -1,5 +1,5 @@
 // Compile-time checks for lib/model_builder.d.ts (run by `npm run typecheck`).
-import { modelBuilder } from '../../lib/index';
+import { modelBuilder } from '../lib/index';
 
 const { Model, Solver, LinearExpr, SolveStatus, isSolverSupported } = modelBuilder;
 

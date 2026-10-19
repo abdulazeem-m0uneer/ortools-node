@@ -10,7 +10,7 @@ import {
   RoutingSolution,
   RoutingSolutionSnapshot,
   VisitTypePolicy,
-} from '../../lib/index';
+} from '../lib/index';
 
 const manager = new RoutingIndexManager(5, 2, 0);
 const multiDepot = new RoutingIndexManager(5, 2, [0, 1], [2, 2]);

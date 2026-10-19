@@ -13,7 +13,7 @@ import {
   IntervalVar,
   NotBooleanVariable,
   SolutionSnapshot,
-} from '../../lib/index';
+} from '../lib/index';
 
 const model = new CpModel();
 const x: IntVar = model.newIntVar(0, 10, 'x');

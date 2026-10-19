@@ -1,5 +1,5 @@
 // Compile-time checks for lib/math_opt.d.ts (run by `npm run typecheck`).
-import { mathOpt } from '../../lib/index';
+import { mathOpt } from '../lib/index';
 
 const { Model, LinearExpr, SolveInterrupter, SolverType, TerminationReason, solve, solveSync } = mathOpt;
 

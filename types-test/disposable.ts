@@ -1,5 +1,5 @@
 // Compile-time check: explicit resource management (`using`) disposes a Solver.
-import { Solver } from '../../lib/index';
+import { Solver } from '../lib/index';
 
 export function solveScoped(): number {
   using solver = new Solver('GLOP');

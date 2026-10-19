@@ -1,5 +1,5 @@
 // Compile-time checks for lib/knapsack.d.ts (run by `npm run typecheck`).
-import { KnapsackSolver, KnapsackSolverType } from '../../lib/index';
+import { KnapsackSolver, KnapsackSolverType } from '../lib/index';
 
 const solver = new KnapsackSolver('KNAPSACK_MULTIDIMENSION_BRANCH_AND_BOUND_SOLVER', 'sample');
 solver.setTimeLimit(10).setUseReduction(true).init([1, 2n], [new BigInt64Array([1n, 2n]), [3, 4]], new Uint32Array([5]));
