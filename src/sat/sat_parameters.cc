@@ -18,7 +18,7 @@ namespace {
 bool CheckParameters(Napi::Env env, const SatParameters& parameters) {
   const std::string error = operations_research::sat::ValidateParameters(parameters);
   if (error.empty()) return true;
-  Napi::RangeError::New(env, "Invalid SatParameters: " + error).ThrowAsJavaScriptException();
+  Napi::RangeError::New(env, BoundedErrorMessage("Invalid SatParameters: " + error)).ThrowAsJavaScriptException();
   return false;
 }
 

@@ -12,6 +12,7 @@
 #include <string>
 
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/message.h"
 
@@ -25,9 +26,17 @@ bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, go
 // A protobuf JSON parse error without its "near L:C (offset N)" part, which
 // points into JSON the caller never saw, without google.protobuf.Struct's
 // internal paths ("<struct>[0].struct_value..."), and with protobuf's irregular
-// whitespace collapsed, cut to 500 bytes (protobuf echoes the caller's value).
-// The field path and expected type stay.
+// whitespace collapsed. The field path and expected type stay. It may echo the
+// caller's value at any length: throw it through BoundedErrorMessage.
 std::string JsonParseErrorMessage(const absl::Status& status);
+
+// `text` cut to at most `max_bytes` (on a UTF-8 boundary) plus "…" when longer.
+std::string Abbreviate(absl::string_view text, size_t max_bytes);
+
+// Errors echo caller values and keys of any length; every native error that
+// can carry one is thrown through this, cut to kMaxErrorMessageBytes.
+inline constexpr size_t kMaxErrorMessageBytes = 500;
+std::string BoundedErrorMessage(absl::string_view message);
 
 // Prints every field, including those left at their proto3 default, with
 // lowerCamelCase names. On failure throws and returns env.Undefined().

@@ -196,20 +196,19 @@ std::string StripStructPath(std::string text) {
   return text;
 }
 
-// protobuf echoes the caller's value, which may be megabytes long.
-std::string TruncateMessage(std::string text) {
-  constexpr size_t kMaxLength = 500;
-  if (text.size() <= kMaxLength) return text;
-  size_t cut = kMaxLength;
-  while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;  // keep UTF-8 whole
-  text.resize(cut);
-  return text + "\xE2\x80\xA6";  // "…" in UTF-8
-}
-
 }  // namespace
 
+std::string Abbreviate(absl::string_view text, size_t max_bytes) {
+  if (text.size() <= max_bytes) return std::string(text);
+  size_t cut = max_bytes;
+  while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;  // keep UTF-8 whole
+  return absl::StrCat(text.substr(0, cut), "\xE2\x80\xA6");  // "…" in UTF-8
+}
+
+std::string BoundedErrorMessage(absl::string_view message) { return Abbreviate(message, kMaxErrorMessageBytes); }
+
 std::string JsonParseErrorMessage(const absl::Status& status) {
-  return TruncateMessage(StripStructPath(NormalizeProtobufMessage(status.message())));
+  return StripStructPath(NormalizeProtobufMessage(status.message()));
 }
 
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out) {
@@ -227,7 +226,8 @@ bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, go
   absl::Status status = google::protobuf::json::JsonStringToMessage(json, out, options);
   const std::string error = status.ok() ? FindInvalidValue(*out, "") : JsonParseErrorMessage(status);
   if (!error.empty()) {
-    Napi::TypeError::New(env, absl::StrCat("Invalid ", what, ": ", error)).ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, BoundedErrorMessage(absl::StrCat("Invalid ", what, ": ", error)))
+        .ThrowAsJavaScriptException();
     return false;
   }
   return true;
