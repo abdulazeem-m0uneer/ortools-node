@@ -42,7 +42,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   build can run. Malformed problems throw JS errors instead of aborting. The
   profit returned is that of the packed items (OR-Tools truncates CP-SAT's
   objective), and `isSolutionOptimal()` is never true for CBC (its bounds can be
-  wrong), nor for SCIP once the profit found reaches 1e4 (its 1e-4 gap).
+  wrong), XPRESS or CPLEX (unverified), nor for SCIP once the profit found
+  reaches 1e4 (its 1e-4 gap).
 - `modelBuilder` (Python's `model_builder`): `Model` with variables, linear and
   enforced (indicator) constraints, objective, hints, `clone()`, LP / MPS export
   and import; `LinearExpr` builders (`sum`, `weightedSum`, `plus`, `times`,
@@ -74,8 +75,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   abort on are rejected, and those where nothing can be packed get an exact
   answer without it. The backend's log goes to stdout only with
   `enableOutput: true` (OR-Tools would always enable it). On OR-Tools 9.14
-  HiGHS still prints its banner, here and in `new Solver('HIGHS')`: that
-  release's HiGHS interface drops solver-specific parameters.
+  HiGHS prints only its banner whatever `enableOutput` says (that release's
+  HiGHS interface ignores it); `new Solver('HIGHS')` prints that banner too.
 
 ### Changed
 
