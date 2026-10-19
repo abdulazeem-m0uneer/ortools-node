@@ -110,6 +110,7 @@ export class Model {
   exportToMpsString(obfuscate?: boolean): string;
   /** OR-Tools' LP parser syntax, e.g. "min: x + 2 y; c1: x + y >= 3; int y;". Existing handles become invalid. */
   importFromLpString(text: string): this;
+  /** Throws if a row lists a variable twice (OR-Tools would call the model invalid). */
   importFromMpsString(text: string): this;
 }
 
