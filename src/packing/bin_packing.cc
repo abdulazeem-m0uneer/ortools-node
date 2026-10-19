@@ -1,5 +1,5 @@
-// Vector bin packing with the arc-flow formulation
-// (packing::SolveVectorBinPackingWithArcFlow).
+// Vector bin packing with the arc-flow formulation (SolveWithArcFlow(), our
+// copy of packing::SolveVectorBinPackingWithArcFlow with the log optional).
 //
 // The problem arrives as VectorBinPackingProblem JSON and the solution goes
 // back as a JS object. The OR-Tools function CHECKs or silently assumes a lot,
@@ -8,8 +8,8 @@
 // * capacities in [1, 2^30], usages in [0, 2^30], one usage per dimension
 //   (values are stored in int and added up, and the builder CHECKs > 0);
 // * copy counts >= 0, their total within int; penalties and bin cost finite;
-// * a MIP backend (the flow decomposition CHECKs integral arc values) whose
-//   SetNumThreads() succeeds (the function CHECK_OKs it), threads >= 1;
+// * a MIP backend (the flow decomposition needs integral arc values) whose
+//   SetNumThreads() succeeds, threads >= 1;
 // * a bound on the dynamic-programming states the graph builder would explore,
 //   since it allocates per state and an absurd instance would exhaust memory;
 // * an item with copies must use some resource (or have a per-bin limit below
@@ -38,10 +38,10 @@
 #include "common/napi_util.h"
 #include "common/proto_json.h"
 #include "common/proto_to_js.h"
+#include "packing/arc_flow.h"
 #include "google/protobuf/text_format.h"
 #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/linear_solver/linear_solver.pb.h"
-#include "ortools/packing/arc_flow_solver.h"
 #include "ortools/packing/vector_bin_packing.pb.h"
 #include "ortools/sat/parameters_validation.h"
 #include "ortools/sat/sat_parameters.pb.h"
@@ -220,9 +220,10 @@ struct SolveInput {
   double time_limit_seconds = std::numeric_limits<double>::infinity();
   int num_threads = 1;
   int max_bins = 0;  // 0: the problem's maxBins, or the total number of copies
+  bool enable_output = false;
 };
 
-// (problemJson, solverType, timeLimitSeconds, numThreads, mipParameters).
+// (problemJson, solverType, timeLimitSeconds, numThreads, mipParameters, enableOutput).
 // Only primitives and a string: no user code runs while they are read.
 bool ReadSolveInput(const Napi::CallbackInfo& info, SolveInput* input) {
   Napi::Env env = info.Env();
@@ -256,6 +257,8 @@ bool ReadSolveInput(const Napi::CallbackInfo& info, SolveInput* input) {
   if (!info[4].IsString()) THROW_TYPE_AND_RETURN(env, "mipParameters must be a string", false);
   input->mip_parameters = info[4].As<Napi::String>().Utf8Value();
   if (!CheckMipParameters(env, input->backend, backend, input->mip_parameters)) return false;
+  if (!info[5].IsBoolean()) THROW_TYPE_AND_RETURN(env, "enableOutput must be a boolean", false);
+  input->enable_output = info[5].As<Napi::Boolean>().Value();
   if (!ValidateProblem(env, input->problem)) return false;
   input->max_bins = input->problem.max_bins();
   return true;
@@ -263,9 +266,8 @@ bool ReadSolveInput(const Napi::CallbackInfo& info, SolveInput* input) {
 
 vbp::VectorBinPackingSolution RunSolve(const SolveInput& input) {
   if (!HasPlaceableItem(input.problem)) return SolveWithoutPlaceableItems(input.problem);
-  return operations_research::packing::SolveVectorBinPackingWithArcFlow(
-      input.problem, input.backend, input.mip_parameters, input.time_limit_seconds, input.num_threads,
-      input.max_bins);
+  return SolveWithArcFlow(input.problem, input.backend, input.mip_parameters, input.time_limit_seconds,
+                          input.num_threads, input.max_bins, input.enable_output);
 }
 
 class BinPackingWorker : public PromiseWorker {
