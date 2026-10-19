@@ -37,8 +37,9 @@ async function run(): Promise<void> {
   );
   if (solution !== null) {
     const routes: number[][] = solution.routes();
-    const loads: number[][] = solution.cumuls(time);
-    const slacks: Array<Array<number | null>> = solution.slacks('Load');
+    const loads: Array<Array<number | bigint>> = solution.cumuls(time);
+    const cost: number | bigint = solution.objectiveValue();
+    const slacks: Array<Array<number | bigint | null>> = solution.slacks('Load');
     const warm = model.solveFromAssignmentWithParametersSync(solution);
   }
   const initial = model.readAssignmentFromRoutes([[1, 2], [3]], true);
@@ -55,6 +56,8 @@ model.setVisitType(3, 0, 'TYPE_MAYBE');
 model.solveWithParametersSync({ firstSolutionStrategy: 'NOPE' });
 // @ts-expect-error onSolution receives a snapshot, not a number
 model.solveWithParametersSync({}, { onSolution: (s: number) => s });
+// @ts-expect-error objective values may be bigints
+const exact: number = model.solveWithParametersSync()!.objectiveValue();
 // @ts-expect-error the manager is required
 new RoutingModel();
 // @ts-expect-error status names are RoutingSearchStatus names

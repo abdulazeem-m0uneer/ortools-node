@@ -146,5 +146,20 @@ test('an objective beyond 2^53 reaches onSolution as a BigInt', async () => {
   assert.ok(solution);
   assert.equal(typeof snapshots.at(-1).objective, 'bigint');
   assert.equal(snapshots.at(-1).objective, 2n * (1n << 52n));
-  assert.throws(() => solution.objectiveValue(), RangeError, 'objectiveValue() never rounds');
+  assert.equal(solution.objectiveValue(), 2n * (1n << 52n), 'objectiveValue() returns a bigint, never a rounded number');
+});
+
+test('cumuls and values beyond 2^53 come back as bigints, safe ones as numbers', () => {
+  const manager = new RoutingIndexManager(3, 1, 0);
+  const model = new RoutingModel(manager);
+  const huge = 1n << 54n;
+  const t = model.registerTransitMatrix([[0n, huge, huge], [huge, 0n, huge], [huge, huge, 0n]]);
+  model.setArcCostEvaluatorOfAllVehicles(t);
+  model.addDimension(t, 0, Infinity, true, 'Far');
+  const solution = model.solveWithParametersSync(PCA);
+  assert.equal(solution.objectiveValue(), 3n * huge);
+  assert.deepEqual(solution.cumuls('Far'), [[0, huge, 2n * huge, 3n * huge]]);
+  const dim = model.getDimensionOrDie('Far');
+  assert.equal(solution.value(dim.cumulVar(model.end(0))), 3n * huge);
+  assert.equal(typeof solution.value(model.nextVar(0)), 'number');
 });

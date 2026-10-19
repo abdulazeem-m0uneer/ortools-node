@@ -127,7 +127,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (a `cp.CpSolver`).
 - `solveWithParameters` / `solveFromAssignmentWithParameters` on the threadpool
   (plus `*Sync` variants) resolving to a `RoutingSolution` with bulk
-  `routes()`, `cumuls()` and `slacks()`; `status()`; `interrupt()`; and an
+  `routes()`, `cumuls()` and `slacks()` (values beyond 2^53 come back as
+  bigints); `status()`; `interrupt()`; and an
   `onSolution` callback receiving a snapshot of each solution. Solutions become
   invalid after the next solve or any model change. Model-definition calls
   throw once the model is closed, and every argument OR-Tools would `CHECK` is
