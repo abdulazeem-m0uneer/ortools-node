@@ -212,6 +212,15 @@ test('strings must be well-formed Unicode', () => {
   assert.equal(validateRoutingSearchParameters({ logTag: 'r\u00e9seau \u{1F69A}' }).logTag, 'r\u00e9seau \u{1F69A}');
 });
 
+test('object keys must be well-formed Unicode', () => {
+  assert.throws(() => validateSatParameters({ ['num\uD800']: 1 }),
+    { name: 'TypeError', message: /^SatParameters has a top-level key that is not well-formed Unicode/ });
+  assert.throws(() => validateRoutingSearchParameters({ localSearchOperators: { ['\uDC00']: 'BOOL_TRUE' } }),
+    { name: 'TypeError', message: /'localSearchOperators' has a key that is not well-formed Unicode/ });
+  assert.throws(() => validateSatParameters({ subsolverParams: [{ name: 'a', ['x\uD83D']: 1 }] }),
+    { name: 'TypeError', message: /'subsolverParams\[0\]' has a key that is not well-formed Unicode/ });
+});
+
 test('protobuf parse errors keep the field and expected type but not positions in the internal JSON', () => {
   const messageOf = (fn) => { try { fn(); } catch (error) { return error; } return assert.fail('expected a TypeError'); };
   const routing = messageOf(() => validateRoutingSearchParameters({ timeLimit: 5 }));
