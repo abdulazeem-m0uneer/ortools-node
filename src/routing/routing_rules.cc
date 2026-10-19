@@ -237,10 +237,16 @@ Napi::Value RoutingModelWrap::SetVisitType(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   int64_t index, type;
   RoutingModel::VisitTypePolicy policy;
-  if (!ReadIntInRange(env, info[0], 0, size_ + vehicles_ - 1, "index", &index) ||
+  // Only visits take a type: on an end (or a start, with some policies) the
+  // type checkers read past their per-route data and crash.
+  if (!ReadIntInRange(env, info[0], 0, size_ - 1, "index", &index) ||
       !ReadIntInRange(env, info[1], 0, kMaxVisitType, "type", &type) || !ReadVisitTypePolicy(env, info[2], &policy) ||
       !CheckOpen(env, "setVisitType()")) {
     return env.Undefined();
+  }
+  if (model_->IsStart(index)) {
+    THROW_AND_RETURN(env, "index " + std::to_string(index) + " is a vehicle start and cannot have a visit type",
+                     env.Undefined());
   }
   GuardCpp(env, "setVisitType()", [&] { model_->SetVisitType(index, static_cast<int>(type), policy); });
   MarkChanged();
@@ -302,7 +308,8 @@ Napi::Value RoutingModelWrap::AddSoftSameVehicleConstraint(const Napi::CallbackI
   Napi::Env env = info.Env();
   std::vector<int64_t> indices;
   int64_t cost;
-  if (!ReadIntArrayInRange(env, info[0], 0, size_ + vehicles_ - 1, "indices", &indices) ||
+  // The same-vehicle cost structures only cover indices with a next (no ends).
+  if (!ReadIntArrayInRange(env, info[0], 0, size_ - 1, "indices", &indices) ||
       !ReadInt64(env, info[1], false, "cost", &cost) || !CheckOpen(env, "addSoftSameVehicleConstraint()")) {
     return env.Undefined();
   }

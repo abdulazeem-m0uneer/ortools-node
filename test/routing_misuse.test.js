@@ -131,3 +131,26 @@ test('argument getters and callbacks that dispose, solve or throw cannot crash a
   assert.match(results.solveInRoutes, /busy/);
   assert.match(results.throwingTransitCallback, /transit/);
 });
+
+// Review findings 1 and 2: these crashed (SIGSEGV) at close/solve before the
+// index checks; each case solves, so a missing guard shows as a crash.
+test('soft same-vehicle costs and visit types refuse the indices OR-Tools cannot handle', () => {
+  const solve = (setup) => `const manager = new RoutingIndexManager(4, 2, 0);
+    const model = new RoutingModel(manager);
+    model.setArcCostEvaluatorOfAllVehicles(model.registerTransitMatrix([[0, 1, 2, 3], [1, 0, 1, 2], [2, 1, 0, 1], [3, 2, 1, 0]]));
+    ${setup}
+    model.solveWithParametersSync();`;
+  const results = expectAllThrow({
+    softSameVehicleEnd0: solve('model.addSoftSameVehicleConstraint([1, model.end(0)], 5)'),
+    softSameVehicleEnd1: solve('model.addSoftSameVehicleConstraint([1, model.end(1)], 5)'),
+    visitTypeOnEnd: solve(`model.setVisitType(model.end(0), 1, 'TYPE_ADDED_TO_VEHICLE');
+      model.setVisitType(1, 0, 'TYPE_ADDED_TO_VEHICLE');
+      model.addRequiredTypeAlternativesWhenAddingType(1, [0])`),
+    visitTypeOnStart: solve(`model.setVisitType(model.start(1), 1, 'ADDED_TYPE_REMOVED_FROM_VEHICLE');
+      model.setVisitType(1, 1, 'TYPE_ADDED_TO_VEHICLE');
+      model.setVisitType(2, 0, 'TYPE_ADDED_TO_VEHICLE');
+      model.addRequiredTypeAlternativesWhenRemovingType(1, [0])`),
+  });
+  assert.match(results.softSameVehicleEnd1, /must be in \[0, 4\]/);
+  assert.match(results.visitTypeOnStart, /vehicle start/);
+});
