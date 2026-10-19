@@ -38,3 +38,7 @@ test('threadpool: Fail() rejects with exactly its message', async () => {
 test('threadpool: Fail(message, true) rejects with a RangeError', async () => {
   await assert.rejects(guardCppAsync('fail_oom'), (e) => e.constructor === RangeError && e.message === 'custom out of memory');
 });
+
+test('threadpool: Fail("") still rejects, with a non-empty message', async () => {
+  await assert.rejects(guardCppAsync('fail_empty'), (e) => e.constructor === Error && e.message === 'native operation failed');
+});

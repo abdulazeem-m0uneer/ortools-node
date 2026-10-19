@@ -14,7 +14,7 @@ namespace ortools_node {
 namespace {
 
 // 'ok' returns normally, 'bad_alloc' and 'runtime' throw the matching C++ exception
-// ('fail' and 'fail_oom' are handled by GuardWorker without one).
+// ('fail', 'fail_oom' and 'fail_empty' are handled by GuardWorker without one).
 void Raise(const std::string& kind) {
   if (kind == "bad_alloc") throw std::bad_alloc();
   if (kind == "runtime") throw std::runtime_error("boom");
@@ -28,6 +28,7 @@ class GuardWorker : public PromiseWorker {
   void Execute() override {
     if (kind_ == "fail") return Fail("custom message");
     if (kind_ == "fail_oom") return Fail("custom out of memory", true);
+    if (kind_ == "fail_empty") return Fail("");
     RunGuarded("guardCppAsync", [this] { Raise(kind_); });
   }
   Napi::Value Result(Napi::Env env) override { return Napi::String::New(env, "ok"); }
