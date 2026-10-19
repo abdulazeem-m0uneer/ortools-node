@@ -261,12 +261,54 @@ test('dispose() frees the model; later calls throw', () => {
   assert.equal(s.busy, false);
 });
 
-test('dispose() refuses while a solve is pending', async () => {
-  const { s } = smallLp();
+test('dispose() while a solve is pending frees the model once the solve settles', async () => {
+  const { s, x } = smallLp();
   const p = s.solve();
-  assert.throws(() => s.dispose(), /busy/);
-  assert.equal((await p).status, 'OPTIMAL');
   s.dispose();
+  s.dispose();  // idempotent while pending too
+  assert.ok(s.busy);
+  assert.throws(() => s.numVariables, /busy/);
+  const r = await p;
+  assert.equal(r.status, 'OPTIMAL');
+  assert.ok(Math.abs(r.objectiveValue - 34) < 1e-6);
+  assert.equal(s.busy, false);
+  assert.throws(() => s.numVariables, /disposed/);
+  assert.throws(() => x.value(), /no longer valid/);
+});
+
+test('dispose() during a solve() that rejects still frees the model', async () => {
+  // A native rejection (a C++ failure in the solver) cannot be triggered on
+  // demand, so stub the native solve with one that rejects later.
+  const { s } = smallLp();
+  let busy = false;
+  // Native methods are read-only on the prototype: shadow them on the instance.
+  Object.defineProperties(s._n, {
+    isBusy: { value: () => busy },
+    solve: {
+      value: () => {
+        busy = true;
+        return new Promise((resolve, reject) => setImmediate(() => { busy = false; reject(new Error('solve: boom')); }));
+      },
+    },
+  });
+  const p = s.solve();
+  s.dispose();
+  await assert.rejects(p, /solve: boom/);
+  assert.throws(() => s.numVariables, /disposed/);
+});
+
+// `using` needs the syntax (Node.js >= 24), so compile it only where it parses.
+let usingSyntax = null;
+try { usingSyntax = new Function('Solver', 'smallLp', `
+  return function solveInScope() {
+    using s = smallLp().s;
+    return { s, result: s.solve() };
+  };`); } catch { /* no `using` syntax */ }
+
+test('`using` + return s.solve() resolves the Promise, then frees the model', { skip: !usingSyntax && 'no `using` syntax' }, async () => {
+  const { s, result } = usingSyntax(Solver, smallLp)();
+  assert.equal((await result).status, 'OPTIMAL');
+  assert.throws(() => s.numVariables, /disposed/);
 });
 
 test('Symbol.dispose releases the solver at scope exit', { skip: typeof Symbol.dispose !== 'symbol' && 'no Symbol.dispose' }, () => {
