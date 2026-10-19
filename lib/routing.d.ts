@@ -47,24 +47,27 @@ export class RoutingDimension {
 }
 
 /** Valid until the model is solved again, changed or disposed; then every call throws. */
+/** An exact solution value: a number up to 2^53, a bigint beyond, ±Infinity for the int64 extremes. */
+export type SolutionValue = number | bigint;
+
 export class RoutingSolution {
   private constructor();
   readonly valid: boolean;
-  objectiveValue(): number;
-  value(variable: IntVar): number;
-  min(variable: IntVar): number;
-  max(variable: IntVar): number;
+  objectiveValue(): SolutionValue;
+  value(variable: IntVar): SolutionValue;
+  min(variable: IntVar): SolutionValue;
+  max(variable: IntVar): SolutionValue;
   /** Per vehicle, the visited indices from its start to its end. */
   routes(): number[][];
   /** Per vehicle, the cumul at each index of routes(). */
-  cumuls(dimension: RoutingDimension | string): number[][];
+  cumuls(dimension: RoutingDimension | string): SolutionValue[][];
   /** Per vehicle, the slack at each index of routes(), null at the end. */
-  slacks(dimension: RoutingDimension | string): Array<Array<number | null>>;
+  slacks(dimension: RoutingDimension | string): Array<Array<SolutionValue | null>>;
 }
 
 export interface RoutingSolutionSnapshot {
   /** A bigint beyond Number.MAX_SAFE_INTEGER (e.g. large penalties). */
-  objective: number | bigint;
+  objective: SolutionValue;
   /** 0 for the first solution of the solve, then 1, 2... */
   solutionIndex: number;
   /** With includeRoutes: per vehicle, start to end (null if not readable). */
