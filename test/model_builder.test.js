@@ -502,3 +502,15 @@ test('a solution hint is safe with HiGHS (OR-Tools crashes on it; the hint is dr
   assert.deepEqual(out.split('\n').filter((l) => /^(sync|async)/.test(l)).sort(),
     ['async OPTIMAL 7', 'async OPTIMAL 7.5', 'sync OPTIMAL 7', 'sync OPTIMAL 7.5']);
 });
+
+test('an imported model listing a variable twice in a row or hint is refused, not collapsed', () => {
+  const mps = ['NAME dup', 'ROWS', ' N obj', ' L c1', 'COLUMNS', '    x obj -1', '    x c1 1', '    x c1 2',
+    'RHS', '    rhs c1 4', 'ENDATA', ''].join('\n');
+  const model = sample(false).model;
+  // OR-Tools rejects the same model as MODEL_INVALID; keeping only the last coefficient solved x <= 2.
+  assert.throws(() => model.importFromMpsString(mps), /constraint c1: variable 0 appears several times/);
+  assert.equal(model.numConstraints, 2); // unchanged
+  const proto = sample(false).model.exportToProto();
+  proto.solutionHint = { varIndex: [0, 0], varValue: [1, 2] };
+  assert.throws(() => new Model()._loadProto(proto), /solution hint: variable 0 appears several times/);
+});
