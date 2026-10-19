@@ -207,8 +207,12 @@ std::string Abbreviate(absl::string_view text, size_t max_bytes) {
 
 std::string BoundedErrorMessage(absl::string_view message) { return Abbreviate(message, kMaxErrorMessageBytes); }
 
-std::string JsonParseErrorMessage(const absl::Status& status) {
-  return StripStructPath(NormalizeProtobufMessage(status.message()));
+std::string JsonParseErrorMessage(const absl::Status& status) { return NormalizeProtobufMessage(status.message()); }
+
+// Only here: a parameter message has no Struct field, so its errors cannot hold
+// a Struct path, and " @ <struct>" in them is the caller's own value.
+std::string StructParseErrorMessage(const absl::Status& status) {
+  return StripStructPath(JsonParseErrorMessage(status));
 }
 
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out) {
