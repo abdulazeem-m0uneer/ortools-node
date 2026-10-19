@@ -29,12 +29,15 @@
 
 #include "common/async_worker.h"
 #include "constraint_solver/cp_context.h"
+#include "routing/routing_progress.h"
 #include "ortools/constraint_solver/routing.h"
 
 namespace ortools_node {
 
 // Registers RoutingIndexManager, RoutingModel and the routing enums.
 Napi::Object InitRouting(Napi::Env env, Napi::Object exports);
+// Registers native._testing.failNextRoutingSolves(n) for the test suite.
+void InitRoutingSolveTesting(Napi::Env env, Napi::Object testing);
 
 // Receives each solution found while a solve with a callback runs (any thread).
 class SolutionListener {
@@ -167,6 +170,7 @@ class RoutingModelWrap : public Napi::ObjectWrap<RoutingModelWrap> {
   std::shared_ptr<CpContext> context_;
   AsyncSolveState solve_state_;
   SolutionListener* listener_ = nullptr;
+  ProgressMonitor* progress_ = nullptr;  // owned by the solver
   // Fixed when the model is built; readable after dispose.
   int64_t size_ = 0;      // RoutingModel::Size(): indices with a next variable
   int64_t vehicles_ = 0;

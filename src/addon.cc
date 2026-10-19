@@ -71,6 +71,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   InitInt64Testing(env, testing);
   InitCppGuardTesting(env, testing);
   InitSolutionChannelTesting(env, testing);
+  InitRoutingSolveTesting(env, testing);
   exports.Set("_testing", testing);
   InitRoutingSearchParameters(env, exports);
   InitSatParameters(env, exports);

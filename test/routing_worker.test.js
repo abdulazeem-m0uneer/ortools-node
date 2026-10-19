@@ -33,6 +33,25 @@ test('terminating a worker during an async routing solve with onSolution', async
   `);
 });
 
+test('terminating a worker during an async routing solve with a busy onProgress', async () => {
+  await terminateWhileSolving(`
+    const { parentPort, workerData } = require('node:worker_threads');
+    const { RoutingIndexManager, RoutingModel } = require(workerData.root);
+    const data = require(workerData.root + '/test/fixtures/samples.json');
+    const model = new RoutingModel(new RoutingIndexManager(17, 4, 0));
+    model.setArcCostEvaluatorOfAllVehicles(model.registerTransitMatrix(data.distance17));
+    let sent = false;
+    model.solveWithParameters({ localSearchMetaheuristic: 'GUIDED_LOCAL_SEARCH', timeLimit: '1s' }, {
+      progressIntervalMs: 0,
+      onProgress() {
+        if (!sent) { sent = true; parentPort.postMessage('solving'); }
+        const until = Date.now() + 20;
+        while (Date.now() < until);
+      },
+    });
+  `);
+});
+
 test('terminating a worker during a CP solveAsync', async () => {
   await terminateWhileSolving(`
     const { parentPort, workerData } = require('node:worker_threads');

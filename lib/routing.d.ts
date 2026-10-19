@@ -74,10 +74,37 @@ export interface RoutingSolutionSnapshot {
   routes?: number[][] | null;
 }
 
+/** A progress event of a routing solve (SolveOptions.onProgress). */
+export interface RoutingProgress {
+  /** Solutions found so far in this solve. */
+  solutions: number;
+  /** The best objective so far; null before the first solution. */
+  objective: SolutionValue | null;
+  /** Search counters of this solve. */
+  branches: number;
+  failures: number;
+  wallTimeMs: number;
+  /** True for the final event, sent once when the search has ended. */
+  done: boolean;
+}
+
 export interface SolveOptions {
-  /** Called for each solution found; a throw stops the search and rejects. */
+  /**
+   * Called for each solution found; a throw stops the search and rejects.
+   * During an async solve every snapshot is queued, so a slow callback costs
+   * memory (one snapshot per solution), never solver time.
+   */
   onSolution?: (snapshot: RoutingSolutionSnapshot) => void;
   includeRoutes?: boolean;
+  /**
+   * Called at most every progressIntervalMs while the search runs, then once
+   * with done: true. During an async solve, events coalesce while the callback
+   * is busy: the next call carries the latest values. A throw stops the search
+   * and rejects.
+   */
+  onProgress?: (progress: RoutingProgress) => void;
+  /** Minimum time between progress events: an integer in [0, 2^31 - 1]. Default 500. */
+  progressIntervalMs?: number;
 }
 
 export type RoutingParameters = Overrides<RoutingSearchParameters>;
