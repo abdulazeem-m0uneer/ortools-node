@@ -102,54 +102,86 @@ std::string FindInvalidValue(const Message& message, const std::string& path) {
 // caller's text, and libstdc++'s std::regex recurses once per character, so a
 // long value overflowed the stack (never use std::regex in this codebase).
 
-std::string CollapseWhitespace(absl::string_view text) {
-  std::string out;
-  out.reserve(text.size());
-  bool pending_space = false;
-  for (const char c : text) {
-    if (absl::ascii_isspace(static_cast<unsigned char>(c))) {
-      pending_space = !out.empty();
-      continue;
-    }
-    if (pending_space) out += ' ';
-    pending_space = false;
-    out += c;
-  }
-  return out;
-}
+bool IsSpace(char c) { return absl::ascii_isspace(static_cast<unsigned char>(c)); }
 
 size_t SkipDigits(absl::string_view text, size_t i) {
   while (i < text.size() && absl::ascii_isdigit(static_cast<unsigned char>(text[i]))) ++i;
   return i;
 }
 
-// The end of ",? near <digits>:<digits> (offset <digits>)" starting at `start`, or `start`.
+// The end of ",? near <digits>:<digits> (offset <digits>)" starting at
+// `start`, where each space may be any run of whitespace, or `start`.
 size_t MatchJsonPosition(absl::string_view text, size_t start) {
   size_t i = start;
+  // Consumes `literal` after at least one whitespace character; false if absent.
+  const auto spaced = [&](absl::string_view literal) {
+    const size_t before = i;
+    while (i < text.size() && IsSpace(text[i])) ++i;
+    if (i == before || !absl::StartsWith(text.substr(i), literal)) return false;
+    i += literal.size();
+    return true;
+  };
+  const auto digits = [&] {
+    const size_t before = i;
+    i = SkipDigits(text, i);
+    return i != before;
+  };
   if (i < text.size() && text[i] == ',') ++i;
-  if (!absl::StartsWith(text.substr(i), " near ")) return start;
-  const size_t line = i + 6;
-  i = SkipDigits(text, line);
-  if (i == line || i >= text.size() || text[i] != ':') return start;
-  const size_t column = i + 1;
-  i = SkipDigits(text, column);
-  if (i == column || !absl::StartsWith(text.substr(i), " (offset ")) return start;
-  const size_t offset = i + 9;
-  i = SkipDigits(text, offset);
-  if (i == offset || i >= text.size() || text[i] != ')') return start;
+  if (!spaced("near") || !spaced("") || !digits() || i >= text.size() || text[i++] != ':' || !digits() ||
+      !spaced("(offset") || !spaced("") || !digits() || i >= text.size() || text[i] != ')') {
+    return start;
+  }
   return i + 1;
 }
 
-// Positions point into JSON the binding prints internally, not into the caller's input.
-std::string StripJsonPositions(absl::string_view text) {
+// Where protobuf quotes a value, which may be the caller's text verbatim
+// (unescaped, so it may hold quotes itself): a quote after a space, ':' or
+// '(' opens, and one before the end, a space, ';', ',' or ')' closes.
+bool OpensQuote(absl::string_view text, size_t i) {
+  return text[i] == '\'' && (i == 0 || IsSpace(text[i - 1]) || text[i - 1] == ':' || text[i - 1] == '(');
+}
+
+bool ClosesQuote(absl::string_view text, size_t i) {
+  if (text[i] != '\'') return false;
+  if (i + 1 == text.size()) return true;
+  const char next = text[i + 1];
+  return IsSpace(next) || next == ';' || next == ',' || next == ')';
+}
+
+// Collapses protobuf's irregular spacing and drops its one "near L:C (offset N)"
+// position (which points into JSON the binding prints internally), but only
+// outside quoted values, so the caller's echoed text stays exactly as given.
+std::string NormalizeProtobufMessage(absl::string_view text) {
   std::string out;
   out.reserve(text.size());
+  bool quoted = false;
+  bool pending_space = false;
+  bool position_removed = false;
   for (size_t i = 0; i < text.size();) {
-    const size_t end = MatchJsonPosition(text, i);
-    if (end != i) {
-      i = end;
+    if (quoted) {
+      quoted = !ClosesQuote(text, i);
+      out += text[i++];
       continue;
     }
+    // Only where a position can begin (a comma, or the first of a run of
+    // spaces), so a long run is scanned once and the loop stays linear.
+    const bool may_start = text[i] == ',' || (IsSpace(text[i]) && (i == 0 || !IsSpace(text[i - 1])));
+    if (!position_removed && may_start) {
+      const size_t end = MatchJsonPosition(text, i);
+      if (end != i) {
+        position_removed = true;
+        i = end;
+        continue;
+      }
+    }
+    if (IsSpace(text[i])) {
+      pending_space = !out.empty();
+      ++i;
+      continue;
+    }
+    if (pending_space) out += ' ';
+    pending_space = false;
+    quoted = OpensQuote(text, i);
     out += text[i++];
   }
   return out;
@@ -177,7 +209,7 @@ std::string TruncateMessage(std::string text) {
 }  // namespace
 
 std::string JsonParseErrorMessage(const absl::Status& status) {
-  return TruncateMessage(StripStructPath(StripJsonPositions(CollapseWhitespace(status.message()))));
+  return TruncateMessage(StripStructPath(NormalizeProtobufMessage(status.message())));
 }
 
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out) {

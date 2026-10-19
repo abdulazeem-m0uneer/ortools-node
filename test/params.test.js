@@ -233,6 +233,17 @@ test('protobuf parse errors keep the field and expected type but not positions i
   }
 });
 
+test('cleaning protobuf errors never rewrites the caller\'s echoed value', () => {
+  for (const value of ['A near 1:2 (offset 3)', 'A  B', ' lead\ttab  ', "it's  x", 'x, near 1:2 (offset 3)']) {
+    for (const call of [
+      () => validateSatParameters({ searchBranching: value }),
+      () => native.readSatParametersForTesting(JSON.stringify({ searchBranching: value })),
+    ]) {
+      assert.throws(call, (error) => error instanceof TypeError && error.message.includes(`'${value}'`), JSON.stringify(value));
+    }
+  }
+});
+
 // In a child process: a crash here (e.g. a regex executor overflowing the
 // stack on caller-controlled text) must fail this test, not kill the runner.
 test('huge values echoed in parse errors neither crash nor flood the message', () => {
