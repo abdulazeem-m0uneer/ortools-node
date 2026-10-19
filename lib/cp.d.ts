@@ -102,7 +102,11 @@ export interface JsSearchMonitor {
   endInitialPropagation?(): void;
   /** Return false to reject the solution; anything else accepts it. */
   acceptSolution?(): boolean | void;
-  /** Return false to stop the search, true to ask for more solutions. */
+  /**
+   * Return false to stop the search, true to ask for more solutions. Any other
+   * value (undefined, 1...) leaves the decision to the other monitors: solve()
+   * stops at the first solution, newSearch() / nextSolution() visit them all.
+   */
   atSolution?(): boolean | void;
   noMoreSolutions?(): void;
 }
