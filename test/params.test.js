@@ -277,6 +277,25 @@ test('huge values and keys echoed in errors neither crash nor flood the message'
   assert.equal(child.status, 0, child.stderr);
 });
 
+test('circular references are a short TypeError naming the path', () => {
+  const routing = {};
+  routing.localSearchOperators = { self: routing };
+  assert.throws(() => validateRoutingSearchParameters(routing),
+    { name: 'TypeError', message: /^RoutingSearchParameters: 'localSearchOperators\.self' is a circular reference$/ });
+  const list = [];
+  list.push({ again: list });
+  assert.throws(() => validateSatParameters({ subsolverParams: list }),
+    { name: 'TypeError', message: /^SatParameters: 'subsolverParams\[0\]\.again' is a circular reference$/ });
+  const longKeyed = {};
+  longKeyed['k'.repeat(1e6)] = { x: longKeyed };
+  assert.throws(() => validateSatParameters(longKeyed),
+    (error) => error instanceof TypeError && error.message.startsWith('SatParameters: ') &&
+      /circular reference$/.test(error.message) && error.message.length < 1000);
+  // The same object twice, without a cycle, is not circular.
+  const shared = { name: 'a' };
+  assert.doesNotThrow(() => validateSatParameters({ subsolverParams: [shared, shared] }));
+});
+
 test('deeply nested values are a short TypeError, without protobuf-internal Struct paths', () => {
   const nest = (levels, key) => {
     let value = {};
