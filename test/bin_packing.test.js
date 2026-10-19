@@ -206,3 +206,20 @@ test('getters in the problem or options run before the solve and may start anoth
   assert.match(out, /item getter/);
   assert.match(out, /solved 2 2/);
 });
+
+test('a time limit under 1 ms is rounded up to 1 ms; 0 is refused', () => {
+  // 3000 tiny copies in one huge bin: CP-SAT needs about a second to prove 1 bin optimal.
+  const problem = { resourceCapacity: [2 ** 30], item: [{ resourceUsage: [1], numCopies: 3000 }] };
+  let started = Date.now();
+  const full = solveVectorBinPackingSync(problem, { solverType: 'CP_SAT' });
+  const fullMs = Date.now() - started;
+  assert.equal(full.status, 'OPTIMAL');
+  started = Date.now();
+  // MPSolver counts whole milliseconds and reads 0 as "no limit": this used to run to OPTIMAL.
+  solveVectorBinPackingSync(problem, { solverType: 'CP_SAT', timeLimitSeconds: 0.0004 });
+  const limitedMs = Date.now() - started;
+  assert.ok(limitedMs < fullMs / 2, `a 0.4 ms limit took ${limitedMs} ms vs ${fullMs} ms without one`);
+  for (const timeLimitSeconds of [0, -0]) {
+    assert.throws(() => solveVectorBinPackingSync(problem, { timeLimitSeconds }), /timeLimitSeconds must be > 0/);
+  }
+});

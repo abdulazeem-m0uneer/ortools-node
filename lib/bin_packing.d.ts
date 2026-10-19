@@ -36,6 +36,7 @@ export interface VectorBinPackingProblem {
 export interface VectorBinPackingSolution {
   solverInfo: string;
   bins: Array<{ itemIndices: number[]; itemCopies: number[] }>;
+  /** ..._UNSPECIFIED: no packing found within the limits. */
   status: 'OPTIMAL' | 'FEASIBLE' | 'INFEASIBLE' | 'VECTOR_BIN_PACKING_SOLVE_STATUS_UNSPECIFIED';
   objectiveValue: number;
   solveTimeInSeconds: number;
@@ -45,7 +46,7 @@ export interface VectorBinPackingSolution {
 export interface VectorBinPackingOptions {
   /** 'SCIP' when available. */
   solverType?: VectorBinPackingSolverName;
-  /** Infinity by default. */
+  /** > 0; Infinity (the default) for no limit. Limits under 1 ms count as 1 ms. */
   timeLimitSeconds?: number;
   /** An integer in [1, 1024]; 1 by default. */
   numThreads?: number;
