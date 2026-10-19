@@ -44,6 +44,7 @@ export class LinearConstraint {
   terms(): Array<[Variable, number]>;
 }
 
+/** Any other key is a TypeError. */
 export interface VariableOptions {
   lb?: number;
   ub?: number;
@@ -51,6 +52,7 @@ export interface VariableOptions {
   name?: string;
 }
 
+/** Any other key is a TypeError. */
 export interface LinearConstraintOptions {
   lb?: number;
   ub?: number;
@@ -131,6 +133,7 @@ export interface ModelSolveParameters {
   [field: string]: unknown;
 }
 
+/** Any other key is a TypeError. */
 export interface SolveOptions {
   parameters?: SolveParameters;
   modelParameters?: ModelSolveParameters;
