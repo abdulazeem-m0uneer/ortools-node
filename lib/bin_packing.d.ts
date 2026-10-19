@@ -56,6 +56,8 @@ export interface VectorBinPackingOptions {
    * the backend rejects throw a TypeError.
    */
   mipParameters?: string;
+  /** Writes the backend's log to stdout; false by default. OR-Tools 9.14 prints the HiGHS banner regardless. */
+  enableOutput?: boolean;
 }
 
 /** Solves off the main thread. Invalid problems throw a RangeError or TypeError. */

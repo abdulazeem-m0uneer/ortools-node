@@ -72,7 +72,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   returning a `VectorBinPackingSolution` as plain objects; solver type, time
   limit, threads and backend parameters as options. Problems OR-Tools would
   abort on are rejected, and those where nothing can be packed get an exact
-  answer without it. The backend's log always goes to stdout (OR-Tools enables it).
+  answer without it. The backend's log goes to stdout only with
+  `enableOutput: true` (OR-Tools would always enable it). On OR-Tools 9.14
+  HiGHS still prints its banner, here and in `new Solver('HIGHS')`: that
+  release's HiGHS interface drops solver-specific parameters.
 
 ### Changed
 

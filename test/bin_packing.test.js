@@ -2,9 +2,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
-const { solveVectorBinPacking, solveVectorBinPackingSync, VectorBinPackingSolverType } = require('..');
+const { solveVectorBinPacking, solveVectorBinPackingSync, VectorBinPackingSolverType, ortoolsVersion } = require('..');
 
 const SOLVERS = Object.keys(VectorBinPackingSolverType);
+// OR-Tools 9.14's HiGHS interface drops solver-specific parameters, so its banner cannot be turned off.
+const QUIET_SOLVERS = /^9\.14\./.test(ortoolsVersion) ? SOLVERS.filter((s) => s !== 'HIGHS') : SOLVERS;
 
 // Capacity 10; three 6s, three 4s and two 3s: 36 units need 4 bins, and 4 suffice.
 function classic() {
@@ -190,7 +192,7 @@ function runIsolated(body) {
   const script = `const ortools = require(${JSON.stringify(require.resolve('..'))});\n${body}`;
   const child = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 60000 });
   assert.equal(child.status, 0, `child exited with ${child.status} (${child.signal}): ${child.stderr}`);
-  return child.stderr.trim();
+  return child;
 }
 
 test('getters in the problem or options run before the solve and may start another', () => {
@@ -199,11 +201,34 @@ test('getters in the problem or options run before the solve and may start anoth
     let nested;
     const options = { get solverType() { nested = ortools.solveVectorBinPacking(problem); return 'SCIP'; } };
     Promise.all([ortools.solveVectorBinPacking(problem, options), Promise.resolve().then(() => nested)])
-      .then(([outer, inner]) => console.error('solved', outer.objectiveValue, inner.objectiveValue));
+      .then(([outer, inner]) => console.log('solved', outer.objectiveValue, inner.objectiveValue));
     const throwing = { resourceCapacity: [10], get item() { throw new Error('item getter'); } };
-    try { ortools.solveVectorBinPackingSync(throwing); } catch (e) { console.error(e.message); }`);
+    try { ortools.solveVectorBinPackingSync(throwing); } catch (e) { console.log(e.message); }`).stdout;
   assert.match(out, /item getter/);
   assert.match(out, /solved 2 2/);
+});
+
+test('nothing reaches stdout unless enableOutput is set', () => {
+  const quiet = runIsolated(`
+    const problem = { resourceCapacity: [10], item: [{ resourceUsage: [6], numCopies: 3 }, { resourceUsage: [4], numCopies: 3 }] };
+    const solvers = ${JSON.stringify(QUIET_SOLVERS)};
+    const results = solvers.map((solverType) => ortools.solveVectorBinPackingSync(problem, { solverType }).objectiveValue);
+    // A caller's own parameters still apply.
+    if (solvers.includes('SCIP')) results.push(ortools.solveVectorBinPackingSync(problem, { mipParameters: 'limits/nodes = 1000' }).objectiveValue);
+    if (solvers.includes('CP_SAT')) results.push(ortools.solveVectorBinPackingSync(problem, { solverType: 'CP_SAT', mipParameters: 'num_workers:2' }).objectiveValue);
+    Promise.all(solvers.map((solverType) => ortools.solveVectorBinPacking(problem, { solverType, enableOutput: false })))
+      .then((async) => process.stdout.write(JSON.stringify([...results, ...async.map((s) => s.objectiveValue)])));`);
+  const expected = Array(2 * QUIET_SOLVERS.length + ['SCIP', 'CP_SAT'].filter((s) => SOLVERS.includes(s)).length).fill(3);
+  assert.deepEqual(JSON.parse(quiet.stdout), expected);
+  for (const solverType of SOLVERS) {
+    const verbose = runIsolated(`ortools.solveVectorBinPackingSync({ resourceCapacity: [10], item: [{ resourceUsage: [6], numCopies: 3 }] },
+      { solverType: '${solverType}', enableOutput: true });`);
+    assert.notEqual(verbose.stdout + verbose.stderr, '', `${solverType} printed nothing with enableOutput`);
+  }
+});
+
+test('enableOutput must be a boolean', () => {
+  assert.throws(() => solveVectorBinPackingSync(classic(), { enableOutput: 1 }), TypeError);
 });
 
 test('a time limit under 1 ms is rounded up to 1 ms; 0 is refused', () => {
