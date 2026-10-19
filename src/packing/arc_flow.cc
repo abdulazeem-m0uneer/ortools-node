@@ -1,7 +1,18 @@
-// Adapted from ortools/packing/arc_flow_solver.cc (OR-Tools 9.14 and 9.15,
-// identical in both). Copyright 2010-2025 Google LLC, licensed under the Apache
-// License, Version 2.0: http://www.apache.org/licenses/LICENSE-2.0
+// Copyright 2010-2025 Google LLC
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// Modified copy of ortools/packing/arc_flow_solver.cc (OR-Tools 9.14 and 9.15,
+// identical in both); a copy of the License is in LICENSES/Apache-2.0.txt.
 // Changes: the backend's output follows `enable_output` (OR-Tools calls
 // EnableOutput() unconditionally), HiGHS gets output_flag=false while quiet,
 // CHECK failures throw instead of aborting, and the model-dump flag is dropped.

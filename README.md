@@ -469,6 +469,9 @@ are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 
-[MIT](LICENSE) © Abdulazeem Mouneer. OR-Tools is licensed under Apache-2.0. The solvers bundled in its release
-archives carry their own licences: SCIP and SoPlex (Apache-2.0), HiGHS (MIT),
+[MIT](LICENSE) © Abdulazeem Mouneer, except for third-party code listed in
+[NOTICE](NOTICE): `src/packing/arc_flow.cc` is a modified copy of OR-Tools'
+`ortools/packing/arc_flow_solver.cc` (v9.15) under
+[Apache-2.0](LICENSES/Apache-2.0.txt). OR-Tools is licensed under Apache-2.0.
+The solvers bundled in its release archives carry their own licences: SCIP and SoPlex (Apache-2.0), HiGHS (MIT),
 and the COIN-OR solvers CBC and CLP (Eclipse Public License).

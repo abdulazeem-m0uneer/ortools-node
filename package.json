@@ -29,7 +29,7 @@
     "url": "git+https://github.com/abdulazeem-m0uneer/ortools-node.git"
   },
   "author": "Abdulazeem Mouneer (https://github.com/abdulazeem-m0uneer)",
-  "license": "MIT",
+  "license": "MIT AND Apache-2.0",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
   "engines": {
@@ -62,6 +62,8 @@
     "lib/",
     "src/",
     "CMakeLists.txt",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSES/",
+    "NOTICE"
   ]
 }

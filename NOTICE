@@ -1,0 +1,12 @@
+ortools-node
+Copyright (c) Abdulazeem Mouneer. Licensed under the MIT License (LICENSE).
+
+Third-party code
+----------------
+
+src/packing/arc_flow.cc
+  Origin:   google/or-tools v9.15, ortools/packing/arc_flow_solver.cc
+            (identical in v9.14), https://github.com/google/or-tools
+  Copyright 2010-2025 Google LLC
+  License:  Apache License, Version 2.0 (LICENSES/Apache-2.0.txt)
+  Modified: see the "Changes" note at the top of the file.
