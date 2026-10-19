@@ -215,7 +215,9 @@ export class CpModel {
 /** One solution, passed to onSolution while the search runs. */
 export class SolutionSnapshot {
   private constructor();
+  /** Throws unless the last solve ended OPTIMAL or FEASIBLE (Python returns a number). */
   readonly objectiveValue: number;
+  /** Throws after an INFEASIBLE or MODEL_INVALID solve (Python returns a number). */
   readonly bestObjectiveBound: number;
   readonly wallTime: number;
   readonly userTime: number;
@@ -235,9 +237,13 @@ export interface CpSolveOptions {
 export class CpSolver {
   constructor();
   parameters: SatParameters;
-  /** Solves on the threadpool; resolves to the status name. */
+  /**
+   * Solves on the threadpool; resolves to the status name. A model that fails
+   * OR-Tools' validation rejects with 'Invalid CpModel: ...' instead of
+   * resolving 'MODEL_INVALID' (unlike Python).
+   */
   solve(model: CpModel, options?: CpSolveOptions): Promise<CpSolverStatusName>;
-  /** Blocking solve; onSolution is not supported here. */
+  /** Blocking solve; onSolution is not supported here. Throws 'Invalid CpModel: ...' like solve() rejects. */
   solveSync(model: CpModel, options?: { onSolution?: undefined }): CpSolverStatusName;
   /** Stops the running search (also from inside onSolution); false when none is running. */
   stopSearch(): boolean;
@@ -254,7 +260,9 @@ export class CpSolver {
   /** A number, or a BigInt beyond 2^53 - 1. Throws unless the last solve ended OPTIMAL or FEASIBLE. */
   value(expr: LinearExprLike): Int;
   booleanValue(literal: Literal): boolean;
+  /** Throws unless the last solve ended OPTIMAL or FEASIBLE (Python returns a number). */
   readonly objectiveValue: number;
+  /** Throws after an INFEASIBLE or MODEL_INVALID solve (Python returns a number). */
   readonly bestObjectiveBound: number;
   readonly wallTime: number;
   readonly userTime: number;

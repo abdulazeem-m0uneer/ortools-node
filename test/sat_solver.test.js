@@ -115,7 +115,19 @@ test('a time limit hit before any solution leaves status UNKNOWN and values unav
   solver.parameters = { maxTimeInSeconds: 0 };
   assert.equal(solver.solveSync(m), 'UNKNOWN');
   assert.throws(() => solver.value(x), /ended UNKNOWN/);
+  assert.throws(() => solver.objectiveValue, /objectiveValue: no solution, the last solve ended UNKNOWN/);
   assert.equal(typeof solver.bestObjectiveBound, 'number');
+});
+
+test('after INFEASIBLE, objectiveValue and bestObjectiveBound throw (Python returns numbers)', () => {
+  const m = new CpModel();
+  const x = m.newIntVar(0, 5, 'x');
+  m.add(x.ge(10));
+  m.minimize(x);
+  const solver = new CpSolver();
+  assert.equal(solver.solveSync(m), 'INFEASIBLE');
+  assert.throws(() => solver.objectiveValue, /objectiveValue: no solution, the last solve ended INFEASIBLE/);
+  assert.throws(() => solver.bestObjectiveBound, /No objective bound: the last solve ended INFEASIBLE/);
 });
 
 test('values from another model or added after the solve throw', () => {
