@@ -362,15 +362,16 @@ Napi::Value CpSolver::Member(const Napi::CallbackInfo& info) {
   // isMember) values, which may need a bitset OR-Tools CHECKs.
   const bool keeps = kind == "member" || kind == "isMember";
   const bool removes = kind == "notMember" || kind == "isMember";
+  const char* method = kind == "member" ? "memberCt()" : kind == "notMember" ? "notMemberCt()" : "isMemberVar()";
   if ((keeps && KeepingNeedsHugeBitset(expr->Min(), expr->Max(), values)) ||
       (removes && RemovalNeedsHugeBitset(expr->Min(), expr->Max(), values))) {
-    Napi::RangeError::New(env, kind + "()" + HugeBitsetMessage()).ThrowAsJavaScriptException();
+    Napi::RangeError::New(env, method + std::string(HugeBitsetMessage())).ThrowAsJavaScriptException();
     return env.Undefined();
   }
   Solver* s = context_->solver();
-  if (kind == "member") BUILD_CONSTRAINT(env, "memberCt()", s->MakeMemberCt(expr, values));
-  if (kind == "notMember") BUILD_CONSTRAINT(env, "notMemberCt()", s->MakeNotMemberCt(expr, values));
-  if (kind == "isMember") BUILD_EXPR(env, "isMemberVar()", s->MakeIsMemberVar(expr, values));
+  if (kind == "member") BUILD_CONSTRAINT(env, method, s->MakeMemberCt(expr, values));
+  if (kind == "notMember") BUILD_CONSTRAINT(env, method, s->MakeNotMemberCt(expr, values));
+  if (kind == "isMember") BUILD_EXPR(env, method, s->MakeIsMemberVar(expr, values));
   THROW_TYPE_AND_RETURN(env, "unknown membership kind '" + kind + "'", env.Undefined());
 }
 
