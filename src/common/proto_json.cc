@@ -110,7 +110,9 @@ size_t SkipDigits(absl::string_view text, size_t i) {
 }
 
 // The end of ",? near <digits>:<digits> (offset <digits>)" starting at
-// `start`, where each space may be any run of whitespace, or `start`.
+// `start`, where each space may be any run of whitespace, or `start`. Only
+// where the ':' that follows every real position comes next, so a lookalike
+// inside the caller's value is not one.
 size_t MatchJsonPosition(absl::string_view text, size_t start) {
   size_t i = start;
   // Consumes `literal` after at least one whitespace character; false if absent.
@@ -128,7 +130,8 @@ size_t MatchJsonPosition(absl::string_view text, size_t start) {
   };
   if (i < text.size() && text[i] == ',') ++i;
   if (!spaced("near") || !spaced("") || !digits() || i >= text.size() || text[i++] != ':' || !digits() ||
-      !spaced("(offset") || !spaced("") || !digits() || i >= text.size() || text[i] != ')') {
+      !spaced("(offset") || !spaced("") || !digits() || i + 1 >= text.size() || text[i] != ')' ||
+      text[i + 1] != ':') {
     return start;
   }
   return i + 1;
