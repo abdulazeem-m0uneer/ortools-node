@@ -88,8 +88,12 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `CpSolver`: `solve()` on the threadpool and `solveSync()`, `SatParameters` as
   a plain object, `stopSearch()`, values (BigInts beyond 2^53), objective,
   bound and statistics.
-  Invalid models throw OR-Tools' own message instead of aborting the process;
-  values throw when the last solve found no solution.
+  Invalid models throw OR-Tools' own message instead of aborting the process
+  (`solve()` rejects with `Invalid CpModel: ...` rather than resolving
+  `MODEL_INVALID` as Python does); values and `objectiveValue` throw when the
+  last solve found no solution, and `bestObjectiveBound` after `INFEASIBLE`.
+  Comparing with `==` either int64 extreme, `>= INT64_MAX` or `<= INT64_MIN`
+  throws a `RangeError`, as Python's `ValueError`.
 - CP-SAT solution callbacks: `solve(model, { onSolution })` passes each solution
   to JS while the search runs; `stopSearch()` works from inside it, and an
   exception stops the search and rejects `solve()`.
