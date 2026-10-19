@@ -247,6 +247,14 @@ test('removeValues() on a wide domain accepts bound values in any order', () => 
   }
 });
 
+test('a refused wide-domain membership names the public method', () => {
+  const s = new CpSolver();
+  const x = s.intVar(0, 2 ** 40);
+  assert.throws(() => s.memberCt(x, [0, 5, 2 ** 40]), /^RangeError: memberCt\(\): OR-Tools cannot make holes/);
+  assert.throws(() => s.notMemberCt(x, [5]), /^RangeError: notMemberCt\(\): OR-Tools cannot make holes/);
+  assert.throws(() => s.isMemberVar(x, [5]), /^RangeError: isMemberVar\(\): OR-Tools cannot make holes/);
+});
+
 test('removeValues() moves bounds and keeps holes when given in any order', () => {
   const s = new CpSolver();
   const x = s.intVar(0, 10).removeValues([10, 5, 0, 5]);
