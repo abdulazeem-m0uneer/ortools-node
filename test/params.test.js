@@ -203,6 +203,14 @@ test('bigints are encoded exactly, even with a BigInt.prototype.toJSON polyfill'
   }
 });
 
+test('strings must be well-formed Unicode', () => {
+  assert.throws(() => validateRoutingSearchParameters({ logTag: 'a\uD800' }),
+    { name: 'TypeError', message: /'logTag' must be well-formed Unicode/ });
+  assert.throws(() => validateSatParameters({ subsolvers: ['default_lp', '\uDC00b'] }),
+    { name: 'TypeError', message: /'subsolvers\[1\]' must be well-formed Unicode/ });
+  assert.equal(validateRoutingSearchParameters({ logTag: 'r\u00e9seau \u{1F69A}' }).logTag, 'r\u00e9seau \u{1F69A}');
+});
+
 test('integer fields given as strings take only canonical decimals that fit the field type', () => {
   for (const bad of ['1e3', '007', ' 7', '7 ', '+7', '-0', '1.5', '', '-', '0x10']) {
     assert.throws(() => validateRoutingSearchParameters({ solutionLimit: bad }),
