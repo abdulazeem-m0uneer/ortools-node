@@ -11,7 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { summary } = require('../lib/stats');
 const { compareCases, canonical } = require('./lib/parity');
-const { RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES } = require('./bench');
+const { RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES } = require('./lib/matrix');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 /** Python run, its Node counterpart (same pin, same allowed-vehicles mode). */
