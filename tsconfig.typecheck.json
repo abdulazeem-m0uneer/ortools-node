@@ -6,6 +6,8 @@
     "target": "es2022",
     "module": "commonjs"
   },
-  "files": ["lib/index.d.ts"],
-  "include": ["test/types/*.ts"]
+  "include": [
+    "lib/**/*.d.ts",
+    "test/types/*.ts"
+  ]
 }
