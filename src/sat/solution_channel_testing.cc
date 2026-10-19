@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 
+#include "common/napi_util.h"
 #include "sat/solution_channel.h"
 
 namespace ortools_node {
@@ -19,7 +20,8 @@ void InitSolutionChannelTesting(Napi::Env env, Napi::Object testing) {
   // else returns whether the search was told to stop.
   testing.Set("publishSolutionFailure", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
     Napi::Env env = info.Env();
-    const std::string kind = info[0].ToString().Utf8Value();
+    if (!info[0].IsString()) THROW_TYPE_AND_RETURN(env, "kind must be a string", env.Undefined());
+    const std::string kind = info[0].As<Napi::String>().Utf8Value();
     // Static: the channel lives on until its thread-safe function is finalized.
     static std::atomic<bool> stop_flag;
     stop_flag.store(false);

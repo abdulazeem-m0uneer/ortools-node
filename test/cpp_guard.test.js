@@ -42,3 +42,19 @@ test('threadpool: Fail(message, true) rejects with a RangeError', async () => {
 test('threadpool: Fail("") still rejects, with a non-empty message', async () => {
   await assert.rejects(guardCppAsync('fail_empty'), (e) => e.constructor === Error && e.message === 'native operation failed');
 });
+
+test('the test hooks throw a TypeError for a kind that is not a string instead of aborting', () => {
+  const { spawnSync } = require('node:child_process');
+  const script = `const { native } = require(${JSON.stringify(require('node:path').join(__dirname, '..'))});
+    for (const hook of ['guardCpp', 'guardCppAsync', 'publishSolutionFailure']) {
+      for (const kind of [Symbol('s'), 1, undefined]) {
+        try { native._testing[hook](kind); console.log(hook + ': no error'); }
+        catch (e) { console.log(hook + ': ' + e.constructor.name + ': ' + e.message); }
+      }
+    }`;
+  const r = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  const expected = ['guardCpp', 'guardCppAsync', 'publishSolutionFailure']
+    .flatMap((hook) => Array(3).fill(`${hook}: TypeError: kind must be a string`));
+  assert.deepEqual(r.stdout.trim().split('\n'), expected);
+});

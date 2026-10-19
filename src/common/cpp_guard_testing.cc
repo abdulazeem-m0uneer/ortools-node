@@ -9,6 +9,7 @@
 
 #include "common/async_worker.h"
 #include "common/cpp_guard.h"
+#include "common/napi_util.h"
 
 namespace ortools_node {
 namespace {
@@ -45,12 +46,14 @@ static_assert(!std::is_convertible_v<GuardWorker*, Napi::AsyncWorker*>, "Promise
 
 void InitCppGuardTesting(Napi::Env env, Napi::Object testing) {
   testing.Set("guardCpp", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
-    const std::string kind = info[0].ToString().Utf8Value();
+    if (!info[0].IsString()) THROW_TYPE_AND_RETURN(info.Env(), "kind must be a string", info.Env().Undefined());
+    const std::string kind = info[0].As<Napi::String>().Utf8Value();
     if (!GuardCpp(info.Env(), "guardCpp", [&] { Raise(kind); })) return info.Env().Undefined();
     return Napi::String::New(info.Env(), "ok");
   }));
   testing.Set("guardCppAsync", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
-    auto* worker = new GuardWorker(info.Env(), info.This().As<Napi::Object>(), info[0].ToString().Utf8Value());
+    if (!info[0].IsString()) THROW_TYPE_AND_RETURN(info.Env(), "kind must be a string", info.Env().Undefined());
+    auto* worker = new GuardWorker(info.Env(), info.This().As<Napi::Object>(), info[0].As<Napi::String>().Utf8Value());
     worker->Queue();
     return worker->Promise();
   }));
