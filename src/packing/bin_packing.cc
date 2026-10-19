@@ -203,8 +203,13 @@ bool CheckMipParameters(Napi::Env env, MPSolver::OptimizationProblemType backend
     return false;
   }
   if (accepted && problem.empty()) return true;
-  Napi::TypeError::New(env, "mipParameters rejected by " + backend_name + (problem.empty() ? "" : ": " + problem))
-      .ThrowAsJavaScriptException();
+  // Their MPSolver interfaces refuse any non-empty text, valid or not.
+  const bool takes_none =
+      backend == MPSolver::CBC_MIXED_INTEGER_PROGRAMMING || backend == MPSolver::HIGHS_MIXED_INTEGER_PROGRAMMING;
+  const std::string message =
+      takes_none ? "mipParameters: " + backend_name + " takes none here (only SCIP and CP_SAT do)"
+                 : "mipParameters rejected by " + backend_name + (problem.empty() ? "" : ": " + problem);
+  Napi::TypeError::New(env, message).ThrowAsJavaScriptException();
   return false;
 }
 

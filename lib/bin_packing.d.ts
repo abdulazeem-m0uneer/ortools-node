@@ -50,7 +50,11 @@ export interface VectorBinPackingOptions {
   timeLimitSeconds?: number;
   /** An integer in [1, 1024]; 1 by default. */
   numThreads?: number;
-  /** Backend-specific parameter text; parameters the backend rejects throw a TypeError. */
+  /**
+   * Backend-specific parameter text, for SCIP and CP_SAT only: CBC and HIGHS
+   * take none here, so any non-empty text throws a TypeError for them. Parameters
+   * the backend rejects throw a TypeError.
+   */
   mipParameters?: string;
 }
 
