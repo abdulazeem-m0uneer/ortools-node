@@ -104,6 +104,19 @@ test('minimize() sets scaling factor 1, as Python does, also after a maximize()'
   assert.deepEqual(m.toJSON().objective, { vars: [], coeffs: [], offset: 4, scalingFactor: 1 });
 });
 
+test('maximize() of a plain integer is stored unnegated, as Python does; a constant expression is not', () => {
+  const m = new CpModel();
+  const x = m.newIntVar(0, 5, 'x');
+  m.maximize(4);
+  assert.deepEqual(m.toJSON().objective, { vars: [], coeffs: [], offset: 4, scalingFactor: 1 });
+  m.maximize(-3n);
+  assert.deepEqual(m.toJSON().objective, { vars: [], coeffs: [], offset: -3, scalingFactor: 1 });
+  m.maximize(CpLinearExpr.sum([4]));
+  assert.deepEqual(m.toJSON().objective, { vars: [], coeffs: [], offset: -4, scalingFactor: -1 });
+  m.maximize(x.plus(5));
+  assert.deepEqual(m.toJSON().objective, { vars: [0], coeffs: ['-1'], offset: -5, scalingFactor: -1 });
+});
+
 test('a deep .plus() chain does not overflow the stack', () => {
   const m = new CpModel();
   const x = m.newIntVar(0, 1, 'x');
