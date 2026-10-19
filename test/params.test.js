@@ -189,6 +189,20 @@ test('integer fields take any exact integer given as a JS number', () => {
   assert.equal(validateSatParameters({ randomSeed: 2 ** 31 - 1 }).randomSeed, 2 ** 31 - 1);
 });
 
+test('bigints are encoded exactly, even with a BigInt.prototype.toJSON polyfill', () => {
+  const descriptor = Object.getOwnPropertyDescriptor(BigInt.prototype, 'toJSON');
+  try {
+    BigInt.prototype.toJSON = function toJSON() { return Number(this); }; // a common, lossy polyfill
+    assert.equal(validateRoutingSearchParameters({ solutionLimit: 9007199254740993n }).solutionLimit, '9007199254740993');
+    assert.equal(validateRoutingSearchParameters({ solutionLimit: Object(9007199254740993n) }).solutionLimit, '9007199254740993');
+    assert.deepEqual(validateSatParameters({ subsolverParams: [{ name: 'a', maxNumberOfConflicts: -9007199254740993n }] })
+      .subsolverParams[0].maxNumberOfConflicts, '-9007199254740993');
+  } finally {
+    if (descriptor) Object.defineProperty(BigInt.prototype, 'toJSON', descriptor);
+    else delete BigInt.prototype.toJSON;
+  }
+});
+
 test('integer fields given as strings take only canonical decimals that fit the field type', () => {
   for (const bad of ['1e3', '007', ' 7', '7 ', '+7', '-0', '1.5', '', '-', '0x10']) {
     assert.throws(() => validateRoutingSearchParameters({ solutionLimit: bad }),
