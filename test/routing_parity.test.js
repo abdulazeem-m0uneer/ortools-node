@@ -211,3 +211,44 @@ test('vrp_drop_nodes (deterministic): objective 7936, drops nodes 6 and 15', asy
   assert.deepEqual(dropped, [6, 15]);
   for (const node of dropped) assert.equal(solution.value(model.activeVar(manager.nodeToIndex(node))), 0);
 });
+
+// The cheapest route (p1 p2 d1 d2) delivers in FIFO order, so a LIFO policy
+// must change it: this fails if the policy is not forwarded.
+function lifoInstance() {
+  const manager = new RoutingIndexManager(5, 1, 0);
+  const model = new RoutingModel(manager);
+  const matrix = Array.from({ length: 5 }, (_, i) => Array.from({ length: 5 }, (_, j) => (i === j ? 0 : 10)));
+  for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 4], [4, 0]]) matrix[a][b] = 1;
+  model.setArcCostEvaluatorOfAllVehicles(model.registerTransitMatrix(matrix));
+  model.addPickupAndDelivery(1, 3);
+  model.addPickupAndDelivery(2, 4);
+  return model;
+}
+
+function isLifo(route) {
+  const deliveryOf = { 1: 3, 2: 4 };
+  const stack = [];
+  for (const i of route.slice(1, -1)) {
+    if (deliveryOf[i] !== undefined) stack.push(deliveryOf[i]);
+    else if (stack.pop() !== i) return false;
+  }
+  return true;
+}
+
+test('LIFO and a per-vehicle policy change the routes observably', () => {
+  const free = lifoInstance().solveWithParametersSync(PARALLEL_CHEAPEST_INSERTION);
+  assert.deepEqual(free.routes(), [[0, 1, 2, 3, 4, 5]]);
+  assert.equal(isLifo(free.routes()[0]), false);
+  const all = lifoInstance();
+  all.setPickupAndDeliveryPolicyOfAllVehicles(PickupAndDeliveryPolicy.PICKUP_AND_DELIVERY_LIFO);
+  const lifo = all.solveWithParametersSync(PARALLEL_CHEAPEST_INSERTION);
+  assert.ok(isLifo(lifo.routes()[0]), JSON.stringify(lifo.routes()));
+  assert.ok(lifo.objectiveValue() > free.objectiveValue());
+  const one = lifoInstance();
+  one.setPickupAndDeliveryPolicyOfVehicle(PickupAndDeliveryPolicy.PICKUP_AND_DELIVERY_LIFO, 0);
+  const perVehicle = one.solveWithParametersSync(PARALLEL_CHEAPEST_INSERTION);
+  assert.ok(isLifo(perVehicle.routes()[0]), JSON.stringify(perVehicle.routes()));
+  const fifo = lifoInstance();
+  fifo.setPickupAndDeliveryPolicyOfVehicle(PickupAndDeliveryPolicy.PICKUP_AND_DELIVERY_FIFO, 0);
+  assert.deepEqual(fifo.solveWithParametersSync(PARALLEL_CHEAPEST_INSERTION).routes(), free.routes());
+});

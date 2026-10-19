@@ -602,3 +602,36 @@ test('an open CP search on the model solver blocks the model', () => {
   s.endSearch();
   assert.ok(model.solveWithParametersSync(PCA));
 });
+
+// One vehicle on a line 0-1-2: every route costs 4 and ends with cumul 4, so
+// each cost term below has an exact, hand-computed contribution.
+function lineModel() {
+  const manager = new RoutingIndexManager(3, 1, 0);
+  const model = new RoutingModel(manager);
+  const t = model.registerTransitMatrix([[0, 1, 2], [1, 0, 1], [2, 1, 0]]);
+  model.setArcCostEvaluatorOfAllVehicles(t);
+  model.addDimension(t, 0, 100, true, 'D');
+  return { model, d: model.getDimensionOrDie('D') };
+}
+
+test('span cost coefficients and soft cumul bounds add their exact cost', () => {
+  const base = lineModel();
+  assert.equal(base.model.solveWithParametersSync(PCA).objectiveValue(), 4);
+
+  const all = lineModel();
+  all.d.setSpanCostCoefficientForAllVehicles(2);
+  assert.equal(all.model.solveWithParametersSync(PCA).objectiveValue(), 4 + 2 * 4);
+
+  const one = lineModel();
+  one.d.setSpanCostCoefficientForVehicle(3, 0);
+  assert.equal(one.model.solveWithParametersSync(PCA).objectiveValue(), 4 + 3 * 4);
+
+  const upper = lineModel();
+  upper.d.setCumulVarSoftUpperBound(upper.model.end(0), 1, 5);
+  assert.equal(upper.model.solveWithParametersSync(PCA).objectiveValue(), 4 + (4 - 1) * 5);
+
+  const lower = lineModel();
+  lower.d.setCumulVarSoftLowerBound(lower.model.end(0), 10, 2);
+  const solution = lower.model.solveWithParametersSync(PCA);
+  assert.equal(solution.objectiveValue(), 4 + (10 - 4) * 2);
+});
