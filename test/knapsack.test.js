@@ -174,31 +174,93 @@ test('MIP types honour a time limit of 0 or under 1 ms instead of solving withou
   for (const line of out.split('\n')) assert.match(line, / false true$/);
 });
 
-test('MIP types claim optimality only when their 1e-4 relative gap is under one unit of profit', () => {
+test('MIP types claim optimality only where their result is provably exact', () => {
+  const CBC = 'KNAPSACK_MULTIDIMENSION_CBC_MIP_SOLVER';
+  const SCIP = 'KNAPSACK_MULTIDIMENSION_SCIP_MIP_SOLVER';
   const mipTypes = MULTI_TYPES.filter((t) => t.endsWith('_MIP_SOLVER'));
   // The MIP stops within a relative gap of 1e-4: SCIP returned 9900101 and CBC 22900107 as optimal.
+  // CBC also proves wrong bounds: it returned 2000 (optimum 2007) and 1430 (optimum 1431) as optimal.
   const counterexamples = [
     [[7500093, 3100048, 2400084, 4900023, 1900030], [[75, 31, 24, 49, 19]], [99], 9900177],
     [[4300062, 6000063, 5600017, 5600006, 6000001, 2300012, 7400022, 8600032], [[43, 60, 56, 56, 60, 23, 74, 86]],
       [229], 22900108],
+    [[358, 65, 1208, 267, 455, 1462, 1483, 234, 1256, 250, 1507, 194, 346, 863],
+      [[22, 4, 74, 16, 28, 90, 91, 14, 77, 15, 93, 12, 21, 53]], [122], 2007],
+    [[15, 103, 93, 336, 55, 258, 129, 33, 152, 458, 216, 254, 210, 175, 416, 478, 190, 43, 219],
+      [[3, 21, 19, 68, 11, 52, 26, 6, 31, 93, 44, 52, 43, 35, 85, 97, 38, 8, 44]], [287], 1431],
   ];
   for (const type of mipTypes) {
-    for (const [profits, weights, capacities, optimum] of counterexamples) {
-      const s = new KnapsackSolver(type).init(profits, weights, capacities);
-      const best = s.solveSync();
-      assert.ok(best <= optimum, type);
-      assertConsistent(s, profits, weights, capacities, best);
-      assert.equal(s.isSolutionOptimal(), false, `${type} ${best}`);
+    for (const reduce of [true, false]) {
+      for (const [profits, weights, capacities, optimum] of counterexamples) {
+        const s = new KnapsackSolver(type).setUseReduction(reduce).init(profits, weights, capacities);
+        const best = s.solveSync();
+        assert.ok(best <= optimum, type);
+        assertConsistent(s, profits, weights, capacities, best);
+        if (s.isSolutionOptimal()) assert.equal(best, optimum, `${type} reduction=${reduce} claims ${best}`);
+      }
     }
-    // Below 1e4 in total the gap is under 1, so the integer profit is exact.
-    const s = new KnapsackSolver(type).init([4999, 5000], [[1, 1]], [1]);
+  }
+  if (mipTypes.includes(CBC)) {
+    // CBC's own proof cannot be trusted, at any size.
+    const s = new KnapsackSolver(CBC).init([4999, 5000], [[1, 1]], [1]);
     assert.equal(s.solveSync(), 5000);
-    assert.equal(s.isSolutionOptimal(), true, `${type} at a profit sum of 9999`);
-    assert.equal(s.init([5000, 5000], [[1, 1]], [1]).solveSync(), 5000);
-    assert.equal(s.isSolutionOptimal(), false, `${type} at a profit sum of 10000`);
+    assert.equal(s.isSolutionOptimal(), false);
+  }
+  if (mipTypes.includes(SCIP)) {
+    const s = new KnapsackSolver(SCIP);
+    // SCIP's gap of 1e-4 times a found profit under 1e4 is under 1, so the integer profit is exact.
+    assert.equal(s.init([9999, 5000], [[1, 1]], [1]).solveSync(), 9999);
+    assert.equal(s.isSolutionOptimal(), true, 'SCIP at a found profit of 9999');
+    assert.equal(s.init([10000, 5000], [[1, 1]], [1]).solveSync(), 10000);
+    assert.equal(s.isSolutionOptimal(), false, 'SCIP at a found profit of 10000');
     // Items weighing nothing are packed outside the MIP and do not count.
     assert.equal(s.init([9998, 1, 50000], [[1, 1, 0]], [1]).solveSync(), 59998);
-    assert.equal(s.isSolutionOptimal(), true, `${type} with a weightless item`);
+    assert.equal(s.isSolutionOptimal(), true, 'SCIP with a weightless item');
+    assert.equal(s.init(...counterexamples[2].slice(0, 3)).solveSync(), 2007);
+    assert.equal(s.isSolutionOptimal(), true);
+  }
+});
+
+test('CP-SAT reports the profit of the items it packs (OR-Tools truncates 1827.9999999999998)', () => {
+  const cases = [
+    [[82, 524, 153, 771, 261, 589, 447, 625, 136, 756],
+      [[9, 62, 18, 92, 31, 70, 53, 75, 16, 90], [38, 43, 5, 97, 16, 90, 36, 14, 44, 30]], [350, 82], 1828],
+    [[2046, 1094, 1102, 254, 605, 1281], [[93, 68, 100, 31, 75, 61], [83, 54, 67, 6, 67, 16]], [142, 97], 2375],
+  ];
+  for (const [profits, weights, capacities, optimum] of cases) {
+    for (const scale of [1, 2, 3, 10]) {
+      const scaled = profits.map((p) => p * scale);
+      const s = new KnapsackSolver('KNAPSACK_MULTIDIMENSION_CP_SAT_SOLVER').init(scaled, weights, capacities);
+      const best = s.solveSync();
+      assert.equal(best, optimum * scale);
+      assertConsistent(s, scaled, weights, capacities, best);
+      assert.equal(s.isSolutionOptimal(), true);
+    }
+  }
+});
+
+test('every solver type reports the profit of the items it packs, and is right when it claims optimality', () => {
+  let seed = 12345;
+  const rnd = (m) => { seed = (seed * 48271) % 2147483647; return seed % m; };
+  for (let instance = 0; instance < 25; instance++) {
+    const n = 6 + rnd(7);
+    const dims = 1 + rnd(2);
+    const weights = Array.from({ length: dims }, () => Array.from({ length: n }, () => 1 + rnd(100)));
+    // Strongly correlated profits are the hard case for bounds.
+    const profits = weights[0].map((w) => w * (5 + rnd(20)) + rnd(10));
+    const capacities = weights.map((row) => Math.floor(row.reduce((a, b) => a + b) / (2 + rnd(2))));
+    const optimum = bruteForce(profits, weights, capacities);
+    for (const type of dims === 1 ? ALL_TYPES : MULTI_TYPES) {
+      for (const reduce of [true, false]) {
+        const s = new KnapsackSolver(type).setUseReduction(reduce).init(profits, weights, capacities);
+        const best = s.solveSync();
+        const what = `${type} reduction=${reduce} instance ${instance}`;
+        assertConsistent(s, profits, weights, capacities, best);
+        assert.ok(best <= optimum, what);
+        if (s.isSolutionOptimal()) assert.equal(best, optimum, what);
+        s.dispose();
+      }
+    }
   }
 });
 

@@ -39,7 +39,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `KnapsackSolver` (OR-Tools' `KnapsackSolver`): 0-1 knapsack problems with one
   or several dimensions, `solve()` off the main thread or `solveSync()`, time
   limit and reduction settings. `KnapsackSolverType` lists the solver types this
-  build can run. Malformed problems throw JS errors instead of aborting.
+  build can run. Malformed problems throw JS errors instead of aborting. The
+  profit returned is that of the packed items (OR-Tools truncates CP-SAT's
+  objective), and `isSolutionOptimal()` is never true for CBC (its bounds can be
+  wrong), nor for SCIP once the profit found reaches 1e4 (its 1e-4 gap).
 - `modelBuilder` (Python's `model_builder`): `Model` with variables, linear and
   enforced (indicator) constraints, objective, hints, `clone()`, LP / MPS export
   and import; `LinearExpr` builders (`sum`, `weightedSum`, `plus`, `times`,
