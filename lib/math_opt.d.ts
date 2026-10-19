@@ -1,5 +1,6 @@
 // Python's ortools.math_opt.python.mathopt, exported as `mathOpt`.
 import { BoundedLinearExpression, LinearExpr, LinearExprLike, VariableBase } from './linear_expr';
+import { Int64 } from './params';
 
 export { BoundedLinearExpression, LinearExpr, LinearExprLike };
 
@@ -105,8 +106,9 @@ export class Model {
 export interface SolveParameters {
   /** Seconds (Infinity: none), or a protobuf Duration string such as "1.5s". */
   timeLimit?: number | string;
-  iterationLimit?: number;
-  nodeLimit?: number;
+  /** int64 fields: a number, a BigInt or a decimal string. */
+  iterationLimit?: Int64;
+  nodeLimit?: Int64;
   cutoffLimit?: number;
   objectiveLimit?: number;
   bestBoundLimit?: number;
