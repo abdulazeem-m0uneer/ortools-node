@@ -39,7 +39,7 @@ export class KnapsackSolver {
   bestSolutionContains(item: number): boolean;
   /** False when the time limit stopped the search early. */
   isSolutionOptimal(): boolean;
-  /** Seconds per solve; Infinity (the default) means no limit. */
+  /** Seconds per solve; Infinity (the default) means no limit. The MIP types count limits under 1 ms (0 included) as 1 ms. */
   setTimeLimit(seconds: number): this;
   /** On by default; a change needs a new init(). */
   setUseReduction(useReduction: boolean): this;

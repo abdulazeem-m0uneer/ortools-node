@@ -28,6 +28,7 @@
 #include "common/async_worker.h"
 #include "common/cpp_guard.h"
 #include "common/int64.h"
+#include "common/mp_time_limit.h"
 #include "common/napi_util.h"
 #include "ortools/algorithms/knapsack_solver.h"
 #include "ortools/linear_solver/linear_solver.h"
@@ -149,7 +150,7 @@ class KnapsackSolver : public Napi::ObjectWrap<KnapsackSolver> {
   int64_t RunSolve() {
     if (native_item_count_ == 0) return forced_profit_;
     // OR-Tools starts the clock when the limit is set, so restart it here.
-    solver_->set_time_limit(time_limit_seconds_);
+    solver_->set_time_limit(NativeTimeLimit(time_limit_seconds_));
     return forced_profit_ + solver_->Solve();
   }
   void FinishSolve(bool succeeded) {
@@ -198,6 +199,10 @@ class KnapsackSolver : public Napi::ObjectWrap<KnapsackSolver> {
   }
   bool ValidateShape(Napi::Env env, size_t num_items, size_t num_dimensions) const;
   bool CheckNumericRange(Napi::Env env, const std::vector<int64_t>& weight_sums) const;
+  // The other algorithms honour 0 and stop at once.
+  double NativeTimeLimit(double seconds) const {
+    return type_->needs_mp_backend ? MpSolverTimeLimitSeconds(seconds) : seconds;
+  }
   void LoadProblem(const std::vector<int64_t>& profits, const std::vector<std::vector<int64_t>>& weights,
                    const std::vector<int64_t>& capacities);
 
@@ -452,7 +457,9 @@ Napi::Value KnapsackSolver::SetTimeLimit(const Napi::CallbackInfo& info) {
     return env.Undefined();
   }
   // Also bounds the reduction init() runs. MPSolver::infinity() is a real infinity.
-  if (!GuardCpp(env, "setTimeLimit", [&] { solver_->set_time_limit(seconds); })) return env.Undefined();
+  if (!GuardCpp(env, "setTimeLimit", [&] { solver_->set_time_limit(NativeTimeLimit(seconds)); })) {
+    return env.Undefined();
+  }
   time_limit_seconds_ = seconds;
   return env.Undefined();
 }

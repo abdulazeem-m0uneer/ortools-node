@@ -34,6 +34,7 @@
 #include "absl/strings/str_cat.h"
 #include "common/async_worker.h"
 #include "common/cpp_guard.h"
+#include "common/mp_time_limit.h"
 #include "common/napi_util.h"
 #include "common/proto_json.h"
 #include "common/proto_to_js.h"
@@ -57,7 +58,6 @@ constexpr int64_t kMaxTotalCopies = int64_t{1} << 30;
 // About a gigabyte of graph-builder states; see EstimatedDpStates().
 constexpr double kMaxDpStates = 1e7;
 constexpr int kMaxThreads = 1024;
-constexpr double kMinTimeLimitSeconds = 0.001;
 
 // MIP backends this build has whose SetNumThreads() works.
 bool IsUsableBackend(MPSolver::OptimizationProblemType type) {
@@ -240,9 +240,7 @@ bool ReadSolveInput(const Napi::CallbackInfo& info, SolveInput* input) {
     Napi::RangeError::New(env, "timeLimitSeconds must be > 0 (Infinity for no limit)").ThrowAsJavaScriptException();
     return false;
   }
-  // MPSolver keeps whole milliseconds and reads 0 as "no limit": the shortest
-  // limit it can honour is 1 ms.
-  input->time_limit_seconds = std::max(seconds, kMinTimeLimitSeconds);
+  input->time_limit_seconds = MpSolverTimeLimitSeconds(seconds);
   double threads;
   if (!ReadNumber(env, info[3], /*allow_infinite=*/false, "numThreads", &threads)) return false;
   if (threads != std::floor(threads) || threads < 1 || threads > kMaxThreads) {
