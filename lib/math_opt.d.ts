@@ -192,4 +192,5 @@ export class SolveResult {
 
 /** Solves off the main thread. The model may change while it runs. */
 export function solve(model: Model, solverType: SolverTypeName, options?: SolveOptions): Promise<SolveResult>;
+/** Blocks the calling thread; an interrupter is a TypeError (use solve()). */
 export function solveSync(model: Model, solverType: SolverTypeName, options?: Omit<SolveOptions, 'interrupter'>): SolveResult;

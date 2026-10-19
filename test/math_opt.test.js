@@ -348,6 +348,13 @@ test('a SolveInterrupter stops a running solve and stays interrupted', async () 
   assert.throws(() => solve(gettingStarted().model, 'GLOP', { interrupter: {} }), /interrupter must be a SolveInterrupter/);
 });
 
+test('solveSync() rejects an interrupter instead of ignoring it', () => {
+  const { model } = gettingStarted();
+  assert.throws(() => solveSync(model, 'GLOP', { interrupter: new SolveInterrupter() }),
+    { name: 'TypeError', message: /interrupter needs solve\(\)/ });
+  assert.equal(solveSync(model, 'GLOP', { interrupter: undefined }).termination.reason, 'OPTIMAL');
+});
+
 test('a time limit stops a hard model early', () => {
   const started = Date.now();
   const result = solveSync(marketSplit(), 'CP_SAT', { parameters: { timeLimit: 0.2 } });
