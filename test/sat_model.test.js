@@ -3,7 +3,7 @@
 // layer produces (checked against Python's cp_model) and argument validation.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { CpModel, CpLinearExpr, Domain, IntVar, NotBooleanVariable, BoundedLinearExpr, CpConstraint } = require('..');
+const { CpModel, CpSolver, CpLinearExpr, Domain, IntVar, NotBooleanVariable, BoundedLinearExpr, CpConstraint } = require('..');
 
 const INT64_MAX = '9223372036854775807';
 const INT64_MIN = '-9223372036854775808';
@@ -440,4 +440,30 @@ test('addHint on a negated literal takes booleans, 0 / 1 and 0n / 1n', () => {
 test('CpLinearExpr cannot be constructed directly', () => {
   assert.throws(() => new CpLinearExpr(), /CpLinearExpr\.sum\(\)/);
   assert.ok(CpLinearExpr.constant(3) instanceof CpLinearExpr);
+});
+
+test('comparisons with the int64 extremes become unbounded or exact domains', () => {
+  const MIN = -(2n ** 63n);
+  const MAX = 2n ** 63n - 1n;
+  const m = new CpModel();
+  const z = m.newIntVar(0, 1, 'z');
+  const cases = [
+    [z.ge(MIN), [INT64_MIN, INT64_MAX]],
+    [z.le(MAX), [INT64_MIN, INT64_MAX]],
+    [z.gt(MIN), [String(MIN + 1n), INT64_MAX]],
+    [z.lt(MAX), [INT64_MIN, String(MAX - 1n)]],
+    [z.ne(MIN), [String(MIN + 1n), INT64_MAX]],
+    [z.eq(MAX), [INT64_MAX, INT64_MAX]],
+    [z.lt(MIN), []],
+    [z.plus(5).le(7), [INT64_MIN, '2']],
+  ];
+  for (const [ble, domain] of cases) {
+    m.add(ble);
+    assert.deepEqual(m.toJSON().constraints.at(-1).linear.domain, domain, String(ble));
+  }
+  const ok = new CpModel();
+  const y = ok.newIntVar(0, 1, 'y');
+  ok.add(y.ge(MIN));
+  ok.add(y.le(MAX));
+  assert.equal(new CpSolver().solveSync(ok), 'OPTIMAL');
 });
