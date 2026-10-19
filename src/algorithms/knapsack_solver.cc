@@ -50,6 +50,8 @@ struct SolverTypeInfo {
 
 constexpr int kNoItemLimit = 0;
 constexpr int64_t kMaxSafeInteger = 9007199254740991;  // 2^53 - 1
+constexpr int64_t kMaxCpSatSum = int64_t{1} << 62;
+constexpr int64_t kMaxMipWeightSum = int64_t{1} << 20;
 constexpr int kForcedItem = -1;  // an item taken up front, unseen by OR-Tools
 
 const SolverTypeInfo kSolverTypes[] = {
@@ -195,6 +197,7 @@ class KnapsackSolver : public Napi::ObjectWrap<KnapsackSolver> {
     return true;
   }
   bool ValidateShape(Napi::Env env, size_t num_items, size_t num_dimensions) const;
+  bool CheckNumericRange(Napi::Env env, const std::vector<int64_t>& weight_sums) const;
   void LoadProblem(const std::vector<int64_t>& profits, const std::vector<std::vector<int64_t>>& weights,
                    const std::vector<int64_t>& capacities);
 
@@ -272,6 +275,30 @@ KnapsackSolver::KnapsackSolver(const Napi::CallbackInfo& info) : Napi::ObjectWra
   GuardCpp(env, "new KnapsackSolver", [&] { solver_ = std::make_unique<NativeKnapsackSolver>(type_->type, name); });
 }
 
+// MIP backends accept a constraint violated by up to about 1e-6 of its
+// activity, so with large weights an over-capacity packing passes as feasible
+// (SCIP reports a load of 1e7 + 1 in a capacity of 1e7 as optimal; CBC gives up
+// and returns 0). Below 2^20 per dimension a violation of one unit is always
+// detected. CP-SAT rejects linear expressions whose bounds reach 2^62 and
+// returns profit 0 without an error. Capacities are capped at the weight sums
+// before this check, and profits at 2^53 in total.
+bool KnapsackSolver::CheckNumericRange(Napi::Env env, const std::vector<int64_t>& weight_sums) const {
+  const bool mip = type_->needs_mp_backend;
+  const bool cp_sat = type_->type == NativeKnapsackSolver::KNAPSACK_MULTIDIMENSION_CP_SAT_SOLVER;
+  if (!mip && !cp_sat) return true;
+  const int64_t limit = mip ? kMaxMipWeightSum : kMaxCpSatSum;
+  for (size_t d = 0; d < weight_sums.size(); ++d) {
+    if ((mip && weight_sums[d] > limit) || (cp_sat && weight_sums[d] >= limit)) {
+      return ThrowRange(env, std::string(type_->name) + ": the weights of dimension " + std::to_string(d) +
+                                 (mip ? " add up to more than 2^20, beyond what its MIP backend's feasibility tolerance checks exactly"
+                                      : " add up to 2^62 or more, beyond what CP-SAT accepts") +
+                                 ". Use KNAPSACK_MULTIDIMENSION_BRANCH_AND_BOUND_SOLVER, "
+                                 "KNAPSACK_BRUTE_FORCE_SOLVER or KNAPSACK_64ITEMS_SOLVER");
+    }
+  }
+  return true;
+}
+
 bool KnapsackSolver::ValidateShape(Napi::Env env, size_t num_items, size_t num_dimensions) const {
   if (num_items > static_cast<size_t>(std::numeric_limits<int>::max())) {
     return ThrowRange(env, "too many items");
@@ -345,6 +372,8 @@ Napi::Value KnapsackSolver::InitProblem(const Napi::CallbackInfo& info) {
                         " (after capping it to the total weight). Use a branch-and-bound or CP-SAT solver type");
     return env.Undefined();
   }
+
+  if (!CheckNumericRange(env, weight_sums)) return env.Undefined();
 
   state_ = State::kEmpty;
   if (!GuardCpp(env, "knapsack init", [&] { LoadProblem(profits, weights, capacities); })) return env.Undefined();

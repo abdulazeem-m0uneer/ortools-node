@@ -344,3 +344,27 @@ test('a throwing getter on a profit propagates its own error', () => {
     try { s.init(profits, [[1, 1]], [1]); console.log('no error'); } catch (e) { console.log(e.message); }`);
   assert.equal(out, 'profit getter');
 });
+
+test('MIP and CP-SAT types refuse numbers they cannot represent exactly', () => {
+  const big = 2n ** 61n;
+  const mipTypes = ['KNAPSACK_MULTIDIMENSION_CBC_MIP_SOLVER', 'KNAPSACK_MULTIDIMENSION_SCIP_MIP_SOLVER']
+    .filter((t) => t in KnapsackSolverType);
+  for (const type of mipTypes) {
+    // CBC used to report this infeasible packing (item 0 alone exceeds the capacity) as optimal.
+    assert.throws(() => new KnapsackSolver(type).init([5, 3, 7], [[big + 1n, big, 1n]], [big]),
+      { name: 'RangeError', message: new RegExp(`${type}.*more than 2\\^20.*BRANCH_AND_BOUND`) });
+    // SCIP used to pack a load of 1e7 + 1 into a capacity of 1e7 (its tolerance is relative).
+    assert.throws(() => new KnapsackSolver(type).init([5, 3], [[1e7, 1]], [1e7]), /more than 2\^20/);
+    // Weights adding up to 2^20 are checked exactly; one more unit is refused.
+    const s = new KnapsackSolver(type).init([5, 3, 4], [[2 ** 19, 2 ** 19 - 4, 4]], [2 ** 19]);
+    assert.equal(s.solveSync(), 7); // items 1 and 2; items 0 and 2 would weigh 2^19 + 4
+    assert.equal(s.bestSolutionContains(0), false);
+    assert.throws(() => s.init([5, 3], [[2 ** 20, 1]], [2 ** 20]), RangeError);
+  }
+  const cpSat = 'KNAPSACK_MULTIDIMENSION_CP_SAT_SOLVER';
+  assert.throws(() => new KnapsackSolver(cpSat).init([5, 3], [[2n ** 61n, 2n ** 61n]], [2n ** 61n]),
+    { name: 'RangeError', message: /KNAPSACK_MULTIDIMENSION_CP_SAT_SOLVER.*2\^62.*BRANCH_AND_BOUND/ });
+  assert.equal(new KnapsackSolver(cpSat).init([5, 3], [[2n ** 60n, 2n ** 60n]], [2n ** 60n]).solveSync(), 5);
+  // Branch and bound handles the same input exactly.
+  assert.equal(new KnapsackSolver(BB).init([5, 3, 7], [[big + 1n, big, 1n]], [big]).solveSync(), 7);
+});
