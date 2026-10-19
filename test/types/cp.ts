@@ -36,3 +36,14 @@ s.solveAsync(db, [{ atSolution: () => true }]);
 s.add(x);
 // @ts-expect-error collectors read IntVars only
 best.value(0, e);
+
+// Integer arrays are Arrays or the typed arrays the addon reads.
+const sparse = new cp.CpSolver('arrays');
+sparse.intVar(new Int32Array([1, 3]));
+sparse.intVar(new BigInt64Array([1n, 3n]));
+// @ts-expect-error array-like objects are rejected at runtime
+sparse.intVar({ length: 1, 0: 3 });
+// @ts-expect-error Int8Array is not read by the addon
+sparse.intVar(new Int8Array([1]));
+// @ts-expect-error BigUint64Array is not read by the addon
+sparse.memberCt(sparse.intVar(0, 1), new BigUint64Array([1n]));

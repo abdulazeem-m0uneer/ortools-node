@@ -2,6 +2,8 @@
 
 /** An int64 input: a safe integer, a BigInt, or ±Infinity where a bound may be unlimited. */
 export type CpInt = number | bigint;
+/** Integer arrays the addon reads: an Array, or an Int32Array, Uint32Array, Float64Array or BigInt64Array. */
+export type Int64Values = ReadonlyArray<CpInt> | Int32Array | Uint32Array | Float64Array | BigInt64Array;
 
 export type IntVarStrategyName =
   | 'INT_VAR_DEFAULT' | 'INT_VAR_SIMPLE' | 'CHOOSE_FIRST_UNBOUND' | 'CHOOSE_RANDOM'
@@ -47,7 +49,7 @@ export class IntVar extends IntExpr {
   /** The value at a solution; throws when the variable is not bound. */
   value(): number;
   removeValue(value: CpInt): this;
-  removeValues(values: ArrayLike<CpInt>): this;
+  removeValues(values: Int64Values): this;
   contains(value: CpInt): boolean;
   size(): number;
   name(): string;
@@ -89,30 +91,30 @@ export class CpSolver {
   constructor(name?: string);
 
   intVar(min: CpInt, max: CpInt, name?: string): IntVar;
-  intVar(values: ArrayLike<CpInt>, name?: string): IntVar;
+  intVar(values: Int64Values, name?: string): IntVar;
   boolVar(name?: string): IntVar;
   intConst(value: CpInt, name?: string): IntVar;
 
   sum(exprs: IntExpr[]): IntExpr;
-  scalProd(vars: IntExpr[], coefficients: ArrayLike<CpInt>): IntExpr;
+  scalProd(vars: IntExpr[], coefficients: Int64Values): IntExpr;
   min(exprs: IntExpr[]): IntExpr;
   min(a: IntExpr, b: IntExpr | CpInt): IntExpr;
   max(exprs: IntExpr[]): IntExpr;
   max(a: IntExpr, b: IntExpr | CpInt): IntExpr;
-  element(values: ArrayLike<CpInt> | IntExpr[], index: IntExpr): IntExpr;
+  element(values: Int64Values | IntExpr[], index: IntExpr): IntExpr;
 
   add(constraint: CpConstraint): void;
   allDifferent(vars: IntExpr[]): CpConstraint;
-  allowedAssignments(vars: IntExpr[], tuples: ArrayLike<CpInt>[]): CpConstraint;
-  memberCt(expr: IntExpr, values: ArrayLike<CpInt>): CpConstraint;
-  notMemberCt(expr: IntExpr, values: ArrayLike<CpInt>): CpConstraint;
+  allowedAssignments(vars: IntExpr[], tuples: ReadonlyArray<Int64Values>): CpConstraint;
+  memberCt(expr: IntExpr, values: Int64Values): CpConstraint;
+  notMemberCt(expr: IntExpr, values: Int64Values): CpConstraint;
   isEqualVar(a: IntExpr, b: IntExpr | CpInt): IntVar;
   isDifferentVar(a: IntExpr, b: IntExpr | CpInt): IntVar;
   isLessOrEqualVar(a: IntExpr, b: IntExpr | CpInt): IntVar;
   isLessVar(a: IntExpr, b: IntExpr | CpInt): IntVar;
   isGreaterOrEqualVar(a: IntExpr, b: IntExpr | CpInt): IntVar;
   isGreaterVar(a: IntExpr, b: IntExpr | CpInt): IntVar;
-  isMemberVar(expr: IntExpr, values: ArrayLike<CpInt>): IntVar;
+  isMemberVar(expr: IntExpr, values: Int64Values): IntVar;
 
   phase(vars: IntExpr[], varStrategy: IntVarStrategyName, valueStrategy: IntValueStrategyName): DecisionBuilder;
   compose(...dbs: DecisionBuilder[]): DecisionBuilder;

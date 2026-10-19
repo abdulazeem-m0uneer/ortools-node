@@ -62,3 +62,13 @@ const exact: number = model.solveWithParametersSync()!.objectiveValue();
 new RoutingModel();
 // @ts-expect-error status names are RoutingSearchStatus names
 const status: 'SUCCESS' = model.status();
+
+// Index and integer arrays: Arrays or the typed arrays the addon reads.
+new RoutingIndexManager(3, 2, new Int32Array([0, 1]), [2, 2]);
+model.addDisjunction(new Uint32Array([3]), 10);
+// @ts-expect-error array-like objects are rejected at runtime
+model.addDisjunction({ length: 1, 0: 3 }, 10);
+// @ts-expect-error Uint8Array is not read by the addon
+model.setAllowedVehiclesForIndex(new Uint8Array([0]), 1);
+// @ts-expect-error the outer array of routes must be an Array
+model.readAssignmentFromRoutes({ length: 1, 0: [1] }, true);

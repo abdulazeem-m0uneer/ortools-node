@@ -116,7 +116,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the model while a search is open throws.
 - Vehicle routing: `RoutingIndexManager` (single depot, or per-vehicle starts
   and ends) and `RoutingModel` with transit matrices, vectors and callbacks
-  (evaluated once at registration, since solving runs off the JS thread), arc
+  (evaluated once at registration, since solving runs off the JS thread;
+  at most 16384 indices), arc
   and fixed costs, every `addDimension*` variant with span bounds, span costs
   and soft cumul bounds, pickup and delivery pairs and sets with policies,
   disjunctions, allowed vehicles, visit types with incompatibilities and
