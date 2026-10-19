@@ -11,6 +11,7 @@
 
 #include <string>
 
+#include "absl/status/status.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/message.h"
 
@@ -20,6 +21,11 @@ namespace ortools_node {
 // parsed value. On failure throws a TypeError naming `what` and returns false.
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out);
 bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, google::protobuf::Message* out);
+
+// A protobuf JSON parse error without its "near L:C (offset N)" part, which
+// points into JSON the caller never saw, and with protobuf's irregular
+// whitespace collapsed. The field path and expected type stay.
+std::string JsonParseErrorMessage(const absl::Status& status);
 
 // Prints every field, including those left at their proto3 default, with
 // lowerCamelCase names. On failure throws and returns env.Undefined().

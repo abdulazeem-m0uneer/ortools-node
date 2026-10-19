@@ -211,6 +211,18 @@ test('strings must be well-formed Unicode', () => {
   assert.equal(validateRoutingSearchParameters({ logTag: 'r\u00e9seau \u{1F69A}' }).logTag, 'r\u00e9seau \u{1F69A}');
 });
 
+test('protobuf parse errors keep the field and expected type but not positions in the internal JSON', () => {
+  const messageOf = (fn) => { try { fn(); } catch (error) { return error; } return assert.fail('expected a TypeError'); };
+  const routing = messageOf(() => validateRoutingSearchParameters({ timeLimit: 5 }));
+  const sat = messageOf(() => validateSatParameters({ logSearchProgress: 1 }));
+  for (const [error, field, type] of [[routing, 'timeLimit', 'google.protobuf.Duration'], [sat, 'logSearchProgress', 'bool']]) {
+    assert.equal(error.name, 'TypeError');
+    assert.ok(error.message.includes(`@ ${field}: `) && error.message.includes(type), error.message);
+    assert.doesNotMatch(error.message, /near|offset|\d+:\d+/);
+    assert.doesNotMatch(error.message, /\s{2}/);
+  }
+});
+
 test('integer fields given as strings take only canonical decimals that fit the field type', () => {
   for (const bad of ['1e3', '007', ' 7', '7 ', '+7', '-0', '1.5', '', '-', '0x10']) {
     assert.throws(() => validateRoutingSearchParameters({ solutionLimit: bad }),

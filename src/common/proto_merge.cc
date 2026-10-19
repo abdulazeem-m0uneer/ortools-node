@@ -276,7 +276,7 @@ bool MergeProtoJson(Napi::Env env, const Napi::Value& json, const char* what, Me
   // The message is parsed from the checked Struct, printed again, never from the caller's text.
   Struct present;
   absl::Status status = google::protobuf::json::JsonStringToMessage(json.As<Napi::String>().Utf8Value(), &present);
-  std::string error = status.ok() ? CheckObject(&present, target->GetDescriptor(), "") : std::string(status.message());
+  std::string error = status.ok() ? CheckObject(&present, target->GetDescriptor(), "") : JsonParseErrorMessage(status);
   std::string checked_json;
   if (error.empty()) {
     status = google::protobuf::json::MessageToJsonString(present, &checked_json);
