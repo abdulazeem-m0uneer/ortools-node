@@ -2,8 +2,9 @@
 
 // Assembles a prebuilt platform package directory: the addon, every OR-Tools
 // shared library it needs (found by following DT_NEEDED with readelf), the
-// licence files shipped in the OR-Tools archive, a third-party notice and a
-// package.json made from npm/<target>/package.json.
+// licence files shipped in the OR-Tools archive, ortools-node's own licence
+// files, a third-party notice and a package.json made from
+// npm/<target>/package.json.
 //
 // Usage: node scripts/prebuilt/assemble.js <target> <ortools-version> <addon> <ortools-root> <out-dir>
 // Example: node scripts/prebuilt/assemble.js linux-x64-gnu 9.15.6755 build/Release/ortools_node.node /opt/or-tools pkg
@@ -99,13 +100,19 @@ function findLibDir(ortoolsRoot) {
   throw new Error(`No libortools.so under ${ortoolsRoot}/lib64 or ${ortoolsRoot}/lib`);
 }
 
-/** The npm `license` expression: this addon (MIT) plus each bundled component's licence. */
-function licenseExpression(components) {
-  const ids = new Set(['MIT', ...components.map((c) => c.spdx)]);
-  return [...ids].join(' AND ');
+/**
+ * The npm `license` expression: the addon's own (`license` of the root
+ * package.json) plus each bundled component's licence.
+ */
+function licenseExpression(addonLicense, components) {
+  const addonIds = typeof addonLicense === 'string' ? addonLicense.split(' AND ') : [];
+  if (addonIds.length === 0 || !addonIds.every((id) => /^[A-Za-z0-9.+-]+$/.test(id))) {
+    throw new Error(`Cannot combine the package.json licence ${JSON.stringify(addonLicense)}: only SPDX ids joined by AND are supported`);
+  }
+  return [...new Set([...addonIds, ...components.map((c) => c.spdx)])].join(' AND ');
 }
 
-function noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenceFiles) {
+function noticeMarkdown({ ortoolsVersion, addonLicense, addonLicenceFiles, components, librariesByComponent, licenceFiles }) {
   const rows = components.map(
     (c) => `| [${c.name}](${c.url}) | ${c.spdx} | ${librariesByComponent.get(c).map((l) => `\`${l}\``).join(', ')} |`,
   );
@@ -113,7 +120,7 @@ function noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenc
     '# Third-party notices',
     '',
     `This package bundles shared libraries from the OR-Tools ${ortoolsVersion} C++ release`,
-    '(https://github.com/google/or-tools/releases). The addon itself is MIT-licensed (LICENSE).',
+    `(https://github.com/google/or-tools/releases). The addon itself is licensed under ${addonLicense} (${addonLicenceFiles.filter((f) => f !== 'LICENSES').join(', ')}).`,
     'The libraries may also contain code that their projects link statically.',
     '',
     '| Component | Licence | Libraries |',
@@ -148,6 +155,21 @@ function ortoolsLicence(ortoolsRoot) {
   return path.join(ortoolsRoot, 'share', 'doc', 'ortools', 'LICENSE');
 }
 
+/** ortools-node's own licence files: LICENSE always, NOTICE and LICENSES/ when the repository has them. */
+const ADDON_LICENCE_FILES = ['LICENSE', 'NOTICE', 'LICENSES'];
+
+/**
+ * Copies ortools-node's licence files, failing rather than overwrite one from
+ * the OR-Tools archive; returns the top-level entries copied.
+ */
+function copyAddonLicences(repoRoot, outDir) {
+  const copied = ADDON_LICENCE_FILES.filter((entry) => fs.existsSync(path.join(repoRoot, entry)));
+  for (const entry of copied) {
+    fs.cpSync(path.join(repoRoot, entry), path.join(outDir, entry), { recursive: true, force: false, errorOnExist: true });
+  }
+  return copied;
+}
+
 /** Copies the licence files of the OR-Tools archive; returns their paths in the package. */
 function copyLicences(ortoolsRoot, outDir) {
   fs.cpSync(ortoolsLicence(ortoolsRoot), path.join(outDir, 'LICENSES', 'or-tools', 'LICENSE'));
@@ -177,7 +199,7 @@ function releaseOf(ortoolsVersion) {
 
 /**
  * Writes the package directory. `templateDir`, `collect` (collectLibraries)
- * and `packageVersion` are injectable for tests.
+ * and `repoRoot` (version, licence and licence files) are injectable for tests.
  */
 function assemble({
   target,
@@ -187,8 +209,9 @@ function assemble({
   outDir,
   templateDir = path.join(REPO_ROOT, 'npm'),
   collect = collectLibraries,
-  packageVersion = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'package.json'), 'utf8')).version,
+  repoRoot = REPO_ROOT,
 }) {
+  const { version, license: addonLicense } = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
   const templateFile = path.join(templateDir, target, 'package.json');
   if (!fs.existsSync(templateFile)) throw new Error(`No package template for target '${target}' (${templateFile})`);
   const name = prebuiltPackageName(target, releaseOf(ortoolsVersion));
@@ -200,10 +223,12 @@ function assemble({
     librariesByComponent.set(component, [...(librariesByComponent.get(component) ?? []), soname]);
   }
   const components = COMPONENTS.filter((c) => librariesByComponent.has(c));
+  const license = licenseExpression(addonLicense, components);
 
   if (!fs.existsSync(ortoolsLicence(ortoolsRoot))) {
     throw new Error(`The OR-Tools archive has no licence at ${ortoolsLicence(ortoolsRoot)}`);
   }
+  if (!fs.existsSync(path.join(repoRoot, 'LICENSE'))) throw new Error(`ortools-node has no licence at ${path.join(repoRoot, 'LICENSE')}`);
   if (fs.existsSync(outDir)) throw new Error(`${outDir} already exists`);
   fs.mkdirSync(outDir, { recursive: true });
   fs.copyFileSync(addon, path.join(outDir, ADDON_FILE));
@@ -211,9 +236,11 @@ function assemble({
   for (const soname of bundled) fs.copyFileSync(path.join(libDir, soname), path.join(outDir, soname));
 
   const licenceFiles = copyLicences(ortoolsRoot, outDir);
-  fs.copyFileSync(path.join(REPO_ROOT, 'LICENSE'), path.join(outDir, 'LICENSE'));
-  fs.writeFileSync(path.join(outDir, 'THIRD_PARTY_NOTICES.md'), noticeMarkdown(ortoolsVersion, components, librariesByComponent, licenceFiles));
-  const version = packageVersion;
+  const addonLicenceFiles = copyAddonLicences(repoRoot, outDir);
+  fs.writeFileSync(
+    path.join(outDir, 'THIRD_PARTY_NOTICES.md'),
+    noticeMarkdown({ ortoolsVersion, addonLicense, addonLicenceFiles, components, librariesByComponent, licenceFiles }),
+  );
   fs.writeFileSync(path.join(outDir, 'README.md'), readmeMarkdown(name, version, ortoolsVersion));
 
   const template = JSON.parse(fs.readFileSync(templateFile, 'utf8'));
@@ -224,7 +251,7 @@ function assemble({
     version,
     ...templateFields,
     description: `${template.description}, built against OR-Tools ${ortoolsVersion}`,
-    license: licenseExpression(components),
+    license,
   };
   fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   return { name, bundled, system };
@@ -244,6 +271,7 @@ module.exports = {
   assemble,
   collectLibraries,
   componentOf,
+  copyAddonLicences,
   copyLicences,
   findLibDir,
   licenseExpression,
