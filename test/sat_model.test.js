@@ -282,6 +282,20 @@ test('interval start, size and end must be affine, as in Python', () => {
   assert.equal(m.toJSON().constraints.length, 2);
 });
 
+test('a boolean interval start, size or end is a TypeError (Python reads it as 1 / 0)', () => {
+  const m = new CpModel();
+  const x = m.newIntVar(0, 9, 'x');
+  const b = m.newBoolVar('b');
+  const before = JSON.stringify(m.toJSON());
+  assert.throws(() => m.newIntervalVar(true, 1, x.plus(1)), { name: 'TypeError', message: /start .*got boolean/ });
+  assert.throws(() => m.newIntervalVar(x, false, x), { name: 'TypeError', message: /size .*got boolean/ });
+  assert.throws(() => m.newOptionalIntervalVar(x, 1, true, b), { name: 'TypeError', message: /end .*got boolean/ });
+  assert.throws(() => m.newFixedSizeIntervalVar(false, 2), { name: 'TypeError', message: /start .*got boolean/ });
+  assert.throws(() => m.newFixedSizeIntervalVar(x, true), TypeError);
+  assert.throws(() => m.newOptionalFixedSizeIntervalVar(x, false, b), TypeError);
+  assert.equal(JSON.stringify(m.toJSON()), before);
+});
+
 test('variables, intervals and literals from another model are rejected before any change', () => {
   const m1 = new CpModel();
   const m2 = new CpModel();
