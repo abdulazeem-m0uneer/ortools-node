@@ -24,8 +24,7 @@ class GuardWorker : public PromiseWorker {
 
  protected:
   void Execute() override {
-    const std::string error = GuardCppOffThread("guardCppAsync", [this] { Raise(kind_); });
-    if (!error.empty()) SetError(error);
+    RunGuarded("guardCppAsync", [this] { Raise(kind_); });
   }
   Napi::Value Result(Napi::Env env) override { return Napi::String::New(env, "ok"); }
 

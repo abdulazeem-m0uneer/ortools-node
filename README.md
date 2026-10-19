@@ -426,8 +426,9 @@ JavaScript.
   a Proxy) that disposes the object or starts a solve.
 - Never let a C++ exception escape: the addon builds with
   `NAPI_DISABLE_CPP_EXCEPTIONS`, so one would abort the process. Wrap OR-Tools
-  calls that can allocate or throw in `GuardCpp()` (main thread) or
-  `GuardCppOffThread()` (in `Execute`) from `src/common/cpp_guard.h`.
+  calls that can allocate or throw in `GuardCpp()` (main thread,
+  `src/common/cpp_guard.h`) or `PromiseWorker::RunGuarded()` (in `Execute`,
+  `src/common/async_worker.h`).
 - Validate every precondition behind an OR-Tools `CHECK` before the call: a
   failed `CHECK` aborts the process, it is not an exception.
 - Keep the JavaScript object alive during async work (`Napi::ObjectReference`)
