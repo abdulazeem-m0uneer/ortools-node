@@ -379,8 +379,11 @@ Napi::Value CpSolver::VarRemoveValues(const Napi::CallbackInfo& info) {
   // Apply the plan the guard approved: OR-Tools' RemoveValues takes values in
   // the caller's order, where a bound value may still be interior and abort.
   if (!context_->RunGuarded(env, "removeValues()", [&] {
-        // Removing every value fails with the domain left as it was.
-        if (RemovedCount(var, removal) == var->Size()) context_->solver()->Fail();
+        // Removing every value fails with the domain left as it was. Size()
+        // wraps to 0 on the full int64 domain, where an empty removal counts 0
+        // too, but a live variable is never empty.
+        const uint64_t removed = RemovedCount(var, removal);
+        if (removed != 0 && removed == var->Size()) context_->solver()->Fail();
         var->SetRange(removal.lo, removal.hi);
         var->RemoveValues(removal.holes);
       })) {
@@ -422,9 +425,10 @@ Napi::Value CpSolver::VarContains(const Napi::CallbackInfo& info) {
 Napi::Value CpSolver::VarSize(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   READ_VAR_OR_RETURN(env, info[0], var);
+  // Size() wraps to 0 on the full int64 domain (2^64 values).
   const uint64_t size = var->Size();
   constexpr uint64_t kMax = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
-  return Int64ToJs(env, static_cast<int64_t>(size > kMax ? kMax : size), "size");
+  return Int64ToJs(env, static_cast<int64_t>(size == 0 || size > kMax ? kMax : size), "size");
 }
 
 Napi::Value CpSolver::VarName(const Napi::CallbackInfo& info) {
