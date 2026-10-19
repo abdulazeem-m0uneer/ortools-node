@@ -1,7 +1,8 @@
 'use strict';
 // Getters that run while solve() reads its arguments may dispose the solver or
 // start another solve. That must end in a JS error, never a crash, so each
-// scenario runs in a child process whose exit status is checked.
+// scenario runs in a child process whose exit status is checked. The native
+// side must never run user JS on its own (e.g. through Object.prototype).
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -9,7 +10,7 @@ const { spawnSync } = require('node:child_process');
 
 const root = path.join(__dirname, '..');
 
-function runScenario(body) {
+function runScenario(body, nodeFlags = []) {
   const script = `
     const { CpModel, CpSolver } = require(${JSON.stringify(root)});
     const model = new CpModel();
@@ -20,7 +21,7 @@ function runScenario(body) {
       (out) => console.log(JSON.stringify(out)),
       (e) => { console.error(e); process.exit(2); });
   `;
-  const child = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 60000 });
+  const child = spawnSync(process.execPath, [...nodeFlags, '-e', script], { encoding: 'utf8', timeout: 60000 });
   assert.equal(child.signal, null, child.stderr);
   assert.equal(child.status, 0, child.stderr);
   return JSON.parse(child.stdout);
@@ -73,4 +74,23 @@ test('a parameters getter that starts a solve makes solveSync() throw busy', () 
   `);
   assert.match(out.error, /busy/);
   assert.equal(out.inner, 'OPTIMAL');
+});
+
+test('the teardown watch never runs Object.prototype setters during a solve', () => {
+  const out = runScenario(`
+    let calls = 0;
+    Object.defineProperty(Object.prototype, 'probe', { set() { calls += 1; throw new Error('setter'); } });
+    const big = new CpModel();
+    for (let i = 0; i < 40; i += 1) big.newBoolVar('b' + i);
+    solver.parameters = { enumerateAllSolutions: true, maxTimeInSeconds: 1, numWorkers: 1 };
+    const started = Date.now();
+    const status = await solver.solve(big);
+    const ms = Date.now() - started;
+    const withCallback = await solver.solve(big, { onSolution() {} }).catch((e) => e.message);
+    return { calls, ms, status, withCallback };
+  `, ['--force-node-api-uncaught-exceptions-policy=true']);
+  assert.equal(out.calls, 0);
+  assert.ok(out.ms >= 900, `the solve was abandoned after ${out.ms} ms`);
+  assert.equal(out.status, 'FEASIBLE');
+  assert.equal(out.withCallback, 'FEASIBLE');
 });

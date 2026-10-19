@@ -12,14 +12,21 @@ namespace {
 constexpr std::chrono::milliseconds kPingInterval(100);
 
 // A Node-API call that may run JS fails, without a pending exception, once
-// the environment is shutting down.
+// the environment is shutting down. Defining an own data property on a fresh
+// object takes that path but, unlike a [[Set]], never calls user JS (such as
+// a setter on Object.prototype). Nothing the probe leaves pending may escape.
 bool CanRunJs(napi_env env) {
   napi_handle_scope scope;
   if (napi_open_handle_scope(env, &scope) != napi_ok) return false;
   napi_value object;
   napi_value value;
-  const bool ok = napi_create_object(env, &object) == napi_ok && napi_get_boolean(env, true, &value) == napi_ok &&
-                  napi_set_named_property(env, object, "probe", value) == napi_ok;
+  bool ok = napi_create_object(env, &object) == napi_ok && napi_get_boolean(env, true, &value) == napi_ok;
+  if (ok) {
+    const napi_property_descriptor probe = {"probe", nullptr, nullptr, nullptr, nullptr, value, napi_default, nullptr};
+    ok = napi_define_properties(env, object, 1, &probe) == napi_ok;
+  }
+  napi_value exception;
+  napi_get_and_clear_last_exception(env, &exception);
   napi_close_handle_scope(env, scope);
   return ok;
 }
