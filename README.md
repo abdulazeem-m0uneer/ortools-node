@@ -313,7 +313,7 @@ appears in exported LP and MPS files.
 | `solveSync()` → `SolveResult` | Solves on the calling thread. |
 | `interrupt()` → `boolean` | Asks a pending `solve()` to stop. Returns `false` if nothing is running or the backend cannot be interrupted safely. |
 | `clear()` | Removes all variables and constraints. Existing handles become invalid. |
-| `dispose()` | Frees the native model immediately; later calls throw. Also runs on scope exit with `using solver = new Solver(...)` (Node.js ≥ 24). |
+| `dispose()` | Frees the native model immediately; later calls throw. During a `solve()` it frees the model once that solve settles. Also runs on scope exit with `using solver = new Solver(...)` (Node.js ≥ 24): `return solver.solve()` from the scope still resolves, but `await` it inside the scope to read variable values. |
 | `toLp(obfuscated?)` / `toMps(fixed?, obfuscated?)` | The model in LP or MPS format. |
 | `solverVersion()` | For example `"Glop solver v9.15.6755"`. |
 | `numVariables`, `numConstraints`, `variables`, `constraints`, `busy` | Read-only properties. |

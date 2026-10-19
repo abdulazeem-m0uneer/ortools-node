@@ -83,9 +83,16 @@ export class Solver {
   toMps(fixed?: boolean, obfuscated?: boolean): string;
   /** Removes everything; existing Variable / Constraint handles become invalid. */
   clear(): this;
-  /** Frees the native model now (GC only runs after the event loop turns); later calls throw. */
+  /**
+   * Frees the native model now (GC only runs after the event loop turns); later calls throw.
+   * During a solve() it never throws: the model is freed once that solve settles.
+   */
   dispose(): void;
-  /** Same as dispose(), so `using solver = new Solver(...)` frees it at scope exit. */
+  /**
+   * Same as dispose(), so `using solver = new Solver(...)` frees it at scope exit. A solve()
+   * still pending then (`return solver.solve()`) resolves normally, but read variable
+   * values with `await solver.solve()` inside the scope: the model is gone afterwards.
+   */
   [Symbol.dispose](): void;
 }
 
