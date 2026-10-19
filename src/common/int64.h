@@ -22,7 +22,8 @@ namespace ortools_node {
 bool ReadInt64(Napi::Env env, const Napi::Value& v, bool allow_infinite, const char* what, int64_t* out);
 
 // Reads an Array of int64 values, or an Int32Array, Uint32Array, Float64Array
-// or BigInt64Array (the fast path for bulk data). Elements follow ReadInt64.
+// or BigInt64Array (the fast path for bulk data). Elements follow ReadInt64;
+// a result too large to allocate throws a RangeError naming `what`.
 bool ReadInt64Array(Napi::Env env, const Napi::Value& v, bool allow_infinite, const char* what,
                     std::vector<int64_t>* out);
 
