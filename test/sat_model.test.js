@@ -85,13 +85,23 @@ test('sum, weightedSum, term and affine build the expected expressions', () => {
   const m = new CpModel();
   const [a, b, c] = [m.newIntVar(0, 5, 'a'), m.newIntVar(0, 5, 'b'), m.newIntVar(0, 5, 'c')];
   m.minimize(CpLinearExpr.sum([a, b, c, 7]));
-  assert.deepEqual(m.toJSON().objective, { vars: [0, 1, 2], coeffs: ['1', '1', '1'], offset: 7 });
+  assert.deepEqual(m.toJSON().objective, { vars: [0, 1, 2], coeffs: ['1', '1', '1'], offset: 7, scalingFactor: 1 });
   m.maximize(CpLinearExpr.weightedSum([a, b], [2, -3]).plus(CpLinearExpr.affine(c, 4, 1)).plus(CpLinearExpr.term(a, 1)));
   assert.deepEqual(m.toJSON().objective, {
     vars: [0, 1, 2], coeffs: ['-3', '3', '-4'], offset: -1, scalingFactor: -1,
   });
   assert.throws(() => CpLinearExpr.weightedSum([a, b], [1]), TypeError);
   assert.throws(() => CpLinearExpr.sum(a), TypeError);
+});
+
+test('minimize() sets scaling factor 1, as Python does, also after a maximize()', () => {
+  const m = new CpModel();
+  const x = m.newIntVar(0, 5, 'x');
+  m.minimize(x);
+  assert.deepEqual(m.toJSON().objective, { vars: [0], coeffs: ['1'], offset: 0, scalingFactor: 1 });
+  m.maximize(x);
+  m.minimize(4);
+  assert.deepEqual(m.toJSON().objective, { vars: [], coeffs: [], offset: 4, scalingFactor: 1 });
 });
 
 test('a deep .plus() chain does not overflow the stack', () => {
