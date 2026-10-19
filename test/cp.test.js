@@ -224,3 +224,34 @@ test('wide domains still allow bound removals and narrow membership', () => {
   assert.equal(y.contains(50), false, 'narrow domains keep their holes');
   assert.throws(() => x.removeValue(7), RangeError);
 });
+
+// A regression here aborts the process (OR-Tools' "Bitset too large" CHECK),
+// so each case runs in a child process and must exit cleanly.
+test('removeValues() on a wide domain accepts bound values in any order', () => {
+  const { spawnSync } = require('node:child_process');
+  const root = JSON.stringify(require('node:path').join(__dirname, '..'));
+  const cases = [
+    ['[2 ** 40 - 1, 2 ** 40]', [0, 2 ** 40 - 2]],
+    ['[1, 0]', [2, 2 ** 40]],
+    ['[3, 2, 1, 0]', [4, 2 ** 40]],
+    ['[2 ** 40 - 3, 2 ** 40 - 2, 2 ** 40 - 1, 2 ** 40]', [0, 2 ** 40 - 4]],
+    ['[2 ** 40, 1, -5, 0, 2 ** 40 - 1, 1]', [2, 2 ** 40 - 2]],
+  ];
+  for (const [values, bounds] of cases) {
+    const script = `const { CpSolver } = require(${root}).cp;
+      const x = new CpSolver().intVar(0, 2 ** 40).removeValues(${values});
+      console.log(JSON.stringify([x.min(), x.max()]));`;
+    const r = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
+    assert.equal(r.status, 0, `${values}: ${r.stderr}`);
+    assert.deepEqual(JSON.parse(r.stdout), bounds, values);
+  }
+});
+
+test('removeValues() moves bounds and keeps holes when given in any order', () => {
+  const s = new CpSolver();
+  const x = s.intVar(0, 10).removeValues([10, 5, 0, 5]);
+  assert.deepEqual([x.min(), x.max(), x.contains(5), x.contains(4)], [1, 9, false, true]);
+  const y = s.intVar(0, 1);
+  assert.throws(() => y.removeValues([1, 0]), /CP solver failure: removeValues\(\)/);
+  assert.deepEqual([y.min(), y.max()], [0, 1], 'a failed removal changes nothing');
+});

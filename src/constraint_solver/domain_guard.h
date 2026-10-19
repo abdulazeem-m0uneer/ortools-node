@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace ortools_node {
@@ -21,10 +22,16 @@ inline bool SpanFitsBitset(int64_t lo, int64_t hi) {
   return static_cast<uint64_t>(hi) - static_cast<uint64_t>(lo) < 0xFFFFFFFFull;
 }
 
-// True when removing `values` from the domain [lo, hi] would need a bitset
-// OR-Tools refuses. Values at the bounds only move the bounds (SetMin/SetMax),
-// so they are peeled off first, as RemoveValues does one value at a time.
-inline bool RemovalNeedsHugeBitset(int64_t lo, int64_t hi, std::vector<int64_t> values) {
+// What removing `values` from the domain [lo, hi] amounts to: values at the
+// bounds only move the bounds, so they are peeled off first, one at a time, and
+// the rest become holes in [lo, hi].
+struct Removal {
+  int64_t lo;
+  int64_t hi;
+  std::vector<int64_t> holes;  // sorted, distinct, within [lo, hi]
+};
+
+inline Removal PlanRemoval(int64_t lo, int64_t hi, std::vector<int64_t> values) {
   values.erase(std::remove_if(values.begin(), values.end(), [&](int64_t v) { return v < lo || v > hi; }),
                values.end());
   std::sort(values.begin(), values.end());
@@ -39,8 +46,18 @@ inline bool RemovalNeedsHugeBitset(int64_t lo, int64_t hi, std::vector<int64_t> 
     --hi;
     --last;
   }
-  const bool holes_left = first < last && lo < hi;
-  return holes_left && !SpanFitsBitset(lo, hi);
+  return {lo, hi, std::vector<int64_t>(values.begin() + first, values.begin() + last)};
+}
+
+// True when `removal` makes holes in a span OR-Tools cannot hold in a bitset.
+inline bool NeedsHugeBitset(const Removal& removal) {
+  return !removal.holes.empty() && removal.lo < removal.hi && !SpanFitsBitset(removal.lo, removal.hi);
+}
+
+// True when removing `values` from the domain [lo, hi] would need a bitset
+// OR-Tools refuses.
+inline bool RemovalNeedsHugeBitset(int64_t lo, int64_t hi, std::vector<int64_t> values) {
+  return NeedsHugeBitset(PlanRemoval(lo, hi, std::move(values)));
 }
 
 // True when keeping only `values` of [lo, hi] (MemberCt, a true IsMemberCt)

@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/int64.h"
@@ -360,11 +361,21 @@ Napi::Value CpSolver::VarRemoveValues(const Napi::CallbackInfo& info) {
   }
   operations_research::IntVar* var = context_->VarById(env, id, "variable");
   if (var == nullptr) return env.Undefined();
-  if (RemovalNeedsHugeBitset(var->Min(), var->Max(), values)) {
+  const Removal removal = PlanRemoval(var->Min(), var->Max(), std::move(values));
+  if (NeedsHugeBitset(removal)) {
     Napi::RangeError::New(env, std::string("removeValues()") + HugeBitsetMessage()).ThrowAsJavaScriptException();
     return env.Undefined();
   }
-  if (!context_->RunGuarded(env, "removeValues()", [&] { var->RemoveValues(values); })) return env.Undefined();
+  // Apply the plan the guard approved: OR-Tools' RemoveValues takes values in
+  // the caller's order, where a bound value may still be interior and abort.
+  if (!context_->RunGuarded(env, "removeValues()", [&] {
+        // Removing every value fails with the domain left as it was.
+        if (removal.lo == removal.hi && !removal.holes.empty()) context_->solver()->Fail();
+        var->SetRange(removal.lo, removal.hi);
+        var->RemoveValues(removal.holes);
+      })) {
+    return env.Undefined();
+  }
   context_->NotifyMutation();
   return env.Undefined();
 }
