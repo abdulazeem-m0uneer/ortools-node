@@ -265,6 +265,9 @@ test('JS monitor atSolution returning false stops the search', () => {
   const first = s.firstSolutionCollector().add(x);
   s.solve(db, [first, { atSolution() {} }]);
   assert.equal(first.solutionCount(), 1, 'undefined leaves the decision to the other monitors');
+  let ones = 0;
+  s.solve(db, [{ atSolution() { ones++; return 1; } }]);
+  assert.equal(ones, 1, 'only a boolean is a decision: 1 keeps the default, solve() stops at the first solution');
 });
 
 test('JS monitors may read values but not change the model', () => {

@@ -61,7 +61,11 @@ export class RoutingSolution {
   routes(): number[][];
   /** Per vehicle, the cumul at each index of routes(). */
   cumuls(dimension: RoutingDimension | string): SolutionValue[][];
-  /** Per vehicle, the slack at each index of routes(), null at the end. */
+  /**
+   * Per vehicle, the slack at each index of routes(), null at the end. Throws
+   * unless the slack variables were stored in solutions: call
+   * model.addToAssignment(dimension.slackVar(i)) for them before closing the model.
+   */
   slacks(dimension: RoutingDimension | string): Array<Array<SolutionValue | null>>;
 }
 
