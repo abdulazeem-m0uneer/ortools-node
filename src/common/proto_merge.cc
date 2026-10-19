@@ -47,8 +47,11 @@ bool MergesIntoSubMessage(const FieldDescriptor* field, const Value& value) {
          !IsWellKnownType(field->message_type()) && value.kind_case() == Value::kStructValue;
 }
 
+// For error messages only: each caller key is abbreviated, so a huge key cannot flood them.
 std::string KeyPath(const std::string& parent, const std::string& key) {
-  return parent.empty() ? key : absl::StrCat(parent, ".", key);
+  constexpr size_t kMaxKeyBytes = 100;
+  const std::string shown = Abbreviate(key, kMaxKeyBytes);
+  return parent.empty() ? shown : absl::StrCat(parent, ".", shown);
 }
 
 // lib/params.js sends ±Infinity numbers as these strings, since JSON has no
@@ -283,7 +286,8 @@ bool MergeProtoJson(Napi::Env env, const Napi::Value& json, const char* what, Me
     if (!status.ok()) error = std::string(status.message());
   }
   if (!error.empty()) {
-    Napi::TypeError::New(env, absl::StrCat("Invalid ", what, ": ", error)).ThrowAsJavaScriptException();
+    Napi::TypeError::New(env, BoundedErrorMessage(absl::StrCat("Invalid ", what, ": ", error)))
+        .ThrowAsJavaScriptException();
     return false;
   }
   std::unique_ptr<Message> parsed(target->New());

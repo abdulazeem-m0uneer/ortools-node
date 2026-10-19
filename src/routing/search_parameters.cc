@@ -20,7 +20,8 @@ namespace {
 bool CheckParameters(Napi::Env env, const RoutingSearchParameters& parameters) {
   const std::string error = operations_research::FindErrorInRoutingSearchParameters(parameters);
   if (error.empty()) return true;
-  Napi::RangeError::New(env, "Invalid RoutingSearchParameters: " + error).ThrowAsJavaScriptException();
+  Napi::RangeError::New(env, BoundedErrorMessage("Invalid RoutingSearchParameters: " + error))
+      .ThrowAsJavaScriptException();
   return false;
 }
 

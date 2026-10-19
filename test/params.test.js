@@ -246,7 +246,7 @@ test('cleaning protobuf errors never rewrites the caller\'s echoed value', () =>
 
 // In a child process: a crash here (e.g. a regex executor overflowing the
 // stack on caller-controlled text) must fail this test, not kill the runner.
-test('huge values echoed in parse errors neither crash nor flood the message', () => {
+test('huge values and keys echoed in errors neither crash nor flood the message', () => {
   const script = `
     const assert = require('node:assert/strict');
     const { validateRoutingSearchParameters, validateSatParameters } = require(${JSON.stringify(require.resolve('..'))});
@@ -259,6 +259,16 @@ test('huge values echoed in parse errors neither crash nor flood the message', (
       ]) {
         assert.throws(call, (error) => error instanceof TypeError && error.message.length < 1000);
       }
+    }
+    const key = 'k'.repeat(1e6);
+    for (const call of [
+      () => validateSatParameters({ [key]: 1 }),
+      () => validateSatParameters({ subsolverParams: [{ name: 'a', [key]: 1 }] }),
+      () => validateSatParameters({ [key]: NaN }),
+      () => validateRoutingSearchParameters({ [key]: { [key]: [Symbol('x')] } }),
+      () => native.validateSatParameters(JSON.stringify({ subsolverParams: [{ [key]: 1 }] })),
+    ]) {
+      assert.throws(call, (error) => error instanceof TypeError && error.message.length < 1000 && error.message.includes('kkkk'));
     }
   `;
   const child = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8' });
@@ -273,7 +283,7 @@ test('deeply nested values are a short TypeError, without protobuf-internal Stru
     return value;
   };
   assert.throws(() => validateRoutingSearchParameters(nest(65, 'localSearchOperators')),
-    { name: 'TypeError', message: /'localSearchOperators(\.localSearchOperators){64}' is nested more than 64 levels deep/ });
+    { name: 'TypeError', message: /^RoutingSearchParameters: 'localSearchOperators(\.localSearchOperators)+\.l?\u2026' is nested more than 64 levels deep/ });
   assert.throws(() => validateSatParameters({ subsolverParams: [nest(70, 'x')] }),
     { name: 'TypeError', message: /is nested more than 64 levels deep/ });
   assert.throws(() => validateRoutingSearchParameters({ localSearchOperators: nest(63, 'x') }), { name: 'TypeError', message: /'localSearchOperators\.x/ });
