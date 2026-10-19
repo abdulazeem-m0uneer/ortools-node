@@ -568,6 +568,8 @@ API can trigger them):
 | `atSolution()` | Return `false` to stop the search, `true` to ask for more solutions. |
 | `noMoreSolutions()` | When the search space is exhausted. |
 
+<!-- no-run -->
+
 ```js
 const fails = { n: 0, beginFail() { this.n++; } };
 solver.solve(db, [fails, { atSolution: () => x.value() < 3 }]);
@@ -600,6 +602,8 @@ take two callbacks:
   500, `0` for every check) while the search runs, then once with `done: true`
   after it ends. `objective` is the best so far, `null` before the first
   solution; the counters cover this solve only.
+
+<!-- no-run -->
 
 ```js
 const solution = await model.solveWithParameters({ timeLimit: '30s', localSearchMetaheuristic: 'GUIDED_LOCAL_SEARCH' }, {
