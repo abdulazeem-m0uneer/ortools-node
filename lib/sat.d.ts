@@ -48,8 +48,8 @@ export class Domain {
 
 /** An immutable integer linear expression. */
 export class CpLinearExpr {
-  /** Abstract: build expressions from variables, arithmetic and the static helpers. */
-  protected constructor();
+  /** Closed (not subclassable): build expressions from variables, arithmetic and the static helpers. */
+  private constructor();
   plus(other: LinearExprLike): CpLinearExpr;
   minus(other: LinearExprLike): CpLinearExpr;
   times(coefficient: Int): CpLinearExpr;
@@ -68,8 +68,13 @@ export class CpLinearExpr {
   toString(): string;
 }
 
+// IntVar and NotBooleanVariable are CpLinearExprs at runtime. CpLinearExpr's
+// constructor is private, so their typings gain its members by merging an
+// interface instead of `extends`.
+
 /** An integer variable; only valid for the CpModel that created it. */
-export class IntVar extends CpLinearExpr {
+export interface IntVar extends CpLinearExpr {}
+export class IntVar {
   private constructor();
   readonly index: number;
   readonly name: string;
@@ -81,7 +86,8 @@ export class IntVar extends CpLinearExpr {
 }
 
 /** not(x) for a Boolean variable x; as an expression it is 1 - x. */
-export class NotBooleanVariable extends CpLinearExpr {
+export interface NotBooleanVariable extends CpLinearExpr {}
+export class NotBooleanVariable {
   private constructor();
   /** The proto literal, -x.index - 1. */
   readonly index: number;
