@@ -137,11 +137,10 @@ class MathOptSolveWorker : public PromiseWorker {
 
  protected:
   void Execute() override {
-    if (auto failure = GuardCppOffThread("math_opt solve", [this] { result_ = RunSolve(input_, interrupter_.get()); })) {
-      Fail(std::move(failure->message), failure->out_of_memory);
-    } else if (!result_.ok()) {
-      Fail(StatusMessage(result_.status()));
-    }
+    RunGuarded("math_opt solve", [this] {
+      result_ = RunSolve(input_, interrupter_.get());
+      if (!result_.ok()) Fail(StatusMessage(result_.status()));
+    });
   }
   Napi::Value Result(Napi::Env env) override { return ProtoToJson(env, *result_); }
 
