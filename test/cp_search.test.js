@@ -96,6 +96,17 @@ test('minimize with best-value and last-solution collectors finds the optimum', 
   assert.throws(() => best.addObjective(cost), /already has an objective/);
 });
 
+test('collector values and objectives beyond MAX_SAFE_INTEGER are exact BigInts', () => {
+  const s = new CpSolver();
+  const BIG = 2n ** 60n + 1n;
+  const x = s.intVar(BIG, BIG + 2n);
+  const best = s.bestValueSolutionCollector(false).add(x).addObjective(x);
+  assert.equal(s.solve(s.phase([x], FIRST, MIN), [s.minimize(x, 1), best]), true);
+  assert.equal(best.value(0, x), BIG);
+  assert.equal(best.objectiveValue(0), BIG);
+  assert.equal(typeof best.wallTime(0), 'number', 'counters below 2^53 stay numbers');
+});
+
 test('maximize with a step', () => {
   const s = new CpSolver();
   const x = s.intVar(0, 20, 'x');

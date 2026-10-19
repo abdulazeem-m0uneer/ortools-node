@@ -3,7 +3,6 @@
 #include "constraint_solver/cp_solver.h"
 
 #include <cstdint>
-#include <limits>
 #include <string>
 #include <utility>
 #include <vector>
@@ -137,25 +136,25 @@ Napi::Value CpSolver::IsDisposed(const Napi::CallbackInfo& info) {
 Napi::Value CpSolver::WallTime(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJs(env, context_->solver()->wall_time(), "wallTime");
+  return Int64ToJsNumberOrBigInt(env, context_->solver()->wall_time());
 }
 
 Napi::Value CpSolver::Branches(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJs(env, context_->solver()->branches(), "branches");
+  return Int64ToJsNumberOrBigInt(env, context_->solver()->branches());
 }
 
 Napi::Value CpSolver::Failures(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJs(env, context_->solver()->failures(), "failures");
+  return Int64ToJsNumberOrBigInt(env, context_->solver()->failures());
 }
 
 Napi::Value CpSolver::Solutions(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJs(env, context_->solver()->solutions(), "solutions");
+  return Int64ToJsNumberOrBigInt(env, context_->solver()->solutions());
 }
 
 // ---- variables ---------------------------------------------------------------
@@ -247,13 +246,13 @@ Napi::Value CpSolver::NewIntConst(const Napi::CallbackInfo& info) {
 Napi::Value CpSolver::ExprMin(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   READ_EXPR_OR_RETURN(env, info[0], expr);
-  return Int64ToJs(env, expr->Min(), "min");
+  return Int64ToJsNumberOrBigInt(env, expr->Min());
 }
 
 Napi::Value CpSolver::ExprMax(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   READ_EXPR_OR_RETURN(env, info[0], expr);
-  return Int64ToJs(env, expr->Max(), "max");
+  return Int64ToJsNumberOrBigInt(env, expr->Max());
 }
 
 Napi::Value CpSolver::ExprBound(const Napi::CallbackInfo& info) {
@@ -411,7 +410,7 @@ Napi::Value CpSolver::VarValue(const Napi::CallbackInfo& info) {
     THROW_AND_RETURN(env, "IntVar '" + var->name() + "' is not bound: values are only available at a solution",
                      env.Undefined());
   }
-  return Int64ToJs(env, var->Value(), "value");
+  return Int64ToJsNumberOrBigInt(env, var->Value());
 }
 
 Napi::Value CpSolver::VarContains(const Napi::CallbackInfo& info) {
@@ -425,11 +424,16 @@ Napi::Value CpSolver::VarContains(const Napi::CallbackInfo& info) {
 Napi::Value CpSolver::VarSize(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   READ_VAR_OR_RETURN(env, info[0], var);
-  // Size() wraps to 0 on the full int64 domain (2^64 values). A count is never
-  // negative or a position, so every size a JS number cannot hold exactly is Infinity.
+  // Same rule as Int64ToJsNumberOrBigInt: a number up to 2^53 - 1, an exact BigInt beyond.
+  // A count is never an unbounded marker, so never Infinity. Size() wraps to 0
+  // on the full int64 domain (2^64 values; a domain is never empty).
   const uint64_t size = var->Size();
   constexpr uint64_t kMaxSafeSize = (uint64_t{1} << 53) - 1;
-  if (size == 0 || size > kMaxSafeSize) return Napi::Number::New(env, std::numeric_limits<double>::infinity());
+  if (size == 0) {
+    const uint64_t two_pow_64[] = {0, 1};  // little-endian 64-bit words
+    return Napi::BigInt::New(env, 0, 2, two_pow_64);
+  }
+  if (size > kMaxSafeSize) return Napi::BigInt::New(env, size);
   return Napi::Number::New(env, static_cast<double>(size));
 }
 

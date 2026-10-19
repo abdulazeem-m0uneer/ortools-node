@@ -37,15 +37,6 @@ namespace {
 
 constexpr int64_t kMaxHandle = INT32_MAX;
 
-// Solution values (objectives, cumuls...) as a number when it is exact, the
-// int64 extremes as ±Infinity, and anything else as a BigInt: objectives with
-// large penalties routinely pass 2^53. Never throws, never rounds.
-Napi::Value SolutionNumber(Napi::Env env, int64_t v) {
-  constexpr int64_t kMaxSafe = 9007199254740991;  // 2^53 - 1
-  if (v == INT64_MAX || v == INT64_MIN || (v <= kMaxSafe && v >= -kMaxSafe)) return Int64ToJs(env, v, "value");
-  return Napi::BigInt::New(env, v);
-}
-
 struct SolutionSnapshot {
   int64_t objective = 0;
   int index = 0;
@@ -80,7 +71,7 @@ SolutionSnapshot TakeSnapshot(const RoutingModel& model, int index, bool include
 
 Napi::Value SnapshotToJs(Napi::Env env, const SolutionSnapshot& snapshot, bool include_routes) {
   Napi::Object out = Napi::Object::New(env);
-  out.Set("objective", SolutionNumber(env, snapshot.objective));
+  out.Set("objective", Int64ToJsNumberOrBigInt(env, snapshot.objective));
   out.Set("solutionIndex", Napi::Number::New(env, snapshot.index));
   if (include_routes) {
     if (!snapshot.has_routes) {
@@ -425,7 +416,7 @@ Napi::Value RoutingModelWrap::SolutionObjective(const Napi::CallbackInfo& info) 
   const Assignment* solution = AssignmentOf(env, handle);
   if (solution == nullptr) return env.Undefined();
   if (!solution->HasObjective()) THROW_AND_RETURN(env, "this solution has no objective", env.Undefined());
-  return SolutionNumber(env, solution->ObjectiveValue());
+  return Int64ToJsNumberOrBigInt(env, solution->ObjectiveValue());
 }
 
 // (handle, varId, kind: 'value' | 'min' | 'max')
@@ -447,12 +438,12 @@ Napi::Value RoutingModelWrap::SolutionValue(const Napi::CallbackInfo& info) {
                               "' is not stored in solutions: call addToAssignment(var) before closing the model",
                      env.Undefined());
   }
-  if (kind == "min") return SolutionNumber(env, solution->Min(var));
-  if (kind == "max") return SolutionNumber(env, solution->Max(var));
+  if (kind == "min") return Int64ToJsNumberOrBigInt(env, solution->Min(var));
+  if (kind == "max") return Int64ToJsNumberOrBigInt(env, solution->Max(var));
   if (kind != "value") THROW_TYPE_AND_RETURN(env, "unknown solution value kind '" + kind + "'", env.Undefined());
   // As in OR-Tools (and pywrapcp), the value of a variable the solution leaves
   // as a range is its lower bound; min() / max() give the range.
-  return SolutionNumber(env, solution->Value(var));
+  return Int64ToJsNumberOrBigInt(env, solution->Value(var));
 }
 
 Napi::Value RoutingModelWrap::SolutionRoutes(const Napi::CallbackInfo& info) {
@@ -500,7 +491,7 @@ Napi::Value RoutingModelWrap::SolutionDimension(const Napi::CallbackInfo& info) 
                                   "' are not stored in solutions: call addToAssignment() on them before closing",
                          env.Undefined());
       }
-      values.Set(static_cast<uint32_t>(k), SolutionNumber(env, solution->Value(var)));
+      values.Set(static_cast<uint32_t>(k), Int64ToJsNumberOrBigInt(env, solution->Value(var)));
     }
     out.Set(static_cast<uint32_t>(v), values);
   }

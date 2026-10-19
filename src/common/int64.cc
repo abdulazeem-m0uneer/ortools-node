@@ -151,6 +151,13 @@ Napi::Value Int64ArrayToJs(Napi::Env env, const std::vector<int64_t>& values, co
   return array;
 }
 
+Napi::Value Int64ToJsNumberOrBigInt(Napi::Env env, int64_t v) {
+  if (v == kInt64Max) return Napi::Number::New(env, std::numeric_limits<double>::infinity());
+  if (v == kInt64Min) return Napi::Number::New(env, -std::numeric_limits<double>::infinity());
+  if (std::fabs(static_cast<double>(v)) > kMaxSafeInteger) return Napi::BigInt::New(env, v);
+  return Napi::Number::New(env, static_cast<double>(v));
+}
+
 void InitInt64Testing(Napi::Env env, Napi::Object testing) {
   // (value, allowInfinite) -> the value after a JS -> int64 -> JS round trip.
   testing.Set("int64RoundTrip", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
@@ -163,6 +170,12 @@ void InitInt64Testing(Napi::Env env, Napi::Object testing) {
     if (!ReadInt64Array(info.Env(), info[0], info[1].ToBoolean(), "values", &values)) return info.Env().Undefined();
     return Int64ArrayToJs(info.Env(), values, "values");
   }));
+  testing.Set("int64NumberOrBigIntRoundTrip",
+              Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+                int64_t v;
+                if (!ReadInt64(info.Env(), info[0], info[1].ToBoolean(), "value", &v)) return info.Env().Undefined();
+                return Int64ToJsNumberOrBigInt(info.Env(), v);
+              }));
 }
 
 }  // namespace ortools_node

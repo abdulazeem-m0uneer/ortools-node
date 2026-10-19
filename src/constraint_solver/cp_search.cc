@@ -401,7 +401,7 @@ Napi::Value CpSolver::CollectorValue(const Napi::CallbackInfo& info) {
   if (!solution->Contains(var)) {
     THROW_AND_RETURN(env, "IntVar '" + var->name() + "' was not added to this collector", env.Undefined());
   }
-  return Int64ToJs(env, solution->Value(var), "value");
+  return Int64ToJsNumberOrBigInt(env, solution->Value(var));
 }
 
 // (monitor, stat: 'objective' | 'wallTime' | 'branches' | 'failures', n)
@@ -422,11 +422,11 @@ Napi::Value CpSolver::CollectorStat(const Napi::CallbackInfo& info) {
     if (!entry->has_objective) {
       THROW_AND_RETURN(env, "this collector has no objective (addObjective())", env.Undefined());
     }
-    return Int64ToJs(env, c->objective_value(i), "objectiveValue");
+    return Int64ToJsNumberOrBigInt(env, c->objective_value(i));
   }
-  if (stat == "wallTime") return Int64ToJs(env, c->wall_time(i), "wallTime");
-  if (stat == "branches") return Int64ToJs(env, c->branches(i), "branches");
-  if (stat == "failures") return Int64ToJs(env, c->failures(i), "failures");
+  if (stat == "wallTime") return Int64ToJsNumberOrBigInt(env, c->wall_time(i));
+  if (stat == "branches") return Int64ToJsNumberOrBigInt(env, c->branches(i));
+  if (stat == "failures") return Int64ToJsNumberOrBigInt(env, c->failures(i));
   THROW_TYPE_AND_RETURN(env, "unknown collector statistic '" + stat + "'", env.Undefined());
 }
 
