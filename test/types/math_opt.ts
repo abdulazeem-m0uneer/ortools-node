@@ -18,6 +18,7 @@ const pending: Promise<mathOpt.SolveResult> = solve(model, 'GSCIP', {
   interrupter,
 });
 const result = solveSync(model, 'GLOP');
+solveSync(model, 'GLOP', { parameters: { iterationLimit: 10n, nodeLimit: '5', threads: 1 } });
 const optimal: boolean = result.termination.reason === TerminationReason.OPTIMAL;
 const value: number = result.variableValues(x);
 const values: number[] = result.variableValues([x, y]);
@@ -31,6 +32,8 @@ solveSync(model, 'NOPE');
 solveSync(model, 'GLOP', { interrupter });
 // @ts-expect-error lpAlgorithm names are checked
 solveSync(model, 'GLOP', { parameters: { lpAlgorithm: 'FASTEST' } });
+// @ts-expect-error iterationLimit is an integer, not a boolean
+solveSync(model, 'GLOP', { parameters: { iterationLimit: true } });
 // @ts-expect-error ids are read-only
 x.id = 3;
 
