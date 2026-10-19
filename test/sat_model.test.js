@@ -437,6 +437,31 @@ test('addHint on a negated literal takes booleans, 0 / 1 and 0n / 1n', () => {
   assert.throws(() => m.addHint(b.not(), 2n), TypeError);
 });
 
+test('add(true / false) adds a trivially true / false bool_or, and addAtLeastOne is addBoolOr', () => {
+  const m = new CpModel();
+  const a = m.newBoolVar('a');
+  const b = m.newBoolVar('b');
+  assert.ok(m.add(true) instanceof CpConstraint);
+  m.add(false);
+  m.addAtLeastOne(a, b.not());
+  m.addAtLeastOne([a]);
+  const { variables, constraints } = m.toJSON();
+  assert.deepEqual(variables[2].domain, ['1', '1']);
+  assert.deepEqual(constraints, [
+    { boolOr: { literals: [2] } },
+    { boolOr: { literals: [] } },
+    { boolOr: { literals: [0, -2] } },
+    { boolOr: { literals: [0] } },
+  ]);
+  const solver = new CpSolver();
+  const ok = new CpModel();
+  ok.add(true);
+  assert.equal(solver.solveSync(ok), 'OPTIMAL');
+  const bad = new CpModel();
+  bad.add(false);
+  assert.equal(solver.solveSync(bad), 'INFEASIBLE');
+});
+
 test('eq/ge at INT64_MAX and eq/le at INT64_MIN are rejected as in Python', () => {
   const MIN = -(2n ** 63n);
   const MAX = 2n ** 63n - 1n;
