@@ -54,6 +54,10 @@ export class CpLinearExpr {
   minus(other: LinearExprLike): CpLinearExpr;
   times(coefficient: Int): CpLinearExpr;
   neg(): CpLinearExpr;
+  /**
+   * Comparisons. A constant INT64_MAX / INT64_MIN (or ±Infinity) bound means unbounded;
+   * as in Python, eq() with either extreme, ge(INT64_MAX) and le(INT64_MIN) throw a RangeError.
+   */
   le(other: LinearExprLike): BoundedLinearExpr;
   ge(other: LinearExprLike): BoundedLinearExpr;
   lt(other: LinearExprLike): BoundedLinearExpr;
