@@ -351,6 +351,16 @@ Napi::Value CpSolver::ExprSetRange(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+// How many values of `var` applying `removal` removes: the peeled bounds were
+// all listed, so this costs O(values), never O(domain).
+static uint64_t RemovedCount(const operations_research::IntVar* var, const Removal& removal) {
+  uint64_t removed = 0;
+  for (int64_t v = var->Min(); v < removal.lo; ++v) removed += var->Contains(v);
+  for (int64_t v = var->Max(); v > removal.hi; --v) removed += var->Contains(v);
+  for (int64_t v : removal.holes) removed += var->Contains(v);
+  return removed;
+}
+
 Napi::Value CpSolver::VarRemoveValues(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   uint32_t id;
@@ -370,7 +380,7 @@ Napi::Value CpSolver::VarRemoveValues(const Napi::CallbackInfo& info) {
   // the caller's order, where a bound value may still be interior and abort.
   if (!context_->RunGuarded(env, "removeValues()", [&] {
         // Removing every value fails with the domain left as it was.
-        if (removal.lo == removal.hi && !removal.holes.empty()) context_->solver()->Fail();
+        if (RemovedCount(var, removal) == var->Size()) context_->solver()->Fail();
         var->SetRange(removal.lo, removal.hi);
         var->RemoveValues(removal.holes);
       })) {
