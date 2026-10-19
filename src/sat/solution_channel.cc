@@ -1,7 +1,5 @@
 #include "sat/solution_channel.h"
 
-#include "common/cpp_guard.h"
-
 #include <algorithm>
 #include <cstring>
 #include <utility>
@@ -87,12 +85,12 @@ void SolutionChannel::Finalize(Napi::Env, std::shared_ptr<SolutionChannel>* self
 SolutionChannel::~SolutionChannel() { Release(); }
 
 void SolutionChannel::Publish(const CpSolverResponse& response) {
-  if (callback_failed_.load()) return;
-  // An exception must not escape into a CP-SAT worker thread (std::terminate).
-  auto failure = GuardCppOffThread("onSolution", [&] { Deliver(response); });
-  if (!failure) return;
+  PublishWith([&] { Deliver(response); });
+}
+
+void SolutionChannel::RecordFailure(CppFailure failure) {
   std::lock_guard<std::mutex> lock(mutex_);
-  native_failure_ = std::move(failure->message);
+  native_failure_ = std::move(failure);
   callback_failed_.store(true);
   stop_flag_->store(true);
 }
@@ -177,8 +175,13 @@ bool SolutionChannel::ThrowCallbackError(Napi::Env env) {
   if (!callback_failed_.load()) return false;
   if (error_holder_.IsEmpty()) {
     // Main thread after the solve: no solver thread writes native_failure_ any more.
-    const std::string message = native_failure_.empty() ? "The onSolution callback could not run" : native_failure_;
-    Napi::Error::New(env, message).ThrowAsJavaScriptException();
+    const std::string message =
+        native_failure_.message.empty() ? "The onSolution callback could not run" : native_failure_.message;
+    if (native_failure_.out_of_memory) {
+      Napi::RangeError::New(env, message).ThrowAsJavaScriptException();
+    } else {
+      Napi::Error::New(env, message).ThrowAsJavaScriptException();
+    }
   } else {
     napi_throw(env, error_holder_.Value().Get("error"));
   }

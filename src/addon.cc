@@ -23,6 +23,7 @@
 #include "sat/cp_sat_solver.h"
 #include "set_cover/set_cover.h"
 #include "sat/sat_parameters.h"
+#include "sat/solution_channel_testing.h"
 
 #ifndef ORTOOLS_VERSION_STRING
 #error "ORTOOLS_VERSION_STRING must be defined by the build (see CMakeLists.txt)"
@@ -67,6 +68,7 @@ Napi::Object InitAll(Napi::Env env, Napi::Object exports) {
   Napi::Object testing = Napi::Object::New(env);  // internal hooks for test/, not public API
   InitInt64Testing(env, testing);
   InitCppGuardTesting(env, testing);
+  InitSolutionChannelTesting(env, testing);
   exports.Set("_testing", testing);
   InitRoutingSearchParameters(env, exports);
   InitSatParameters(env, exports);
