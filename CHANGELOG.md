@@ -8,6 +8,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Classic CP JS search monitors take 13 OR-Tools `SearchMonitor` hooks,
+  camelCased: besides `enterSearch`, `exitSearch` and `atSolution`, now
+  `beginNextDecision`, `endNextDecision`, `applyDecision`, `refuteDecision`,
+  `afterDecision`, `beginFail`, `endFail`, `beginInitialPropagation`,
+  `endInitialPropagation`, `acceptSolution` (return `false` to reject a
+  solution) and `noMoreSolutions`. Decisions are passed as their description.
+  Hooks are read once when the search starts, so a missing hook costs nothing;
+  a throwing hook getter, or a hook that is neither undefined nor a function,
+  throws from `solve()` / `newSearch()`.
 - `ortoolsVersion` (the OR-Tools release loaded at runtime) and `buildInfo`
   (the release the addon was compiled against). Loading fails with a clear error
   when the two differ.

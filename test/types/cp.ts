@@ -40,6 +40,22 @@ x.plus('1');
 e.value();
 // @ts-expect-error solveAsync() takes no JS monitors
 s.solveAsync(db, [{ atSolution: () => true }]);
+
+// Every JS search monitor hook.
+const hooks: cp.JsSearchMonitor = {
+  enterSearch() {}, exitSearch() {}, beginNextDecision() {},
+  endNextDecision(d: string | null) { void d; },
+  applyDecision(d: string) { void d; }, refuteDecision(d: string) { void d; },
+  afterDecision(d: string, apply: boolean) { void d; void apply; },
+  beginFail() {}, endFail() {}, beginInitialPropagation() {}, endInitialPropagation() {},
+  acceptSolution: () => false, atSolution: () => true, noMoreSolutions() {},
+};
+s.solve(db, [hooks, s.minimize(e)]);
+s.newSearch(db, [{ beginFail() {} }]);
+// @ts-expect-error decisions arrive as strings
+s.solve(db, [{ applyDecision(d: number) { void d; } }]);
+// @ts-expect-error acceptSolution returns a boolean or nothing
+s.solve(db, [{ acceptSolution: () => 1 }]);
 // @ts-expect-error a constraint is not an expression
 s.add(x);
 // @ts-expect-error collectors read IntVars only

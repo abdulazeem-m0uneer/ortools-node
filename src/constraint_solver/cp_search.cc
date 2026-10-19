@@ -1,11 +1,9 @@
 // CpSolver: decision builders, search monitors, limits, solution collectors and
 // the three ways to search (newSearch/nextSolution/endSearch, solve, solveAsync).
 //
-// JS monitors are plain objects with optional enterSearch / exitSearch /
-// atSolution methods, called synchronously from inside the search. A throw is
-// recorded, the search is stopped through the interrupt limit, and the error is
-// rethrown once OR-Tools has unwound. Searches never run with the fail
-// intercept installed: a failure in a search is how OR-Tools backtracks.
+// JS monitors (js_monitor_set.cc) run synchronously inside solve() and
+// newSearch() searches. Searches never run with the fail intercept installed: a
+// failure in a search is how OR-Tools backtracks.
 
 #include <napi.h>
 
@@ -30,93 +28,6 @@ using operations_research::IntVar;
 using operations_research::SearchMonitor;
 using operations_research::SolutionCollector;
 using operations_research::Solver;
-
-// ---------------------------------------------------------------------------
-// JS search monitors
-// ---------------------------------------------------------------------------
-
-class JsMonitorSet::Monitor : public SearchMonitor {
- public:
-  Monitor(Solver* solver, JsMonitorSet* set, const Napi::ObjectReference* object)
-      : SearchMonitor(solver), set_(set), object_(object) {}
-
-  void EnterSearch() override { set_->Invoke(*object_, "enterSearch"); }
-  void ExitSearch() override { set_->Invoke(*object_, "exitSearch"); }
-  bool AtSolution() override {
-    Napi::HandleScope scope(set_->env_);
-    Napi::Value result = set_->Invoke(*object_, "atSolution");
-    if (result.IsEmpty() || !result.IsBoolean()) return false;
-    if (!result.As<Napi::Boolean>().Value()) {
-      // Not FinishCurrentSearch(): its flag outlives the search and would end
-      // the next one at its first failure. The interrupt limit stops cleanly.
-      set_->context_->stop_flag()->store(true);
-      return false;
-    }
-    return true;
-  }
-  std::string DebugString() const override { return "JsSearchMonitor"; }
-
- private:
-  JsMonitorSet* set_;
-  const Napi::ObjectReference* object_;  // owned by the set
-};
-
-JsMonitorSet::JsMonitorSet(Napi::Env env, CpContext* context) : env_(env), context_(context) {}
-JsMonitorSet::~JsMonitorSet() = default;
-
-bool JsMonitorSet::Read(const Napi::Value& objects) {
-  if (objects.IsUndefined()) return true;
-  if (!objects.IsArray()) THROW_TYPE_AND_RETURN(env_, "JS search monitors must be an array", false);
-  Napi::Array array = objects.As<Napi::Array>();
-  const uint32_t n = array.Length();
-  if (env_.IsExceptionPending()) return false;
-  objects_.reserve(n);
-  for (uint32_t i = 0; i < n; ++i) {
-    Napi::Value v = array.Get(i);
-    if (env_.IsExceptionPending()) return false;
-    if (!v.IsObject()) THROW_TYPE_AND_RETURN(env_, "a JS search monitor must be an object", false);
-    objects_.push_back(Napi::Persistent(v.As<Napi::Object>()));
-  }
-  return true;
-}
-
-void JsMonitorSet::AppendTo(std::vector<SearchMonitor*>* monitors) {
-  // objects_ is never resized after Read(), so the pointers below stay valid.
-  for (const Napi::ObjectReference& object : objects_) {
-    monitors_.push_back(std::make_unique<Monitor>(context_->solver(), this, &object));
-    monitors->push_back(monitors_.back().get());
-  }
-}
-
-Napi::Value JsMonitorSet::Invoke(const Napi::ObjectReference& object, const char* method) {
-  if (failed_ || disabled_) return Napi::Value();
-  Napi::EscapableHandleScope scope(env_);
-  Napi::Object target = object.Value();
-  Napi::Value fn = target.Get(method);
-  Napi::Value result;
-  if (!env_.IsExceptionPending()) {
-    if (!fn.IsFunction()) return Napi::Value();
-    result = fn.As<Napi::Function>().Call(target, {});
-  }
-  if (env_.IsExceptionPending()) {
-    napi_value error;
-    napi_get_and_clear_last_exception(env_, &error);
-    // References to primitives need Node-API 9: hold the thrown value in an object.
-    Napi::Object holder = Napi::Object::New(env_);
-    holder.Set("error", Napi::Value(env_, error));
-    error_ = Napi::Persistent(holder);
-    failed_ = true;
-    context_->stop_flag()->store(true);  // stop at the next limit check
-    return Napi::Value();
-  }
-  return scope.Escape(result);
-}
-
-bool JsMonitorSet::RethrowIfFailed(Napi::Env env) {
-  if (!failed_) return false;
-  napi_throw(env, error_.Value().Get("error"));
-  return true;
-}
 
 CpSolver::~CpSolver() {
   // A newSearch() left open: end it without calling back into JS (this may run
