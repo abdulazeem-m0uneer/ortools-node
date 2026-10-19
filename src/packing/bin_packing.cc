@@ -37,10 +37,13 @@
 #include "common/napi_util.h"
 #include "common/proto_json.h"
 #include "common/proto_to_js.h"
+#include "google/protobuf/text_format.h"
 #include "ortools/linear_solver/linear_solver.h"
 #include "ortools/linear_solver/linear_solver.pb.h"
 #include "ortools/packing/arc_flow_solver.h"
 #include "ortools/packing/vector_bin_packing.pb.h"
+#include "ortools/sat/parameters_validation.h"
+#include "ortools/sat/sat_parameters.pb.h"
 
 namespace ortools_node {
 namespace {
@@ -179,6 +182,32 @@ bool ValidateProblem(Napi::Env env, const vbp::VectorBinPackingProblem& problem)
   return true;
 }
 
+// SolveVectorBinPackingWithArcFlow ignores whether the backend accepted the
+// parameters: a typo would be dropped, or fail the solve with no explanation.
+// A probe solver of the same backend checks them first; CP-SAT only checks the
+// text format there, so its values are validated too.
+bool CheckMipParameters(Napi::Env env, MPSolver::OptimizationProblemType backend, const std::string& backend_name,
+                        const std::string& parameters) {
+  if (parameters.empty()) return true;
+  bool accepted = false;
+  std::string problem;
+  if (!GuardCpp(env, "solveVectorBinPacking", [&] {
+        MPSolver probe("probe", backend);
+        accepted = probe.SetSolverSpecificParametersAsString(parameters);
+        if (accepted && backend == MPSolver::SAT_INTEGER_PROGRAMMING) {
+          operations_research::sat::SatParameters sat_parameters;
+          accepted = google::protobuf::TextFormat::ParseFromString(parameters, &sat_parameters);
+          if (accepted) problem = operations_research::sat::ValidateParameters(sat_parameters);
+        }
+      })) {
+    return false;
+  }
+  if (accepted && problem.empty()) return true;
+  Napi::TypeError::New(env, "mipParameters rejected by " + backend_name + (problem.empty() ? "" : ": " + problem))
+      .ThrowAsJavaScriptException();
+  return false;
+}
+
 struct SolveInput {
   vbp::VectorBinPackingProblem problem;
   MPSolver::OptimizationProblemType backend = MPSolver::SCIP_MIXED_INTEGER_PROGRAMMING;
@@ -223,6 +252,7 @@ bool ReadSolveInput(const Napi::CallbackInfo& info, SolveInput* input) {
   input->num_threads = static_cast<int>(threads);
   if (!info[4].IsString()) THROW_TYPE_AND_RETURN(env, "mipParameters must be a string", false);
   input->mip_parameters = info[4].As<Napi::String>().Utf8Value();
+  if (!CheckMipParameters(env, input->backend, backend, input->mip_parameters)) return false;
   if (!ValidateProblem(env, input->problem)) return false;
   input->max_bins = input->problem.max_bins();
   return true;

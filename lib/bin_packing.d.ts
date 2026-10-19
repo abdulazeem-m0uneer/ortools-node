@@ -50,7 +50,7 @@ export interface VectorBinPackingOptions {
   timeLimitSeconds?: number;
   /** An integer in [1, 1024]; 1 by default. */
   numThreads?: number;
-  /** Backend-specific parameter text. */
+  /** Backend-specific parameter text; parameters the backend rejects throw a TypeError. */
   mipParameters?: string;
 }
 
