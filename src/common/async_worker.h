@@ -69,8 +69,11 @@ class PromiseWorker : private Napi::AsyncWorker {
   }
 
   // Execute() only: rejects the Promise with exactly `message`, as a RangeError
-  // when `out_of_memory`, for failures reported without a C++ exception.
+  // when `out_of_memory`, for failures reported without a C++ exception. An
+  // empty message is replaced, because node-addon-api treats an empty error as
+  // success and would resolve the Promise.
   void Fail(std::string message, bool out_of_memory = false) {
+    if (message.empty()) message = "native operation failed";
     failure_ = {std::move(message), out_of_memory};
     Napi::AsyncWorker::SetError(failure_.message);
   }
