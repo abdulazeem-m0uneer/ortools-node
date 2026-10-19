@@ -204,6 +204,17 @@ test('a focus limits what generators change and is validated', () => {
   assert.throws(() => new SteepestSearch(inv).nextSolutionSync('0'), TypeError);
 });
 
+test('a focus may be any integer list the declarations allow', () => {
+  for (const focus of [[0n, 2n], [0, 2n], new Uint32Array([0, 2]), new Float64Array([0, 2]), new BigInt64Array([0n, 2n])]) {
+    const inv = new SetCoverInvariant(smallModel());
+    assert.equal(new TrivialSolutionGenerator(inv).nextSolutionSync(focus), true, focus.constructor.name);
+    assert.deepEqual(inv.selectedSubsets(), [0, 2]);
+    assert.ok(Array.isArray(clearMostCoveredElements(inv, 1, focus)));
+  }
+  const inv = new SetCoverInvariant(smallModel());
+  assert.throws(() => new TrivialSolutionGenerator(inv).nextSolutionSync(new Uint8Array([0])), TypeError);
+});
+
 test('local search needs a complete cover', () => {
   const inv = new SetCoverInvariant(smallModel());
   assert.equal(new SteepestSearch(inv).nextSolutionSync(), false);
