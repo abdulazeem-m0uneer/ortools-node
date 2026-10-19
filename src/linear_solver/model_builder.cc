@@ -129,6 +129,11 @@ class ModelBuilderSolver : public Napi::ObjectWrap<ModelBuilderSolver> {
     // OR-Tools' HiGHS wrapper segfaults on any solution hint (9.14 and 9.15).
     // A hint is only advice, so it is dropped rather than refused.
     if (IsHighs(solver_type_)) request->mutable_model()->clear_solution_hint();
+    // HiGHS prints its banner to stdout even without internal output. Put
+    // first, so the caller's own output_flag still wins.
+    if (IsHighs(solver_type_) && !request->enable_internal_solver_output()) {
+      request->set_solver_specific_parameters("output_flag=false\n" + request->solver_specific_parameters());
+    }
     return true;
   }
 
