@@ -235,7 +235,7 @@ test('protobuf parse errors keep the field and expected type but not positions i
 
 test('cleaning protobuf errors never rewrites the caller\'s echoed value', () => {
   for (const value of ['A near 1:2 (offset 3)', 'A  B', ' lead\ttab  ', "it's  x", 'x, near 1:2 (offset 3)',
-    'x @ <struct>y: z']) {
+    'x @ <struct>y: z', "x' near 1:2 (offset 3)"]) {
     for (const call of [
       () => validateSatParameters({ searchBranching: value }),
       () => native.readSatParametersForTesting(JSON.stringify({ searchBranching: value })),
