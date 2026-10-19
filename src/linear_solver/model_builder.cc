@@ -80,10 +80,14 @@ Napi::Float64Array ToFloat64Array(Napi::Env env, const google::protobuf::Repeate
   return array;
 }
 
+bool IsHighs(MPModelRequest::SolverType type) {
+  return type == MPModelRequest::HIGHS_LINEAR_PROGRAMMING || type == MPModelRequest::HIGHS_MIXED_INTEGER_PROGRAMMING;
+}
+
 // OR-Tools' HiGHS proto solver stores row activities in dual_value (both 9.14
 // and 9.15), so its duals are withheld rather than reported wrong.
 bool ReportsDualValues(MPModelRequest::SolverType type) {
-  return type != MPModelRequest::HIGHS_LINEAR_PROGRAMMING && type != MPModelRequest::HIGHS_MIXED_INTEGER_PROGRAMMING;
+  return !IsHighs(type);
 }
 
 Napi::Object ResponseToJs(Napi::Env env, const MPSolutionResponse& response, MPModelRequest::SolverType type) {
@@ -122,6 +126,9 @@ class ModelBuilderSolver : public Napi::ObjectWrap<ModelBuilderSolver> {
     if (!ParseProtoJson(env, info[0], "MPModelRequest", request)) return false;
     if (!CheckNotBusy(env, solve_state_, "Solver")) return false;  // after reading the arguments
     request->set_solver_type(solver_type_);
+    // OR-Tools' HiGHS wrapper segfaults on any solution hint (9.14 and 9.15).
+    // A hint is only advice, so it is dropped rather than refused.
+    if (IsHighs(solver_type_)) request->mutable_model()->clear_solution_hint();
     return true;
   }
 

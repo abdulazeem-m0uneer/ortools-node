@@ -477,3 +477,19 @@ test('code that starts a solve while solve() reads the model is a JS error', () 
   assert.match(out, /Solver is busy/);
   assert.match(out, /OPTIMAL 2/);
 });
+
+test('a solution hint is safe with HiGHS (OR-Tools crashes on it; the hint is dropped)', { skip: !isSolverSupported('HIGHS') && 'no HiGHS' }, () => {
+  const out = runIsolated(`
+    for (const integral of [false, true]) {
+      const model = new mb.Model();
+      const x = model.newVar(0, 10, integral, 'x');
+      model.add(x.le(7.5));
+      model.maximize(x);
+      model.addHint(x, 3);
+      const solver = new mb.Solver('HIGHS');
+      console.log('sync', solver.solveSync(model), solver.objectiveValue);
+      solver.solve(model).then((status) => console.log('async', status, solver.objectiveValue));
+    }`);
+  assert.deepEqual(out.split('\n').filter((l) => /^(sync|async)/.test(l)).sort(),
+    ['async OPTIMAL 7', 'async OPTIMAL 7.5', 'sync OPTIMAL 7', 'sync OPTIMAL 7.5']);
+});
