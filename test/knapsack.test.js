@@ -153,6 +153,27 @@ test('a time limit of 0 stops the search early with a feasible, non-optimal answ
   assert.equal(s.isSolutionOptimal(), true);
 });
 
+test('MIP types honour a time limit of 0 or under 1 ms instead of solving without one', () => {
+  const mipTypes = MULTI_TYPES.filter((t) => t.endsWith('_MIP_SOLVER'));
+  // MPSolver counts whole milliseconds and reads 0 as "no limit": SCIP ran this for minutes.
+  const out = runIsolated(`
+    let seed = 7;
+    const rnd = (m) => { seed = (seed * 48271) % 2147483647; return seed % m; };
+    const profits = Array.from({ length: 400 }, () => 500 + rnd(500));
+    const weights = Array.from({ length: 5 }, () => Array.from({ length: 400 }, () => 500 + rnd(500)));
+    const capacities = weights.map((row) => Math.floor(row.reduce((a, b) => a + b) / 2));
+    for (const type of ${JSON.stringify(mipTypes)}) {
+      for (const limit of [0, 0.0004]) {
+        const s = new KnapsackSolver(type).setTimeLimit(limit);
+        s.init(profits, weights, capacities);
+        const started = Date.now();
+        s.solveSync();
+        console.log(type, limit, s.isSolutionOptimal(), Date.now() - started < 5000);
+      }
+    }`);
+  for (const line of out.split('\n')) assert.match(line, / false true$/);
+});
+
 test('capacity-sized solvers refuse capacities they would need gigabytes for', () => {
   const big = 2n ** 61n;
   for (const type of [DP, 'KNAPSACK_DIVIDE_AND_CONQUER_SOLVER']) {
