@@ -8,8 +8,8 @@
 // thread-safe function every 100 ms; once a probe shows that JS cannot run,
 // on_teardown() is called there.
 
-#ifndef ORTOOLS_NODE_SAT_TEARDOWN_WATCH_H_
-#define ORTOOLS_NODE_SAT_TEARDOWN_WATCH_H_
+#ifndef ORTOOLS_NODE_COMMON_TEARDOWN_WATCH_H_
+#define ORTOOLS_NODE_COMMON_TEARDOWN_WATCH_H_
 
 #include <napi.h>
 
@@ -36,4 +36,4 @@ class TeardownWatch {
 
 }  // namespace ortools_node
 
-#endif  // ORTOOLS_NODE_SAT_TEARDOWN_WATCH_H_
+#endif  // ORTOOLS_NODE_COMMON_TEARDOWN_WATCH_H_

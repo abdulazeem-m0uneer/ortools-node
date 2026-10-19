@@ -538,6 +538,12 @@ The OR-Tools 9.15 release archives include all open-source backends below. Run
   `crypto` and `zlib`. The default is 4 threads. Set `UV_THREADPOOL_SIZE` above
   your maximum number of concurrent solves before Node.js starts, and give every
   solve a time limit.
+- **Terminating a worker thread stops its searches.** `worker.terminate()`
+  waits for threadpool work, so async CP-SAT, routing and CP `solveAsync()`
+  searches are stopped as soon as JS can no longer run. A synchronous routing or
+  CP search blocks the worker's thread: it stops at its next callback or JS
+  monitor hook, and without one it runs to its limits like any blocking native
+  call.
 
 ## Callbacks and search monitors
 

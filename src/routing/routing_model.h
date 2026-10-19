@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "common/async_worker.h"
+#include "common/teardown_watch.h"
 #include "constraint_solver/cp_context.h"
 #include "routing/routing_progress.h"
 #include "ortools/constraint_solver/routing.h"
@@ -171,6 +172,9 @@ class RoutingModelWrap : public Napi::ObjectWrap<RoutingModelWrap> {
   AsyncSolveState solve_state_;
   SolutionListener* listener_ = nullptr;
   ProgressMonitor* progress_ = nullptr;  // owned by the solver
+  // While an async solve runs: stops it once JS can no longer run, since
+  // worker.terminate() waits for the threadpool.
+  std::unique_ptr<TeardownWatch> teardown_watch_;
   // Fixed when the model is built; readable after dispose.
   int64_t size_ = 0;      // RoutingModel::Size(): indices with a next variable
   int64_t vehicles_ = 0;

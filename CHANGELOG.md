@@ -8,6 +8,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- Terminating a worker thread stops its running searches instead of waiting
+  for their time limit (or forever, without one): async routing solves and CP
+  `solveAsync()` are stopped by a teardown watch, as CP-SAT already was, and a
+  synchronous routing or CP search stops at its first callback or JS monitor
+  hook that can no longer run.
 - Routing progress events: `onProgress` and `progressIntervalMs` in the solve
   options report `{ solutions, objective, branches, failures, wallTimeMs, done }`
   from a native search monitor, at most once per interval and once more with
