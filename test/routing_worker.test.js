@@ -1,7 +1,7 @@
 'use strict';
 // Terminating a worker thread during an async CP or routing solve (with a
-// solution callback in flight) must not abort the process. Termination waits
-// for the threadpool work, so each solve here has a short time limit.
+// callback in flight) must not abort the process. How fast the search stops is
+// covered by search_teardown.test.js.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('node:path');

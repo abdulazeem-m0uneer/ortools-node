@@ -19,6 +19,7 @@
 #include "common/cpp_guard.h"
 #include "common/int64.h"
 #include "common/napi_util.h"
+#include "common/teardown_watch.h"
 #include "constraint_solver/cp_solver.h"
 
 namespace ortools_node {
@@ -386,14 +387,19 @@ bool ResolveSearch(Napi::Env env, CpContext* context, const SearchArgs& args, De
 class CpSolveWorker : public PromiseWorker {
  public:
   CpSolveWorker(Napi::Env env, Napi::Object owner, std::shared_ptr<CpContext> context, DecisionBuilder* db,
-                std::vector<SearchMonitor*> monitors)
-      : PromiseWorker(env, owner), context_(std::move(context)), db_(db), monitors_(std::move(monitors)) {}
+                std::vector<SearchMonitor*> monitors, std::unique_ptr<TeardownWatch> watch)
+      : PromiseWorker(env, owner),
+        context_(std::move(context)),
+        db_(db),
+        monitors_(std::move(monitors)),
+        watch_(std::move(watch)) {}
 
  protected:
   void Execute() override {
     RunGuarded("solveAsync()", [&] { found_ = context_->solver()->Solve(db_, monitors_); });
   }
   void Finish(bool succeeded) override {
+    watch_.reset();
     context_->set_search_open(false);
     context_->solve_state().End();
   }
@@ -403,6 +409,7 @@ class CpSolveWorker : public PromiseWorker {
   std::shared_ptr<CpContext> context_;
   DecisionBuilder* db_;
   std::vector<SearchMonitor*> monitors_;
+  std::unique_ptr<TeardownWatch> watch_;  // main thread; stops the search once JS can no longer run
   bool found_ = false;
 };
 
@@ -510,9 +517,20 @@ Napi::Value CpSolver::SolveAsync(const Napi::CallbackInfo& info) {
   DecisionBuilder* db;
   std::vector<SearchMonitor*> monitors;
   if (!ResolveSearch(env, context_.get(), args, &db, &monitors)) return env.Undefined();
+  // worker.terminate() waits for the threadpool: stop the search when JS can no longer run.
+  std::unique_ptr<TeardownWatch> watch;
+  if (!GuardCpp(env, "solveAsync()", [&] {
+        watch = TeardownWatch::Start(env, [weak = std::weak_ptr<CpContext>(context_)] {
+          if (std::shared_ptr<CpContext> context = weak.lock()) context->stop_flag()->store(true);
+        });
+      }) ||
+      !watch) {
+    return env.Undefined();
+  }
   context_->solve_state().Begin();
   context_->set_search_open(true);
-  auto* worker = new CpSolveWorker(env, info.This().As<Napi::Object>(), context_, db, std::move(monitors));
+  auto* worker =
+      new CpSolveWorker(env, info.This().As<Napi::Object>(), context_, db, std::move(monitors), std::move(watch));
   worker->Queue();
   return worker->Promise();
 }

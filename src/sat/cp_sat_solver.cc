@@ -25,6 +25,7 @@
 #include "common/cpp_guard.h"
 #include "common/napi_util.h"
 #include "common/proto_json.h"
+#include "common/teardown_watch.h"
 #include "ortools/sat/cp_model.pb.h"
 #include "ortools/sat/cp_model_checker.h"
 #include "ortools/sat/cp_model_solver.h"
@@ -33,7 +34,6 @@
 #include "ortools/util/time_limit.h"
 #include "sat/sat_parameters.h"
 #include "sat/solution_channel.h"
-#include "sat/teardown_watch.h"
 
 namespace ortools_node {
 namespace {

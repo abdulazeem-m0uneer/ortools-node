@@ -112,8 +112,10 @@ Napi::Value SnapshotToJs(Napi::Env env, const SolutionSnapshot& snapshot, bool i
   return out;
 }
 
-// Holds a thrown JS value (references to primitives need Node-API 9).
+// Holds a thrown JS value (references to primitives need Node-API 9). Empty
+// when nothing was thrown: the call could not run (worker.terminate()).
 Napi::ObjectReference CaptureException(Napi::Env env) {
+  if (!env.IsExceptionPending()) return Napi::ObjectReference();
   napi_value error;
   napi_get_and_clear_last_exception(env, &error);
   Napi::Object holder = Napi::Object::New(env);
@@ -121,15 +123,22 @@ Napi::ObjectReference CaptureException(Napi::Env env) {
   return Napi::Persistent(holder);
 }
 
-// Calls `fn(to_js(env))`; on a throw records it, asks the solve to stop and
-// returns false.
+// The value to reject or rethrow with for a failed callback.
+Napi::Value CallbackError(Napi::Env env, const Napi::ObjectReference& error) {
+  if (error.IsEmpty()) return Napi::Error::New(env, "a solve callback could not be called").Value();
+  return error.Value().Get("error");
+}
+
+// Calls `fn(to_js(env))`. When it throws, or cannot run at all, records the
+// error, asks the solve to stop and returns false.
 template <typename ToJs>
 bool Deliver(Napi::Env env, const Napi::Function& fn, ToJs&& to_js, Napi::ObjectReference* error,
              AsyncSolveState* state) {
   Napi::HandleScope scope(env);
   Napi::Value value = to_js(env);
-  if (!env.IsExceptionPending()) fn.Call(env.Undefined(), {value});
-  if (!env.IsExceptionPending()) return true;
+  Napi::Value result;
+  if (!env.IsExceptionPending()) result = fn.Call(env.Undefined(), {value});
+  if (!env.IsExceptionPending() && !result.IsEmpty()) return true;
   *error = CaptureException(env);
   state->RequestStop();
   return false;
@@ -199,7 +208,7 @@ class SyncCallbacks : public SolutionListener, public ProgressSink {
   }
   bool RethrowIfFailed() {
     if (!failed_) return false;
-    napi_throw(env_, error_.Value().Get("error"));
+    napi_throw(env_, CallbackError(env_, error_));
     return true;
   }
 
@@ -318,7 +327,7 @@ class AsyncSession : public SolutionListener, public ProgressSink {
       deferred_.Reject(worker_failure_->out_of_memory ? Napi::RangeError::New(env, worker_failure_->message).Value()
                                                       : Napi::Error::New(env, worker_failure_->message).Value());
     } else if (callback_failed_) {
-      deferred_.Reject(callback_error_.Value().Get("error"));
+      deferred_.Reject(CallbackError(env, callback_error_));
     } else {
       deferred_.Resolve(handle >= 0 ? Napi::Value(Napi::Number::New(env, handle)) : env.Null());
     }
@@ -392,6 +401,7 @@ int RoutingModelWrap::RecordAssignment(const Assignment* assignment) {
 }
 
 int RoutingModelWrap::FinishSolve(const Assignment* solution) {
+  teardown_watch_.reset();
   listener_ = nullptr;
   progress_->Detach();
   solve_state_.End();
@@ -457,6 +467,12 @@ Napi::Value RoutingModelWrap::StartSolve(const Napi::CallbackInfo& info, bool as
     return handle >= 0 ? Napi::Value(Napi::Number::New(env, handle)) : env.Null();
   }
 
+  std::unique_ptr<TeardownWatch> watch;
+  if (!GuardCpp(env, "solveWithParameters()",
+                [&] { watch = TeardownWatch::Start(env, [this] { solve_state_.RequestStop(); }); }) ||
+      !watch) {
+    return env.Undefined();
+  }
   auto session = std::make_shared<AsyncSession>(env, info.This().As<Napi::Object>(), this, request.include_routes);
   // Unbounded queues (0): solution calls are never dropped, and at most one
   // progress call is queued at a time (AsyncSession::OnProgress).
@@ -480,6 +496,7 @@ Napi::Value RoutingModelWrap::StartSolve(const Napi::CallbackInfo& info, bool as
   }
   listener_ = has_callback ? session.get() : nullptr;
   if (has_progress) progress_->Attach(session.get(), interval);
+  teardown_watch_ = std::move(watch);
   solve_state_.Begin();
   auto* worker = new RoutingSolveWorker(env, session, model_.get(), progress_, request.parameters, initial);
   worker->Queue();
