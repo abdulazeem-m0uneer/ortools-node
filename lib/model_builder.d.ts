@@ -33,9 +33,13 @@ declare class ConstraintBase {
   terms(): Array<[Variable, number]>;
 }
 
-export class LinearConstraint extends ConstraintBase {}
+export class LinearConstraint extends ConstraintBase {
+  /** Type-only brand: an EnforcedLinearConstraint is not a LinearConstraint. */
+  private readonly __linearConstraintBrand: void;
+}
 
 export class EnforcedLinearConstraint extends ConstraintBase {
+  private readonly __enforcedLinearConstraintBrand: void;
   indicatorVariable: Variable;
   indicatorValue: boolean;
 }
