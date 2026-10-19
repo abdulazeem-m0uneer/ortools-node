@@ -397,14 +397,22 @@ test('concurrent solves on separate solvers are independent', async () => {
 });
 
 test('interrupt() stops an interruptible solve early', async () => {
-  const solver = new Solver('CP_SAT');
+  // marketSplit() is infeasible and takes CP-SAT about 10 s to prove: under a
+  // 2 s limit the reference run uses the full 2 s and finds nothing.
+  const reference = new Solver('CP_SAT').setTimeLimitInSeconds(2);
+  let started = Date.now();
+  assert.equal(reference.solveSync(marketSplit()), 'NOT_SOLVED');
+  const limitedMs = Date.now() - started;
+  assert.ok(limitedMs >= 1500, `the reference run ended after ${limitedMs} ms: the model is too easy`);
+
+  const solver = new Solver('CP_SAT').setTimeLimitInSeconds(2);
   assert.equal(solver.interrupt(), false); // nothing running
-  const started = Date.now();
+  started = Date.now();
   const pending = solver.solve(marketSplit());
-  assert.equal(solver.interrupt(), true);
-  const status = await pending;
-  assert.ok(['NOT_SOLVED', 'CANCELLED_BY_USER', 'FEASIBLE', 'INFEASIBLE'].includes(status), status);
-  assert.ok(Date.now() - started < 10000, 'interrupted solve took too long');
+  setTimeout(() => assert.equal(solver.interrupt(), true), 100);
+  assert.equal(await pending, 'NOT_SOLVED');
+  const interruptedMs = Date.now() - started;
+  assert.ok(interruptedMs < limitedMs / 2, `interrupted after ${interruptedMs} ms vs ${limitedMs} ms uninterrupted`);
   assert.equal(solver.interrupt(), false);
 });
 
@@ -418,9 +426,10 @@ test('interrupt() returns false for backends that cannot be interrupted', async 
 test('a time limit stops a hard model early', () => {
   const solver = new Solver('CP_SAT').setTimeLimitInSeconds(0.2);
   const started = Date.now();
-  const status = solver.solveSync(marketSplit());
-  assert.ok(['NOT_SOLVED', 'FEASIBLE', 'INFEASIBLE', 'OPTIMAL'].includes(status), status);
-  assert.ok(Date.now() - started < 10000, 'time limit ignored');
+  // Proving the model infeasible takes about 10 s: 0.2 s cannot settle it, and
+  // a time limit that is not passed on lets it run to INFEASIBLE.
+  assert.equal(solver.solveSync(marketSplit()), 'NOT_SOLVED');
+  assert.ok(Date.now() - started < 2000, 'time limit ignored');
 });
 
 test('dispose() is idempotent and later calls throw', () => {
