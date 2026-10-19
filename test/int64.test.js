@@ -85,3 +85,32 @@ test('an element getter that returns a non-integer is a normal TypeError', () =>
   Object.defineProperty(a, 1, { get: () => 'two' });
   assert.throws(() => many(a, false), { name: 'TypeError', message: /values\[1\]/ });
 });
+
+// A JS length is not backed by memory (`new Array(2 ** 32 - 1)` is free), and
+// a typed array's int64 copy can be twice its size: neither may abort the
+// process with std::bad_alloc. RLIMIT_AS is only enforced on Linux.
+function runWithAddressSpaceLimit(body) {
+  const script = `const { native } = require(${JSON.stringify(path.join(__dirname, '..'))});\n${body}`;
+  return spawnSync('/bin/sh', ['-c', 'ulimit -v 3000000 && exec "$0" -e "$1"', process.execPath, script], {
+    encoding: 'utf8',
+  });
+}
+const noAddressSpaceLimit = process.platform !== 'linux' && 'RLIMIT_AS is only enforced on Linux';
+
+test('a huge sparse Array is rejected by its first element, not pre-allocated', { skip: noAddressSpaceLimit }, () => {
+  const r = runWithAddressSpaceLimit(`
+    try { native._testing.int64ArrayRoundTrip(new Array(2 ** 32 - 1), false); console.log('no error'); }
+    catch (e) { console.log(e.name + ':' + e.message); }`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'TypeError:values[0] must be an integer number or a BigInt');
+});
+
+test('a typed array whose int64 copy does not fit is a RangeError', { skip: noAddressSpaceLimit }, () => {
+  // 1.2 GB of Int32 needs 2.4 GB as int64: over the 3 GB limit with Node itself.
+  const r = runWithAddressSpaceLimit(`
+    const values = new Int32Array(3e8);
+    try { native._testing.int64ArrayRoundTrip(values, false); console.log('no error'); }
+    catch (e) { console.log(e.name + ':' + e.message); }`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'RangeError:values: out of memory (the input is too large)');
+});

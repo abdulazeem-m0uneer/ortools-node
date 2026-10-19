@@ -1,8 +1,11 @@
 #include "common/int64.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <string>
+
+#include "common/cpp_guard.h"
 
 namespace ortools_node {
 namespace {
@@ -59,13 +62,17 @@ bool Throw(Napi::Env env, Int64Error error, const std::string& what) {
 
 std::string ElementName(const char* what, size_t i) { return std::string(what) + "[" + std::to_string(i) + "]"; }
 
+// A plain Array's length is not backed by memory (`new Array(2 ** 32 - 1)` is
+// free), so reserve at most this many elements up front and grow as they validate.
+constexpr uint32_t kMaxArrayReserve = 1u << 16;
+
 template <typename T>
 bool ReadNumericTypedArray(Napi::Env env, const Napi::TypedArray& typed, bool allow_infinite, const char* what,
                            std::vector<int64_t>* out) {
   Napi::TypedArrayOf<T> array = typed.As<Napi::TypedArrayOf<T>>();
   const T* data = array.Data();
   const size_t n = array.ElementLength();
-  out->resize(n);
+  if (!GuardCpp(env, what, [&] { out->resize(n); })) return false;
   for (size_t i = 0; i < n; ++i) {
     Int64Error error = ConvertDouble(static_cast<double>(data[i]), allow_infinite, &(*out)[i]);
     if (error != Int64Error::kNone) return Throw(env, error, ElementName(what, i));
@@ -92,8 +99,7 @@ bool ReadInt64Array(Napi::Env env, const Napi::Value& v, bool allow_infinite, co
       case napi_float64_array: return ReadNumericTypedArray<double>(env, typed, allow_infinite, what, out);
       case napi_bigint64_array: {
         Napi::TypedArrayOf<int64_t> array = typed.As<Napi::TypedArrayOf<int64_t>>();
-        out->assign(array.Data(), array.Data() + array.ElementLength());
-        return true;
+        return GuardCpp(env, what, [&] { out->assign(array.Data(), array.Data() + array.ElementLength()); });
       }
       default:
         Napi::TypeError::New(env, std::string(what) + kArrayTypes).ThrowAsJavaScriptException();
@@ -110,12 +116,15 @@ bool ReadInt64Array(Napi::Env env, const Napi::Value& v, bool allow_infinite, co
   Napi::Array array = v.As<Napi::Array>();
   const uint32_t n = array.Length();
   if (env.IsExceptionPending()) return false;
-  out->resize(n);
+  out->clear();
+  if (!GuardCpp(env, what, [&] { out->reserve(std::min(n, kMaxArrayReserve)); })) return false;
   for (uint32_t i = 0; i < n; ++i) {
     Napi::Value item = array.Get(i);
     if (env.IsExceptionPending()) return false;
-    Int64Error error = ConvertValue(item, allow_infinite, &(*out)[i]);
+    int64_t value = 0;
+    Int64Error error = ConvertValue(item, allow_infinite, &value);
     if (error != Int64Error::kNone) return Throw(env, error, ElementName(what, i));
+    if (!GuardCpp(env, what, [&] { out->push_back(value); })) return false;
   }
   return true;
 }
