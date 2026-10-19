@@ -24,7 +24,8 @@ bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, go
 
 // A protobuf JSON parse error without its "near L:C (offset N)" part, which
 // points into JSON the caller never saw, and with protobuf's irregular
-// whitespace collapsed. The field path and expected type stay.
+// whitespace collapsed, cut to 500 bytes (protobuf echoes the caller's value).
+// The field path and expected type stay.
 std::string JsonParseErrorMessage(const absl::Status& status);
 
 // Prints every field, including those left at their proto3 default, with

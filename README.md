@@ -426,6 +426,8 @@ JavaScript.
   GCC ≥ 11 with the C++11 ABI; `undefined symbol … abi:cxx11` means a mismatch.
 - Let `find_package(ortools)` supply protobuf and abseil. Never mix in system
   copies.
+- Never use `std::regex`. libstdc++'s implementation recurses once per
+  character and crashes on long input; scan text with a plain loop instead.
 
 ## Development
 

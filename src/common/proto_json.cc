@@ -2,12 +2,14 @@
 
 #include <cmath>
 #include <cstdint>
-#include <regex>
 #include <string>
 #include <vector>
 
 #include "absl/status/status.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "google/protobuf/json/json.h"
 #include "google/protobuf/unknown_field_set.h"
 
@@ -96,13 +98,77 @@ std::string FindInvalidValue(const Message& message, const std::string& path) {
   return "";
 }
 
+// The helpers below scan linearly on purpose. protobuf's errors echo the
+// caller's text, and libstdc++'s std::regex recurses once per character, so a
+// long value overflowed the stack (never use std::regex in this codebase).
+
+std::string CollapseWhitespace(absl::string_view text) {
+  std::string out;
+  out.reserve(text.size());
+  bool pending_space = false;
+  for (const char c : text) {
+    if (absl::ascii_isspace(static_cast<unsigned char>(c))) {
+      pending_space = !out.empty();
+      continue;
+    }
+    if (pending_space) out += ' ';
+    pending_space = false;
+    out += c;
+  }
+  return out;
+}
+
+size_t SkipDigits(absl::string_view text, size_t i) {
+  while (i < text.size() && absl::ascii_isdigit(static_cast<unsigned char>(text[i]))) ++i;
+  return i;
+}
+
+// The end of ",? near <digits>:<digits> (offset <digits>)" starting at `start`, or `start`.
+size_t MatchJsonPosition(absl::string_view text, size_t start) {
+  size_t i = start;
+  if (i < text.size() && text[i] == ',') ++i;
+  if (!absl::StartsWith(text.substr(i), " near ")) return start;
+  const size_t line = i + 6;
+  i = SkipDigits(text, line);
+  if (i == line || i >= text.size() || text[i] != ':') return start;
+  const size_t column = i + 1;
+  i = SkipDigits(text, column);
+  if (i == column || !absl::StartsWith(text.substr(i), " (offset ")) return start;
+  const size_t offset = i + 9;
+  i = SkipDigits(text, offset);
+  if (i == offset || i >= text.size() || text[i] != ')') return start;
+  return i + 1;
+}
+
+// Positions point into JSON the binding prints internally, not into the caller's input.
+std::string StripJsonPositions(absl::string_view text) {
+  std::string out;
+  out.reserve(text.size());
+  for (size_t i = 0; i < text.size();) {
+    const size_t end = MatchJsonPosition(text, i);
+    if (end != i) {
+      i = end;
+      continue;
+    }
+    out += text[i++];
+  }
+  return out;
+}
+
+// protobuf echoes the caller's value, which may be megabytes long.
+std::string TruncateMessage(std::string text) {
+  constexpr size_t kMaxLength = 500;
+  if (text.size() <= kMaxLength) return text;
+  size_t cut = kMaxLength;
+  while (cut > 0 && (static_cast<unsigned char>(text[cut]) & 0xC0) == 0x80) --cut;  // keep UTF-8 whole
+  text.resize(cut);
+  return text + "\xE2\x80\xA6";  // "…" in UTF-8
+}
+
 }  // namespace
 
 std::string JsonParseErrorMessage(const absl::Status& status) {
-  static const std::regex* const kWhitespace = new std::regex(R"(\s+)");
-  static const std::regex* const kPosition = new std::regex(R"(,? near \d+:\d+ \(offset \d+\))");
-  const std::string collapsed = std::regex_replace(std::string(status.message()), *kWhitespace, " ");
-  return std::regex_replace(collapsed, *kPosition, "");
+  return TruncateMessage(StripJsonPositions(CollapseWhitespace(status.message())));
 }
 
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out) {
