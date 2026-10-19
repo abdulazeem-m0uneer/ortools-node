@@ -80,6 +80,18 @@ class SolutionChannel : public std::enable_shared_from_this<SolutionChannel> {
   // the pending JS exception and returns true.
   bool ThrowCallbackError(Napi::Env env);
 
+  // Test-only, process-wide counters over every channel (native._testing):
+  // snapshots queued for JS, snapshots delivered, and the most snapshots of one
+  // channel ever queued and not yet delivered, seen when one is queued. Each
+  // solver thread waits for its delivery, so that maximum stays 1.
+  struct Stats {
+    int64_t issued;
+    int64_t delivered;
+    int64_t max_pending;
+  };
+  static Stats TestingStats();
+  static void ResetTestingStats();
+
  private:
   static void CallJs(Napi::Env env, Napi::Function callback, SolutionChannel* self, SolutionSnapshot* snapshot);
   void Deliver(const operations_research::sat::CpSolverResponse& response);  // solver thread; may throw
