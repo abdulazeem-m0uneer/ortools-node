@@ -1,6 +1,6 @@
 // Vehicle routing (pywrapcp's RoutingIndexManager / RoutingModel).
 
-import { CpInt, CpSolver, IntExpr, IntVar } from './cp';
+import { CpInt, CpSolver, Int64Values, IntExpr, IntVar } from './cp';
 import { Overrides, RoutingSearchParameters, RoutingSearchStatusName } from './params';
 
 export type VisitTypePolicyName =
@@ -14,17 +14,17 @@ export type PickupAndDeliveryPolicyName =
 export const VisitTypePolicy: Readonly<{ [K in VisitTypePolicyName]: K }>;
 export const PickupAndDeliveryPolicy: Readonly<{ [K in PickupAndDeliveryPolicyName]: K }>;
 
-/** Integer values for transits and capacities; ±Infinity maps to the int64 extremes. */
-export type Int64Array = ArrayLike<CpInt> | Int32Array | Uint32Array | Float64Array | BigInt64Array;
+/** Indices, nodes and vehicles: an Array of numbers, or an Int32Array, Uint32Array or Float64Array. */
+export type IndexValues = ReadonlyArray<number> | Int32Array | Uint32Array | Float64Array;
 
 export class RoutingIndexManager {
   constructor(numNodes: number, numVehicles: number, depot: number);
-  constructor(numNodes: number, numVehicles: number, starts: ArrayLike<number>, ends: ArrayLike<number>);
+  constructor(numNodes: number, numVehicles: number, starts: IndexValues, ends: IndexValues);
   /** -1 for a node that is only an end depot. */
   nodeToIndex(node: number): number;
   indexToNode(index: number): number;
-  nodesToIndices(nodes: ArrayLike<number>): number[];
-  indicesToNodes(indices: ArrayLike<number>): number[];
+  nodesToIndices(nodes: IndexValues): number[];
+  indicesToNodes(indices: IndexValues): number[];
   getNumberOfNodes(): number;
   getNumberOfVehicles(): number;
   getNumberOfIndices(): number;
@@ -86,9 +86,13 @@ export class RoutingModel {
   constructor(manager: RoutingIndexManager);
   solver(): CpSolver;
 
-  registerTransitMatrix(matrix: ArrayLike<Int64Array>): number;
-  registerUnaryTransitVector(values: Int64Array): number;
-  /** Evaluated now, for every pair of indices: fn must be pure and return integers. */
+  registerTransitMatrix(matrix: ReadonlyArray<Int64Values>): number;
+  registerUnaryTransitVector(values: Int64Values): number;
+  /**
+   * Evaluated now, for every pair of indices (solving runs off the JS thread):
+   * fn must be pure and return integers. Limited to 16384 indices, since it
+   * stores one value per pair; use registerTransitMatrix() for larger models.
+   */
   registerTransitCallback(fn: (fromIndex: number, toIndex: number) => CpInt): number;
   registerUnaryTransitCallback(fn: (fromIndex: number) => CpInt): number;
   setArcCostEvaluatorOfAllVehicles(evaluator: number): void;
@@ -97,15 +101,15 @@ export class RoutingModel {
   setFixedCostOfVehicle(cost: CpInt, vehicle: number): void;
 
   addDimension(evaluator: number, slackMax: CpInt, capacity: CpInt, fixStartCumulToZero: boolean, name: string): boolean;
-  addDimensionWithVehicleCapacity(evaluator: number, slackMax: CpInt, vehicleCapacities: Int64Array,
+  addDimensionWithVehicleCapacity(evaluator: number, slackMax: CpInt, vehicleCapacities: Int64Values,
     fixStartCumulToZero: boolean, name: string): boolean;
-  addDimensionWithVehicleTransits(evaluators: ArrayLike<number>, slackMax: CpInt, capacity: CpInt,
+  addDimensionWithVehicleTransits(evaluators: IndexValues, slackMax: CpInt, capacity: CpInt,
     fixStartCumulToZero: boolean, name: string): boolean;
-  addDimensionWithVehicleTransitAndCapacity(evaluators: ArrayLike<number>, slackMax: CpInt,
-    vehicleCapacities: Int64Array, fixStartCumulToZero: boolean, name: string): boolean;
+  addDimensionWithVehicleTransitAndCapacity(evaluators: IndexValues, slackMax: CpInt,
+    vehicleCapacities: Int64Values, fixStartCumulToZero: boolean, name: string): boolean;
   addConstantDimension(value: CpInt, capacity: CpInt, fixStartCumulToZero: boolean, name: string): [number, boolean];
-  addVectorDimension(values: Int64Array, capacity: CpInt, fixStartCumulToZero: boolean, name: string): [number, boolean];
-  addMatrixDimension(matrix: ArrayLike<Int64Array>, capacity: CpInt, fixStartCumulToZero: boolean,
+  addVectorDimension(values: Int64Values, capacity: CpInt, fixStartCumulToZero: boolean, name: string): [number, boolean];
+  addMatrixDimension(matrix: ReadonlyArray<Int64Values>, capacity: CpInt, fixStartCumulToZero: boolean,
     name: string): [number, boolean];
   hasDimension(name: string): boolean;
   getDimensionOrDie(name: string): RoutingDimension;
@@ -115,16 +119,16 @@ export class RoutingModel {
   setPickupAndDeliveryPolicyOfAllVehicles(policy: PickupAndDeliveryPolicyName): void;
   setPickupAndDeliveryPolicyOfVehicle(policy: PickupAndDeliveryPolicyName, vehicle: number): void;
   /** Returns the disjunction index. The default penalty -1 makes it mandatory. */
-  addDisjunction(indices: ArrayLike<number>, penalty?: CpInt, maxCardinality?: CpInt): number;
-  setAllowedVehiclesForIndex(vehicles: ArrayLike<number>, index: number): void;
+  addDisjunction(indices: IndexValues, penalty?: CpInt, maxCardinality?: CpInt): number;
+  setAllowedVehiclesForIndex(vehicles: IndexValues, index: number): void;
   setVisitType(index: number, type: number, policy: VisitTypePolicyName): void;
   addHardTypeIncompatibility(type1: number, type2: number): void;
   addTemporalTypeIncompatibility(type1: number, type2: number): void;
-  addRequiredTypeAlternativesWhenAddingType(dependentType: number, requiredTypes: ArrayLike<number>): void;
-  addRequiredTypeAlternativesWhenRemovingType(dependentType: number, requiredTypes: ArrayLike<number>): void;
-  addSoftSameVehicleConstraint(indices: ArrayLike<number>, cost: CpInt): void;
+  addRequiredTypeAlternativesWhenAddingType(dependentType: number, requiredTypes: IndexValues): void;
+  addRequiredTypeAlternativesWhenRemovingType(dependentType: number, requiredTypes: IndexValues): void;
+  addSoftSameVehicleConstraint(indices: IndexValues, cost: CpInt): void;
   /** OR-Tools 9.15 and later. */
-  addSameActivityGroup(indices: ArrayLike<number>): void;
+  addSameActivityGroup(indices: IndexValues): void;
 
   nextVar(index: number): IntVar;
   vehicleVar(index: number): IntVar;
@@ -146,9 +150,9 @@ export class RoutingModel {
   closeModel(): void;
   closeModelWithParameters(params?: RoutingParameters): void;
   readonly closed: boolean;
-  applyLocks(locks: ArrayLike<number>): IntVar | null;
-  applyLocksToAllVehicles(locks: ArrayLike<number>[], closeRoutes: boolean): boolean;
-  readAssignmentFromRoutes(routes: ArrayLike<number>[], ignoreInactiveIndices: boolean): RoutingSolution | null;
+  applyLocks(locks: IndexValues): IntVar | null;
+  applyLocksToAllVehicles(locks: ReadonlyArray<IndexValues>, closeRoutes: boolean): boolean;
+  readAssignmentFromRoutes(routes: ReadonlyArray<IndexValues>, ignoreInactiveIndices: boolean): RoutingSolution | null;
 
   solveWithParameters(params?: RoutingParameters, options?: SolveOptions): Promise<RoutingSolution | null>;
   solveFromAssignmentWithParameters(assignment: RoutingSolution, params?: RoutingParameters,
