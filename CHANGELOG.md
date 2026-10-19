@@ -94,8 +94,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`solve()` rejects with `Invalid CpModel: ...` rather than resolving
   `MODEL_INVALID` as Python does); values and `objectiveValue` throw when the
   last solve found no solution, and `bestObjectiveBound` after `INFEASIBLE`.
-  Comparing with `==` either int64 extreme, `>= INT64_MAX` or `<= INT64_MIN`
-  throws a `RangeError`, as Python's `ArithmeticError`. Unlike Python,
+  Comparing with `==` either int64 extreme throws a `RangeError` where Python
+  raises `ValueError`, and `>= INT64_MAX` or `<= INT64_MIN` a `RangeError` where
+  Python raises `ArithmeticError`. Unlike Python,
   `< INT64_MIN` and `> INT64_MAX` are accepted and always false (empty domain,
   so the model is `INFEASIBLE`).
 - CP-SAT solution callbacks: `solve(model, { onSolution })` passes each solution
