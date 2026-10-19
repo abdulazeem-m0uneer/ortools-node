@@ -46,10 +46,10 @@ export class RoutingDimension {
   setCumulVarSoftLowerBound(index: number, lowerBound: CpInt, coefficient: CpInt): void;
 }
 
-/** Valid until the model is solved again, changed or disposed; then every call throws. */
 /** An exact solution value: a number up to 2^53, a bigint beyond, ±Infinity for the int64 extremes. */
 export type SolutionValue = number | bigint;
 
+/** Valid until the model is solved again, changed or disposed; then every call throws. */
 export class RoutingSolution {
   private constructor();
   readonly valid: boolean;
