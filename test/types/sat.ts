@@ -90,3 +90,7 @@ model.addHint(eitherLiteral, true);
 model.addHint(eitherLiteral, 0n);
 // @ts-expect-error only 0 / 1 (or a boolean) fits every literal
 model.addHint(eitherLiteral, 2);
+
+// @ts-expect-error CpLinearExpr is closed: only the library's own subclasses exist
+class MyExpr extends CpLinearExpr {}
+export { MyExpr };

@@ -482,3 +482,8 @@ test('names must be well-formed Unicode: lone surrogates are rejected where they
   assert.equal(m.validate(), '');
   assert.equal(m.toJSON().constraints.length, JSON.parse(before).constraints.length + 1);  // only the add() above
 });
+
+test('CpLinearExpr cannot be subclassed outside the library', () => {
+  class Mine extends CpLinearExpr {}
+  assert.throws(() => new Mine(), /CpLinearExpr is closed/);
+});
