@@ -24,6 +24,9 @@ const d: IntVar = model.newIntVarFromDomain(Domain.fromIntervals([[0, 2], [5]]),
 const ble: BoundedLinearExpr = x.plus(d.times(2)).minus(1).le(big);
 const ct: CpConstraint = model.add(ble).onlyEnforceIf(b, notB, true).withName('c');
 model.addBoolOr([b, notB]);
+const always: CpConstraint = model.add(true);
+model.addAtLeastOne([b]);
+model.addAtLeastOne(b, notB);
 model.addExactlyOne(b, notB);
 model.addLinearConstraint(CpLinearExpr.sum([x, d, 3]), -Infinity, 10);
 const interval: IntervalVar = model.newOptionalFixedSizeIntervalVar(x, 3, b, 'i');
