@@ -85,6 +85,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   abs / product / division / modulo, NoOverlap, NoOverlap2D, cumulative) with
   `onlyEnforceIf()`, objectives, hints, assumptions and decision strategies.
   int64 values are exact: numbers, or BigInts beyond 2^53.
+  Interval start, size and end must be affine (at most one variable), as in
+  Python; anything else throws a `TypeError` when the interval is built.
 - `CpSolver`: `solve()` on the threadpool and `solveSync()`, `SatParameters` as
   a plain object, `stopSearch()`, values (BigInts beyond 2^53), objective,
   bound and statistics.

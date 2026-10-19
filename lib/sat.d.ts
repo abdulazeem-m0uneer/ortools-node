@@ -134,6 +134,7 @@ export class CpModel {
   newBoolVar(name?: string): IntVar;
   newConstant(value: Int): IntVar;
 
+  /** For every interval constructor, start, size and end must be affine (at most one variable) or constant, else a TypeError. */
   newIntervalVar(start: LinearExprLike, size: LinearExprLike, end: LinearExprLike, name?: string): IntervalVar;
   newOptionalIntervalVar(
     start: LinearExprLike, size: LinearExprLike, end: LinearExprLike, isPresent: Literal, name?: string): IntervalVar;

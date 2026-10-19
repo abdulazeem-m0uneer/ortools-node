@@ -253,6 +253,25 @@ test('CpConstraint: onlyEnforceIf accumulates literals, withName names it', () =
   assert.throws(() => ct.onlyEnforceIf(x), TypeError);
 });
 
+test('interval start, size and end must be affine, as in Python', () => {
+  const m = new CpModel();
+  const y = m.newIntVar(0, 7, 'y');
+  const z = m.newIntVar(-3, 3, 'z');
+  const b = m.newBoolVar('b');
+  const before = JSON.stringify(m.toJSON());
+  assert.throws(() => m.newIntervalVar(z, y, z.plus(y), 'i'), { name: 'TypeError', message: /interval end must be affine or constant/ });
+  assert.throws(() => m.newIntervalVar(z.plus(y), 2, z.plus(y).plus(2)), { name: 'TypeError', message: /interval start must be affine/ });
+  assert.throws(() => m.newIntervalVar(z, y.plus(z), 5), { name: 'TypeError', message: /interval size must be affine/ });
+  assert.throws(() => m.newOptionalIntervalVar(z, 2, z.plus(y), b), { name: 'TypeError', message: /interval end must be affine/ });
+  assert.throws(() => m.newFixedSizeIntervalVar(z.plus(y), 2), { name: 'TypeError', message: /interval start must be affine/ });
+  assert.throws(() => m.newOptionalFixedSizeIntervalVar(z.plus(y), 2, b), { name: 'TypeError', message: /interval start must be affine/ });
+  assert.equal(JSON.stringify(m.toJSON()), before);
+  // One variable after merging terms is still affine; so is a constant.
+  m.newIntervalVar(z.times(2).minus(z), 3, z.plus(y).minus(y).plus(3), 'merged');
+  m.newIntervalVar(1, 2, 3, 'const');
+  assert.equal(m.toJSON().constraints.length, 2);
+});
+
 test('variables, intervals and literals from another model are rejected before any change', () => {
   const m1 = new CpModel();
   const m2 = new CpModel();
