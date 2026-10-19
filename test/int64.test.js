@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { native } = require('..');
 
-const { int64RoundTrip: one, int64ArrayRoundTrip: many } = native._testing;
+const { int64RoundTrip: one, int64ArrayRoundTrip: many, int64NumberOrBigIntRoundTrip: exact } = native._testing;
 const SAFE = Number.MAX_SAFE_INTEGER;
 
 test('safe integers and in-range BigInts round-trip exactly', () => {
@@ -32,6 +32,17 @@ test('values a JS number cannot hold exactly are RangeErrors, never rounded', ()
   assert.throws(() => one(SAFE + 1, false), { name: 'RangeError', message: /BigInt/ });
   assert.throws(() => one(2n ** 63n, false), { name: 'RangeError', message: /64-bit/ });
   assert.throws(() => one(BigInt(SAFE) + 1n, false), { name: 'RangeError', message: /exactly/ });
+});
+
+test('Int64ToJsNumberOrBigInt returns results beyond MAX_SAFE_INTEGER as exact BigInts, never a throw', () => {
+  for (const v of [0, 1, -1, SAFE, -SAFE]) assert.equal(exact(v, false), v);
+  assert.equal(exact(BigInt(SAFE), false), SAFE, 'a safe BigInt input comes back as a number');
+  assert.equal(exact(BigInt(SAFE) + 1n, false), BigInt(SAFE) + 1n);
+  assert.equal(exact(-BigInt(SAFE) - 1n, false), -BigInt(SAFE) - 1n);
+  assert.equal(exact(2n ** 63n - 2n, false), 2n ** 63n - 2n);
+  assert.equal(exact(-(2n ** 63n) + 1n, false), -(2n ** 63n) + 1n);
+  assert.equal(exact(2n ** 63n - 1n, false), Infinity, 'kint64max stays the unbounded marker');
+  assert.equal(exact(-(2n ** 63n), false), -Infinity);
 });
 
 test('arrays and typed arrays convert element by element', () => {

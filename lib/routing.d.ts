@@ -1,6 +1,6 @@
 // Vehicle routing (pywrapcp's RoutingIndexManager / RoutingModel).
 
-import { CpInt, CpSolver, Int64Values, IntExpr, IntVar } from './cp';
+import { CpInt, CpSolver, CpValue, Int64Values, IntExpr, IntVar } from './cp';
 import { Overrides, RoutingSearchParameters, RoutingSearchStatusName } from './params';
 
 export type VisitTypePolicyName =
@@ -46,8 +46,8 @@ export class RoutingDimension {
   setCumulVarSoftLowerBound(index: number, lowerBound: CpInt, coefficient: CpInt): void;
 }
 
-/** An exact solution value: a number up to 2^53, a bigint beyond, ±Infinity for the int64 extremes. */
-export type SolutionValue = number | bigint;
+/** An exact solution value; the same rule as every CP int64 result (CpValue). */
+export type SolutionValue = CpValue;
 
 /** Valid until the model is solved again, changed or disposed; then every call throws. */
 export class RoutingSolution {

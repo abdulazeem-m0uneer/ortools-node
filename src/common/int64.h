@@ -4,9 +4,11 @@
 // * Input: a safe-integer number, or a BigInt that fits in int64. When
 //   allow_infinite, +-Infinity maps onto kint64max / kint64min, which OR-Tools
 //   uses for "unbounded". NaN, fractions and unsafe numbers are rejected.
-// * Output: a number; kint64max / kint64min come back as +-Infinity, and any
-//   other value outside the safe range throws a RangeError (never a silent
-//   rounding).
+// * Output (Int64ToJs): a number; kint64max / kint64min come back as
+//   +-Infinity, and any other value outside the safe range throws a RangeError
+//   (never a silent rounding).
+// * Output (Int64ToJsNumberOrBigInt): the same, except that a value outside the
+//   safe range comes back as an exact BigInt instead of throwing.
 
 #ifndef ORTOOLS_NODE_COMMON_INT64_H_
 #define ORTOOLS_NODE_COMMON_INT64_H_
@@ -34,7 +36,10 @@ Napi::Value Int64ToJs(Napi::Env env, int64_t v, const char* what);
 // Converts a vector of int64 results to a JS Array (same rules as Int64ToJs).
 Napi::Value Int64ArrayToJs(Napi::Env env, const std::vector<int64_t>& values, const char* what);
 
-// Registers native._testing.{int64RoundTrip,int64ArrayRoundTrip} for the test suite.
+// Converts an int64 result to a JS number, +-Infinity or exact BigInt. Never throws.
+Napi::Value Int64ToJsNumberOrBigInt(Napi::Env env, int64_t v);
+
+// Registers native._testing.{int64RoundTrip,int64ArrayRoundTrip,int64NumberOrBigIntRoundTrip} for the test suite.
 void InitInt64Testing(Napi::Env env, Napi::Object testing);
 
 }  // namespace ortools_node

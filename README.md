@@ -387,7 +387,12 @@ build. `INF` is `Infinity`.
 
 The classic constraint programming solver (`pywrapcp.Solver`). Integer inputs
 accept safe integers and BigInts; `removeValues`, `memberCt` and similar take an
-Array or a typed array.
+Array or a typed array. Every int64 result (`min()`, `max()`, `value()`,
+`size()`, collector values and statistics) is a number up to
+`Number.MAX_SAFE_INTEGER`, an exact BigInt beyond it, and `-Infinity` /
+`Infinity` for the int64 extremes (the unbounded markers, so
+`intVar(-Infinity, Infinity)` reads back as it was made). `size()` is never
+Infinity: the full int64 domain is `2n ** 64n`.
 
 | Method | Description |
 |---|---|
@@ -433,8 +438,9 @@ OR-Tools' protobuf (`defaultRoutingSearchParameters()`,
 `validateRoutingSearchParameters(params)`, `durationMs(ms)` for time limits). A
 `RoutingSolution` has `objectiveValue()`, `routes()`, `cumuls(dimension)`,
 `slacks(dimension)` and `value/min/max(variable)`, and stays valid until the
-model is solved again, changed or disposed. Solution values are numbers up to
-2^53 and BigInts beyond, so large penalties are exact.
+model is solved again, changed or disposed. Solution values follow the CP rule
+(numbers up to `Number.MAX_SAFE_INTEGER`, BigInts beyond, ±Infinity for the
+int64 extremes), so large penalties are exact.
 
 ### Errors
 

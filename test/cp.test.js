@@ -45,7 +45,24 @@ test('±Infinity bounds map to the int64 extremes and back; BigInt is accepted',
   assert.equal(x.max(), Infinity);
   const y = s.intVar(0n, 10n);
   assert.equal(y.max(), 10);
-  assert.throws(() => s.intVar(0, 2n ** 62n).max(), RangeError, 'unsafe values are not rounded');
+});
+
+test('min()/max()/value() are numbers up to MAX_SAFE_INTEGER, exact BigInts beyond, ±Infinity at the int64 extremes', () => {
+  const s = new CpSolver();
+  const SAFE = BigInt(Number.MAX_SAFE_INTEGER);
+  const [MIN, MAX] = [-(2n ** 63n), 2n ** 63n - 1n];
+  const cases = [
+    [SAFE, Number.MAX_SAFE_INTEGER], [-SAFE, -Number.MAX_SAFE_INTEGER], [SAFE + 1n, SAFE + 1n], [-SAFE - 1n, -SAFE - 1n],
+    [2n ** 60n, 2n ** 60n], [-(2n ** 60n), -(2n ** 60n)], [MAX - 1n, MAX - 1n], [MIN + 1n, MIN + 1n],
+    [MAX, Infinity], [MIN, -Infinity],
+  ];
+  for (const [input, expected] of cases) {
+    const c = s.intConst(input);
+    assert.deepEqual([c.min(), c.max(), c.value()], [expected, expected, expected], `intConst(${input})`);
+  }
+  const x = s.intVar(-(2n ** 60n), 2n ** 60n);
+  assert.deepEqual([x.min(), x.max()], [-(2n ** 60n), 2n ** 60n]);
+  assert.deepEqual([x.plus(1).min(), x.plus(1).max()], [-(2n ** 60n) + 1n, 2n ** 60n + 1n], 'expressions follow the same rule');
 });
 
 test('bad variable arguments throw instead of reaching OR-Tools', () => {
@@ -294,17 +311,18 @@ test('removeValues() on the full int64 domain removes only what is listed', () =
   assert.deepEqual([y.contains(0), y.contains(MIN), y.contains(MAX)], [true, true, true], 'a refused hole changes nothing');
 });
 
-test('size() is exact up to Number.MAX_SAFE_INTEGER and Infinity above it, never a throw or a wrapped 0', () => {
+test('size() is a number up to MAX_SAFE_INTEGER and an exact BigInt beyond, never a throw or a wrapped 0', () => {
   const s = new CpSolver();
   const MAX = 2n ** 63n - 1n;
-  assert.equal(s.intVar(0, 2n ** 53n - 2n).size(), Number.MAX_SAFE_INTEGER, 'the largest exact size');
-  assert.equal(s.intVar(0, 2n ** 53n - 1n).size(), Infinity, 'MAX_SAFE_INTEGER + 1 values');
-  assert.equal(s.intVar(0, 2n ** 53n).size(), Infinity);
-  assert.equal(s.intVar(0, 2n ** 60n).size(), Infinity);
-  assert.equal(s.intVar(2, MAX).size(), Infinity, '2^63 - 2 values');
-  assert.equal(s.intVar(1, MAX).size(), Infinity, '2^63 - 1 values');
-  assert.equal(s.intVar(-(2n ** 63n), MAX).size(), Infinity, 'the full int64 domain holds 2^64 values');
-  assert.equal(s.intVar(-(2n ** 63n) + 1n, MAX).size(), Infinity);
+  assert.equal(s.intVar(0, 2n ** 53n - 2n).size(), Number.MAX_SAFE_INTEGER, 'the largest number size');
+  assert.equal(s.intVar(0, 2n ** 53n - 1n).size(), 2n ** 53n, 'MAX_SAFE_INTEGER + 1 values');
+  assert.equal(s.intVar(0, 2n ** 53n).size(), 2n ** 53n + 1n);
+  assert.equal(s.intVar(0, 2n ** 60n).size(), 2n ** 60n + 1n);
+  assert.equal(s.intVar(2, MAX).size(), 2n ** 63n - 2n);
+  assert.equal(s.intVar(1, MAX).size(), 2n ** 63n - 1n);
+  assert.equal(s.intVar(-(2n ** 63n), MAX).size(), 2n ** 64n, 'the full int64 domain holds 2^64 values');
+  assert.equal(s.intVar(-(2n ** 63n) + 1n, MAX).size(), 2n ** 64n - 1n);
+  assert.equal(s.intVar(-Infinity, Infinity).size(), 2n ** 64n, '±Infinity bounds are the full domain');
 });
 
 test('removeValues() matches a removeValue() loop, and a failed call changes nothing', () => {

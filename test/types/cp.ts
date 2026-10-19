@@ -13,11 +13,16 @@ const found: boolean = s.solve(db, [s.minimize(e), best, { atSolution: () => tru
 const pending: Promise<boolean> = s.solveAsync(db, [best, s.timeLimit(100)]);
 s.newSearch(db);
 while (s.nextSolution()) {
-  const v: number = x.value();
+  const v: cp.CpValue = x.value();
 }
 s.endSearch();
 const count: number = best.solutionCount();
-const objective: number = best.objectiveValue(0);
+const objective: cp.CpValue = best.objectiveValue(0);
+const bounds: Array<number | bigint> = [e.min(), e.max(), x.size(), best.value(0, x), s.branches(), best.wallTime(0)];
+// @ts-expect-error int64 results past 2^53 are bigints, so they are not plain numbers
+const narrow: number = x.max();
+// @ts-expect-error size() of a wide domain is a bigint
+const narrowSize: number = x.size();
 s.dispose();
 {
   using scoped = new cp.CpSolver('scoped');

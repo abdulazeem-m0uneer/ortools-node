@@ -4,6 +4,8 @@
 export type CpInt = number | bigint;
 /** Integer arrays the addon reads: an Array, or an Int32Array, Uint32Array, Float64Array or BigInt64Array. */
 export type Int64Values = ReadonlyArray<CpInt> | Int32Array | Uint32Array | Float64Array | BigInt64Array;
+/** An exact int64 result: a number up to Number.MAX_SAFE_INTEGER, a bigint beyond, ±Infinity for the int64 extremes. */
+export type CpValue = number | bigint;
 
 export type IntVarStrategyName =
   | 'INT_VAR_DEFAULT' | 'INT_VAR_SIMPLE' | 'CHOOSE_FIRST_UNBOUND' | 'CHOOSE_RANDOM'
@@ -34,8 +36,8 @@ export class IntExpr {
   ge(other: IntExpr | CpInt): CpConstraint;
   gt(other: IntExpr | CpInt): CpConstraint;
 
-  min(): number;
-  max(): number;
+  min(): CpValue;
+  max(): CpValue;
   bound(): boolean;
   /** Outside a search only; an empty domain throws "CP solver failure". */
   setMin(value: CpInt): this;
@@ -47,12 +49,12 @@ export class IntExpr {
 
 export class IntVar extends IntExpr {
   /** The value at a solution; throws when the variable is not bound. */
-  value(): number;
+  value(): CpValue;
   removeValue(value: CpInt): this;
   removeValues(values: Int64Values): this;
   contains(value: CpInt): boolean;
-  /** The number of values in the domain; Infinity when it exceeds Number.MAX_SAFE_INTEGER. */
-  size(): number;
+  /** The number of values in the domain: a bigint beyond Number.MAX_SAFE_INTEGER (2n ** 64n for the full int64 domain), never Infinity. */
+  size(): CpValue;
   name(): string;
 }
 
@@ -64,11 +66,11 @@ export class SolutionCollector extends SearchMonitor {
   add(vars: IntExpr | IntExpr[]): this;
   addObjective(objective: IntExpr): this;
   solutionCount(): number;
-  value(n: number, variable: IntVar): number;
-  objectiveValue(n: number): number;
-  wallTime(n: number): number;
-  branches(n: number): number;
-  failures(n: number): number;
+  value(n: number, variable: IntVar): CpValue;
+  objectiveValue(n: number): CpValue;
+  wallTime(n: number): CpValue;
+  branches(n: number): CpValue;
+  failures(n: number): CpValue;
 }
 
 /** A JS object used as a search monitor by solve() and newSearch(). */
@@ -141,10 +143,10 @@ export class CpSolver {
   interrupt(): boolean;
   readonly busy: boolean;
 
-  wallTime(): number;
-  branches(): number;
-  failures(): number;
-  solutions(): number;
+  wallTime(): CpValue;
+  branches(): CpValue;
+  failures(): CpValue;
+  solutions(): CpValue;
   /** Frees the native solver now; later calls throw. A RoutingModel's solver is freed with the model. */
   dispose(): void;
   [Symbol.dispose](): void;
