@@ -5,7 +5,8 @@
 
 namespace ortools_node {
 
-// Registers the `Solver` class, `infinity` and `supportsProblemType`.
+// Registers the `Solver` class, `infinity` and `supportsProblemType` (exported
+// from lib/ as supportsBackend, the name its error messages use).
 Napi::Object InitMpSolver(Napi::Env env, Napi::Object exports);
 
 }  // namespace ortools_node

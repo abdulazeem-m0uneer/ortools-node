@@ -274,7 +274,7 @@ Napi::Object Solver::Init(Napi::Env env, Napi::Object exports) {
   exports.Set("supportsProblemType", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
     Napi::Env env = info.Env();
     if (info.Length() < 1 || !info[0].IsString()) {
-      THROW_TYPE_AND_RETURN(env, "supportsProblemType(name: string)", env.Undefined());
+      THROW_TYPE_AND_RETURN(env, "supportsBackend(name: string)", env.Undefined());
     }
     MPSolver::OptimizationProblemType type;
     bool ok = MPSolver::ParseSolverType(info[0].As<Napi::String>().Utf8Value(), &type);
@@ -296,7 +296,7 @@ Solver::Solver(const Napi::CallbackInfo& info) : Napi::ObjectWrap<Solver>(info) 
   MPSolver::OptimizationProblemType type;
   if (!MPSolver::ParseSolverType(backend, &type) || !MPSolver::SupportsProblemType(type)) {
     THROW_AND_RETURN(env, "Unsupported or unavailable solver backend: '" + backend +
-                     "' (check your OR-Tools build; try supportsProblemType())", );
+                     "' (check your OR-Tools build; try supportsBackend())", );
   }
   solver_ = std::make_unique<MPSolver>(name, type);
 }
