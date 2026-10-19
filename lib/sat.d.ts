@@ -136,7 +136,10 @@ export class CpModel {
   newBoolVar(name?: string): IntVar;
   newConstant(value: Int): IntVar;
 
-  /** For every interval constructor, start, size and end must be affine (at most one variable) or constant, else a TypeError. */
+  /**
+   * For every interval constructor, start, size and end must be affine (at most one variable) or constant, else a TypeError.
+   * Unlike Python, which reads True / False as 1 / 0, a boolean there is a TypeError too.
+   */
   newIntervalVar(start: LinearExprLike, size: LinearExprLike, end: LinearExprLike, name?: string): IntervalVar;
   newOptionalIntervalVar(
     start: LinearExprLike, size: LinearExprLike, end: LinearExprLike, isPresent: Literal, name?: string): IntervalVar;
