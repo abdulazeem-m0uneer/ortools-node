@@ -499,6 +499,20 @@ test('eq/ge at INT64_MAX and eq/le at INT64_MIN are rejected as in Python', () =
   assert.deepEqual(x.plus(5).le(MAX).toString(), x.plus(5).le(Infinity).toString());
 });
 
+test('lt(INT64_MIN) and gt(INT64_MAX) are accepted and always false (Python raises)', () => {
+  const MIN = -(2n ** 63n);
+  const MAX = 2n ** 63n - 1n;
+  for (const make of [
+    (x) => x.lt(MIN), (x) => x.lt(-Infinity), (x) => x.gt(MAX), (x) => x.gt(Infinity),
+    (x) => x.plus(5).lt(MIN), (x) => x.plus(5).gt(MAX),
+  ]) {
+    const m = new CpModel();
+    m.add(make(m.newIntVar(0, 10, 'x')));
+    assert.deepEqual(m.toJSON().constraints[0].linear.domain, [], String(make));
+    assert.equal(new CpSolver().solveSync(m), 'INFEASIBLE', String(make));
+  }
+});
+
 test('CpLinearExpr cannot be constructed directly', () => {
   assert.throws(() => new CpLinearExpr(), /CpLinearExpr\.sum\(\)/);
   assert.ok(CpLinearExpr.constant(3) instanceof CpLinearExpr);

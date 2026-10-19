@@ -57,6 +57,7 @@ export class CpLinearExpr {
   /**
    * Comparisons. A constant INT64_MAX / INT64_MIN (or ±Infinity) bound means unbounded;
    * as in Python, eq() with either extreme, ge(INT64_MAX) and le(INT64_MIN) throw a RangeError.
+   * Unlike Python, lt(INT64_MIN) and gt(INT64_MAX) are accepted and always false (INFEASIBLE).
    */
   le(other: LinearExprLike): BoundedLinearExpr;
   ge(other: LinearExprLike): BoundedLinearExpr;
