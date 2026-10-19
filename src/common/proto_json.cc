@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -97,6 +98,13 @@ std::string FindInvalidValue(const Message& message, const std::string& path) {
 
 }  // namespace
 
+std::string JsonParseErrorMessage(const absl::Status& status) {
+  static const std::regex* const kWhitespace = new std::regex(R"(\s+)");
+  static const std::regex* const kPosition = new std::regex(R"(,? near \d+:\d+ \(offset \d+\))");
+  const std::string collapsed = std::regex_replace(std::string(status.message()), *kWhitespace, " ");
+  return std::regex_replace(collapsed, *kPosition, "");
+}
+
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out) {
   if (!json.IsString()) {
     Napi::TypeError::New(env, std::string(what) + " must be a JSON string").ThrowAsJavaScriptException();
@@ -110,7 +118,7 @@ bool ParseProtoJson(Napi::Env env, const std::string& json, const char* what, go
   google::protobuf::json::ParseOptions options;
   options.ignore_unknown_fields = false;
   absl::Status status = google::protobuf::json::JsonStringToMessage(json, out, options);
-  const std::string error = status.ok() ? FindInvalidValue(*out, "") : std::string(status.message());
+  const std::string error = status.ok() ? FindInvalidValue(*out, "") : JsonParseErrorMessage(status);
   if (!error.empty()) {
     Napi::TypeError::New(env, absl::StrCat("Invalid ", what, ": ", error)).ThrowAsJavaScriptException();
     return false;
