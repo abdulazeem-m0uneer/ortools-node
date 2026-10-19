@@ -395,6 +395,35 @@ describe('assemble', () => {
     assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'Apache-2.0.txt'), 'utf8'), 'Apache text');
   });
 
+  test('refuses a broken NOTICE or LICENSES/ symlink in the repository, naming it', (t) => {
+    for (const [entry, dangling] of [['NOTICE', 'NOTICE'], ['LICENSES', 'LICENSES'], ['LICENSES', path.join('LICENSES', 'Apache-2.0.txt')]]) {
+      const f = fakeOrtools(t);
+      if (dangling !== entry) fs.mkdirSync(path.join(f.repoRoot, entry));
+      fs.symlinkSync(path.join(f.repoRoot, 'missing'), path.join(f.repoRoot, dangling));
+      const escaped = path.join(f.repoRoot, dangling).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      assert.throws(() => run(f), new RegExp(`Broken symlink: ${escaped} `), dangling);
+      assert.ok(!fs.existsSync(f.outDir), dangling);
+    }
+  });
+
+  test('never deletes an output directory another process created first', (t) => {
+    const f = fakeOrtools(t);
+    // A licence clash makes assembly fail after outDir is created.
+    fs.mkdirSync(path.join(f.repoRoot, 'LICENSES', 'scip'), { recursive: true });
+    fs.writeFileSync(path.join(f.repoRoot, 'LICENSES', 'scip', 'LICENSE'), 'ours');
+    // The other process wins the race just before assemble creates outDir.
+    const mkdirSync = fs.mkdirSync;
+    t.mock.method(fs, 'mkdirSync', (dir, ...rest) => {
+      if (dir === f.outDir && !fs.existsSync(f.outDir)) {
+        mkdirSync(f.outDir);
+        fs.writeFileSync(path.join(f.outDir, 'theirs'), 'x');
+      }
+      return mkdirSync(dir, ...rest);
+    });
+    assert.throws(() => run(f), /pkg already exists/);
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'theirs'), 'utf8'), 'x');
+  });
+
   test('removes the partial package when a root licence clashes with the OR-Tools archive', (t) => {
     const f = fakeOrtools(t);
     fs.mkdirSync(path.join(f.repoRoot, 'LICENSES', 'scip'), { recursive: true });

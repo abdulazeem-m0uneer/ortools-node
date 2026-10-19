@@ -175,13 +175,25 @@ function filesUnder(root, dir) {
   return files.sort();
 }
 
+/** fs.statSync, naming a symlink whose target is missing instead of a bare ENOENT. */
+function statFollowingLink(file) {
+  try {
+    return fs.statSync(file);
+  } catch (err) {
+    if (err.code === 'ENOENT' && fs.lstatSync(file, { throwIfNoEntry: false })?.isSymbolicLink()) {
+      throw new Error(`Broken symlink: ${file} -> ${fs.readlinkSync(file)}`, { cause: err });
+    }
+    throw err;
+  }
+}
+
 /**
  * Copies the file or tree `src` to `dest` as regular files, following every
  * symlink (npm pack leaves symlinks out; fs.cpSync's `dereference` follows
  * only `src` itself) and failing with EEXIST rather than overwrite a file.
  */
 function copyFollowingLinks(src, dest) {
-  if (fs.statSync(src).isDirectory()) {
+  if (statFollowingLink(src).isDirectory()) {
     for (const name of fs.readdirSync(src)) copyFollowingLinks(path.join(src, name), path.join(dest, name));
     return;
   }
@@ -194,7 +206,8 @@ function copyFollowingLinks(src, dest) {
  * the OR-Tools archive; returns the files copied, in ADDON_LICENCE_FILES order.
  */
 function copyAddonLicences(repoRoot, outDir) {
-  const entries = ADDON_LICENCE_FILES.filter((entry) => fs.existsSync(path.join(repoRoot, entry)));
+  // lstat, not existsSync: a broken symlink must fail the copy, not drop the file.
+  const entries = ADDON_LICENCE_FILES.filter((entry) => fs.lstatSync(path.join(repoRoot, entry), { throwIfNoEntry: false }));
   for (const entry of entries) copyFollowingLinks(path.join(repoRoot, entry), path.join(outDir, entry));
   return entries.flatMap((entry) => (fs.statSync(path.join(repoRoot, entry)).isDirectory() ? filesUnder(repoRoot, entry) : [entry]));
 }
@@ -247,8 +260,14 @@ function assemble({
     throw new Error(`The OR-Tools archive has no licence at ${ortoolsLicence(ortoolsRoot)}`);
   }
   if (!fs.existsSync(path.join(repoRoot, 'LICENSE'))) throw new Error(`ortools-node has no licence at ${path.join(repoRoot, 'LICENSE')}`);
-  if (fs.existsSync(outDir)) throw new Error(`${outDir} already exists`);
-  fs.mkdirSync(outDir, { recursive: true });
+  fs.mkdirSync(path.dirname(outDir), { recursive: true });
+  try {
+    // Not recursive: only a directory this call created is removed on failure below.
+    fs.mkdirSync(outDir);
+  } catch (err) {
+    if (err.code === 'EEXIST') throw new Error(`${outDir} already exists`, { cause: err });
+    throw err;
+  }
   try {
     fs.copyFileSync(addon, path.join(outDir, ADDON_FILE));
     // Copy each library's real file under its SONAME: npm pack does not keep symlinks.
@@ -274,7 +293,7 @@ function assemble({
     };
     fs.writeFileSync(path.join(outDir, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
   } catch (err) {
-    // outDir did not exist before this run: remove the partial package so a rerun is not blocked.
+    // This run created outDir: remove the partial package so a rerun is not blocked.
     fs.rmSync(outDir, { recursive: true, force: true });
     throw err;
   }
