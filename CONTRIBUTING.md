@@ -21,14 +21,14 @@ Open an issue that includes:
 
    ```bash
    npm install        # builds the addon
-   npm test           # node:test suite
-   npm run typecheck  # checks lib/index.d.ts
+   npm test           # node:test suite, including every README and docs/ example
+   npm run typecheck  # checks lib/**/*.d.ts and test/types/
    ```
 
 The native code is in `src/`, one directory per OR-Tools component (for example
 `src/linear_solver/`), with shared helpers in `src/common/` and module start-up
 in `src/addon.cc`. The JavaScript API is in `lib/` (`lib/index.js` re-exports each
-component), and the types in `lib/index.d.ts`. [How it works](README.md#how-it-works) explains
+component), and the types in `lib/*.d.ts`. [How it works](README.md#how-it-works) explains
 how the layers fit together and the rules for native code.
 
 ## Prebuilt binaries
@@ -82,8 +82,10 @@ the tested tarballs.
 
 - Keep each pull request to one change, and include tests for it. Cover the
   error paths as well as the happy path.
-- Keep `lib/`, `lib/index.d.ts`, the README API reference, and
+- Keep `lib/`, its `.d.ts` declarations, the module's page in `docs/`, and
   `CHANGELOG.md` (under *Unreleased*) in step with the change.
+  `test/types_runtime.test.js` fails when a declaration and the runtime differ,
+  and `test/docs_examples.test.js` when a documented example or link breaks.
 - `npm test` and `npm run typecheck` must pass. CI runs both on every supported
   Node.js version, OR-Tools version (9.14.6206 and 9.15.6755) and architecture
   (Linux x64 and arm64). To run that job locally in a clean Ubuntu 24.04
