@@ -53,6 +53,7 @@ constexpr int kNoItemLimit = 0;
 constexpr int64_t kMaxSafeInteger = 9007199254740991;  // 2^53 - 1
 constexpr int64_t kMaxCpSatSum = int64_t{1} << 62;
 constexpr int64_t kMaxMipWeightSum = int64_t{1} << 20;
+constexpr int64_t kMipExactProfitSum = 10000;  // see IsSolutionOptimal()
 constexpr int kForcedItem = -1;  // an item taken up front, unseen by OR-Tools
 
 const SolverTypeInfo kSolverTypes[] = {
@@ -217,6 +218,7 @@ class KnapsackSolver : public Napi::ObjectWrap<KnapsackSolver> {
   std::vector<int> native_index_;
   size_t native_item_count_ = 0;
   int64_t forced_profit_ = 0;  // profit of the kForcedItem items
+  int64_t native_profit_sum_ = 0;  // of the items OR-Tools sees
 };
 
 class KnapsackSolveWorker : public PromiseWorker {
@@ -393,6 +395,7 @@ void KnapsackSolver::LoadProblem(const std::vector<int64_t>& profits,
   std::vector<std::vector<int64_t>> native_weights(weights.size());
   native_index_.assign(profits.size(), kForcedItem);
   forced_profit_ = 0;
+  native_profit_sum_ = 0;
   for (size_t item = 0; item < profits.size(); ++item) {
     bool weightless = true;
     for (const std::vector<int64_t>& row : weights) weightless = weightless && row[item] == 0;
@@ -402,6 +405,7 @@ void KnapsackSolver::LoadProblem(const std::vector<int64_t>& profits,
     }
     native_index_[item] = static_cast<int>(native_profits.size());
     native_profits.push_back(profits[item]);
+    native_profit_sum_ += profits[item];
     for (size_t d = 0; d < weights.size(); ++d) native_weights[d].push_back(weights[d][item]);
   }
   native_item_count_ = native_profits.size();
@@ -444,7 +448,12 @@ Napi::Value KnapsackSolver::BestSolutionContains(const Napi::CallbackInfo& info)
 Napi::Value KnapsackSolver::IsSolutionOptimal(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckSolved(env)) return env.Undefined();
-  return Napi::Boolean::New(env, native_item_count_ == 0 || solver_->IsSolutionOptimal());
+  // MPSolver stops within a relative gap of 1e-4, which OR-Tools' knapsack
+  // gives no way to change, and still reports OPTIMAL. Below a total profit of
+  // 1e4 that gap is under 1, so the integer profit is exact; above it CBC and
+  // SCIP often stop a few units short.
+  const bool gap_may_hide_profit = type_->needs_mp_backend && native_profit_sum_ >= kMipExactProfitSum;
+  return Napi::Boolean::New(env, native_item_count_ == 0 || (solver_->IsSolutionOptimal() && !gap_may_hide_profit));
 }
 
 Napi::Value KnapsackSolver::SetTimeLimit(const Napi::CallbackInfo& info) {
