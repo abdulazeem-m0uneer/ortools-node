@@ -4,3 +4,6 @@ build/
 bench/.venv/
 __pycache__/
 dist/
+bench/.venv-*/
+bench/dispatch/fixtures/
+bench/dispatch/results/
