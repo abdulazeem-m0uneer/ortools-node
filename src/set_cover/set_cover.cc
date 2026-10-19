@@ -605,7 +605,9 @@ Napi::Value SetCoverInvariantWrap::Clear(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
-// (count, focus?) -> the deselected subsets.
+// (count, focus?) -> subset indices that can be reused as a focus (OR-Tools'
+// contract). ClearRandomSubsets also clears the selected subsets intersecting the
+// ones it picks, so more than `count` may be deselected.
 Napi::Value SetCoverInvariantWrap::ClearSubsets(const Napi::CallbackInfo& info, bool most_covered) {
   Napi::Env env = info.Env();
   int64_t count;

@@ -102,5 +102,15 @@ export class SetCoverMip extends SetCoverSolutionGenerator {
   setTimeLimitInSeconds(seconds: number): this;
 }
 
+/**
+ * Deselects random selected subsets in `focus` (default: all), and the selected
+ * subsets that share elements with them, so it may deselect more than
+ * numSubsets. Returns subset indices that can be reused as a focus.
+ */
 export function clearRandomSubsets(inv: SetCoverInvariant, numSubsets: number, focus?: SubsetList): number[];
+/**
+ * Deselects up to numSubsets selected subsets in `focus` (default: all) that cover
+ * the most covered elements, chosen at random past the cap. Returns the chosen
+ * subset indices, for use as a focus.
+ */
 export function clearMostCoveredElements(inv: SetCoverInvariant, numSubsets: number, focus?: SubsetList): number[];
