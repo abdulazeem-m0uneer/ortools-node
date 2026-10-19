@@ -180,13 +180,20 @@ test('circuit: a 4-city tour of minimal length', () => {
   assert.equal(arcs.filter(([, , lit]) => solver.booleanValue(lit)).length, 4);
 });
 
-test('multiple circuit: every node visited once, routes through the depot', () => {
+test('multiple circuit: two routes leave the depot, every other node is visited once', () => {
   const m = new CpModel();
   const arcs = [];
   for (let i = 0; i < 4; ++i) for (let j = 0; j < 4; ++j) if (i !== j) arcs.push([i, j, m.newBoolVar(`${i}-${j}`)]);
   m.addMultipleCircuit(arcs);
+  const arc = (t, h) => arcs.find(([a, b]) => a === t && b === h)[2];
+  m.add(arc(0, 1).eq(1));  // two routes through the depot: infeasible for a single circuit
+  m.add(arc(0, 2).eq(1));
+  assert.deepEqual(m.toJSON().constraints[0], {
+    routes: { tails: arcs.map(([t]) => t), heads: arcs.map(([, h]) => h), literals: arcs.map(([, , l]) => l.index) },
+  });
   const { solver, status } = solveSync(m);
   assert.equal(status, 'OPTIMAL');
+  assert.equal(arcs.filter(([t, , lit]) => t === 0 && solver.booleanValue(lit)).length, 2);
   for (let node = 1; node < 4; ++node) {
     assert.equal(arcs.filter(([t, , lit]) => t === node && solver.booleanValue(lit)).length, 1);
     assert.equal(arcs.filter(([, h, lit]) => h === node && solver.booleanValue(lit)).length, 1);
