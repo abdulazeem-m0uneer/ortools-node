@@ -32,6 +32,12 @@ test('index manager with one depot', () => {
   assert.deepEqual(m.nodesToIndices([1, 4]), [1, 4]);
   assert.deepEqual(m.indicesToNodes([0, 5, 6]), [0, 0, 0]);
   assert.equal(m.indexToNode(m.nodeToIndex(3)), 3);
+  // Index lists may hold BigInts, as the declarations allow.
+  assert.deepEqual(m.nodesToIndices([1n, 4n]), [1, 4]);
+  assert.deepEqual(m.indicesToNodes(new BigInt64Array([0n, 5n])), [0, 0]);
+  const big = new RoutingIndexManager(5, 2, [0n, 1], new BigInt64Array([2n, 2n]));
+  const plain = new RoutingIndexManager(5, 2, [0, 1], [2, 2]);
+  assert.deepEqual([big.getNumberOfIndices(), big.getEndIndex(1)], [plain.getNumberOfIndices(), plain.getEndIndex(1)]);
 });
 
 test('index manager with separate starts and ends', () => {
