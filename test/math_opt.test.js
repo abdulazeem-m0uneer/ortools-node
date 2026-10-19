@@ -2,7 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawnSync } = require('node:child_process');
-const { mathOpt } = require('..');
+const { mathOpt, durationMs } = require('..');
 
 const { Model, LinearExpr, SolveInterrupter, SolverType, TerminationReason, solve, solveSync } = mathOpt;
 
@@ -406,7 +406,13 @@ test('an invalid timeLimit is reported in seconds, under its own name', () => {
       message.test(e.message) && !/durationMs|ms must/.test(e.message), String(timeLimit));
   }
   assert.equal(solveSync(model, 'GLOP', { parameters: { timeLimit: 315576000000 } }).termination.reason, 'OPTIMAL');
-  assert.equal(solveSync(model, 'GLOP', { parameters: { timeLimit: 0.0015 } }).termination.reason, 'OPTIMAL');
+  // A fractional number of seconds is accepted and sent as that Duration
+  // (durationMs() is the conversion solve() uses). Whether GLOP finishes within
+  // 1.5 ms depends on the machine, so a time-limit stop is as valid as OPTIMAL.
+  assert.equal(durationMs(0.0015 * 1000), '0.0015s');
+  const { termination } = solveSync(model, 'GLOP', { parameters: { timeLimit: 0.0015 } });
+  assert.ok(termination.reason === 'OPTIMAL' || (['FEASIBLE', 'NO_SOLUTION_FOUND'].includes(termination.reason)
+    && ['TIME', 'UNDETERMINED'].includes(termination.limit)), JSON.stringify(termination));
 });
 
 test('unknown option keys are a TypeError naming the key, not silently ignored', () => {
