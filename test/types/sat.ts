@@ -42,6 +42,8 @@ const problem: string = model.validate();
 
 const solver = new CpSolver();
 solver.parameters = { maxTimeInSeconds: 0.3, numWorkers: 1 };
+solver.parameters = { numWorkers: null, randomSeed: undefined };
+const workers: number | null | undefined = solver.parameters.numWorkers;
 async function run(): Promise<number> {
   const status: CpSolverStatusName = await solver.solve(model, {
     onSolution(s: SolutionSnapshot) {
@@ -97,3 +99,4 @@ model.addHint(eitherLiteral, 2);
 // @ts-expect-error CpLinearExpr is closed: only the library's own subclasses exist
 class MyExpr extends CpLinearExpr {}
 export { MyExpr };
+export { workers };

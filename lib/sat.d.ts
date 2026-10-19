@@ -4,7 +4,7 @@
 // domains means unbounded. CpLinearExpr / CpConstraint carry a Cp prefix
 // because the linear solver already exports Constraint and LinearExpr.
 
-import { SatParameters } from './params';
+import { Overrides, SatParameters } from './params';
 
 /** An int64 value: a safe integer number, or a BigInt beyond 2^53 - 1. */
 export type Int = number | bigint;
@@ -221,9 +221,9 @@ export class CpModel {
 /** One solution, passed to onSolution while the search runs. */
 export class SolutionSnapshot {
   private constructor();
-  /** Throws unless the last solve ended OPTIMAL or FEASIBLE (Python returns a number). */
+  /** This solution's objective; 0 when the model has none. Never throws. */
   readonly objectiveValue: number;
-  /** Throws after an INFEASIBLE or MODEL_INVALID solve (Python returns a number). */
+  /** The best bound when this solution was found; 0 when the model has no objective. Never throws. */
   readonly bestObjectiveBound: number;
   readonly wallTime: number;
   readonly userTime: number;
@@ -242,7 +242,11 @@ export interface CpSolveOptions {
 
 export class CpSolver {
   constructor();
-  parameters: SatParameters;
+  /**
+   * SatParameters for the next solves, read back as assigned. As in
+   * validateSatParameters(), null or undefined leaves a field at its default.
+   */
+  parameters: Overrides<SatParameters>;
   /**
    * Solves on the threadpool; resolves to the status name. A model that fails
    * OR-Tools' validation rejects with 'Invalid CpModel: ...' instead of
