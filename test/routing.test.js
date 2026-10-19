@@ -495,6 +495,22 @@ test('readAssignmentFromRoutes and a warm start', async () => {
   assert.ok(sync.objectiveValue() <= againCost);
 });
 
+// With solutionLimit 1 the first accepted solution is the seed itself, so the
+// warm start returns exactly the given routes while a cold solve does not.
+test('a warm start begins from the given assignment', async () => {
+  const { model } = vrp({ vehicles: 2, nodes: 7 });
+  const seed = [[0, 1, 2, 3, 8], [7, 4, 5, 6, 9]];
+  const initial = model.readAssignmentFromRoutes(seed.map((r) => r.slice(1, -1)), true);
+  const initialCost = initial.objectiveValue();
+  const warm = await model.solveFromAssignmentWithParameters(initial, { solutionLimit: 1 });
+  assert.deepEqual(warm.routes(), seed);
+  assert.equal(warm.objectiveValue(), initialCost);
+  const again = model.readAssignmentFromRoutes(seed.map((r) => r.slice(1, -1)), true);
+  assert.deepEqual(model.solveFromAssignmentWithParametersSync(again, { solutionLimit: 1 }).routes(), seed);
+  const cold = model.solveWithParametersSync({ ...PCA, solutionLimit: 1 });
+  assert.notDeepEqual(cold.routes(), seed, 'a cold solve finds other routes');
+});
+
 test('readAssignmentFromRoutes: null when infeasible, errors for invalid input', () => {
   const { model } = vrp({ vehicles: 2, nodes: 5 });
   model.setAllowedVehiclesForIndex([1], 1);

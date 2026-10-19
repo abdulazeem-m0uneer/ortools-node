@@ -128,7 +128,11 @@ test('dispatch spike model: solve with a solution limit, then warm-start', async
   const initial = model.readAssignmentFromRoutes(routes.map((r) => r.slice(1, -1)), true);
   assert.ok(initial, 'the solution routes read back as an assignment');
   assert.equal(initial.objectiveValue(), objective);
-  const warm = await model.solveFromAssignmentWithParameters(initial, PARAMS);
+  const seeded = await model.solveFromAssignmentWithParameters(
+    model.readAssignmentFromRoutes(routes.map((r) => r.slice(1, -1)), true), { ...PARAMS, solutionLimit: 1 });
+  assert.deepEqual(seeded.routes(), routes, 'the warm start begins from the given routes');
+  const warm = await model.solveFromAssignmentWithParameters(
+    model.readAssignmentFromRoutes(routes.map((r) => r.slice(1, -1)), true), PARAMS);
   checkSolution(warm, built);
   assert.ok(warm.objectiveValue() <= objective);
 });
