@@ -172,8 +172,7 @@ test('options are validated', () => {
   assert.throws(() => solveVectorBinPackingSync(problem, 'fast'), TypeError);
   const threaded = solveVectorBinPackingSync(problem, { numThreads: 2, timeLimitSeconds: 30 });
   assert.equal(threaded.objectiveValue, 4);
-  // Unknown backend parameters are ignored by OR-Tools here, not fatal.
-  assert.equal(solveVectorBinPackingSync(problem, { mipParameters: 'not a parameter' }).status, 'OPTIMAL');
+  assert.throws(() => solveVectorBinPackingSync(problem, { mipParameters: 'not a parameter' }), /mipParameters rejected/);
 });
 
 test('concurrent solves are independent', async () => {
@@ -221,5 +220,19 @@ test('a time limit under 1 ms is rounded up to 1 ms; 0 is refused', () => {
   assert.ok(limitedMs < fullMs / 2, `a 0.4 ms limit took ${limitedMs} ms vs ${fullMs} ms without one`);
   for (const timeLimitSeconds of [0, -0]) {
     assert.throws(() => solveVectorBinPackingSync(problem, { timeLimitSeconds }), /timeLimitSeconds must be > 0/);
+  }
+});
+
+test('mipParameters the backend rejects are an error, not ignored or an UNSPECIFIED status', () => {
+  const problem = classic();
+  const bad = [['SCIP', 'garbage = = {{'], ['SCIP', 'limits/time = -5'], ['CBC', 'garbage = = {{'],
+    ['CP_SAT', 'garbage = = {{'], ['CP_SAT', 'num_workers: -1'], ['HIGHS', 'garbage']];
+  for (const [solverType, mipParameters] of bad.filter(([s]) => s in VectorBinPackingSolverType)) {
+    assert.throws(() => solveVectorBinPackingSync(problem, { solverType, mipParameters }),
+      { name: 'TypeError', message: new RegExp(`mipParameters.*${solverType}`) }, `${solverType}: ${mipParameters}`);
+  }
+  const good = [['SCIP', 'limits/gap = 0.01'], ['CP_SAT', 'num_workers: 2'], ['CBC', '']];
+  for (const [solverType, mipParameters] of good.filter(([s]) => s in VectorBinPackingSolverType)) {
+    assert.equal(solveVectorBinPackingSync(problem, { solverType, mipParameters }).objectiveValue, 4, solverType);
   }
 });
