@@ -3,12 +3,13 @@
 [![CI](https://github.com/abdulazeem-m0uneer/ortools-node/actions/workflows/ci.yml/badge.svg)](https://github.com/abdulazeem-m0uneer/ortools-node/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 ![Node.js](https://img.shields.io/badge/node-%E2%89%A522-339933?logo=node.js&logoColor=white)
-![OR-Tools](https://img.shields.io/badge/OR--Tools-9.15-4285F4)
+![OR-Tools](https://img.shields.io/badge/OR--Tools-9.14%20%7C%209.15-4285F4)
 
 **Native Node.js bindings for [Google OR-Tools](https://developers.google.com/optimization)**:
 linear and mixed-integer programming with GLOP, PDLP, CLP, SCIP, CBC, HiGHS and
-CP-SAT, plus Gurobi, CPLEX or Xpress where your OR-Tools build can load them,
-all behind one API, and the constraint programming solver with vehicle routing.
+CP-SAT (plus Gurobi, CPLEX or Xpress where your OR-Tools build can load them),
+the CP-SAT and classic constraint solvers, vehicle routing, graph algorithms,
+knapsack, set cover and bin packing.
 
 Google publishes official OR-Tools bindings for C++, Python, Java and .NET, but
 not for Node.js. `ortools-node` calls the OR-Tools C++ library directly through
@@ -24,16 +25,15 @@ solver.addLessEq([[x, 1], [y, 2]], 14);   // x + 2y <= 14
 solver.maximize([[x, 3], [y, 4]]);        // max 3x + 4y
 
 const result = await solver.solve();      // runs off the main thread
-console.log(result.status, result.objectiveValue, x.value(), y.value());
-// OPTIMAL 38 10 2
+console.log(result.status, result.objectiveValue, x.value(), y.value()); //=> OPTIMAL 38 10 2
+solver.dispose();
 ```
 
-> **Status: 0.1.0, early release.** The API is tested on Linux x64 and arm64
-> with OR-Tools 9.14 and 9.15 and Node.js 22, 24 and 26. On Linux x64 and arm64
-> with glibc, `npm install` uses a prebuilt addon that bundles OR-Tools, so it
-> needs no compiler. Elsewhere it builds from source against an OR-Tools C++
-> release you download yourself. macOS and Windows CI are on the
-> [roadmap](#roadmap).
+> **Status: 0.1.0, early release. Not yet published on npm; build from source
+> until the first release** ([how](#building-from-source), [roadmap](#roadmap)).
+> The API is tested on Linux x64 and arm64 with OR-Tools 9.14 and 9.15 and
+> Node.js 22, 24 and 26. Once published, `npm install` on Linux x64 and arm64
+> with glibc uses a prebuilt addon that bundles OR-Tools and needs no compiler.
 
 ## Contents
 
@@ -44,7 +44,6 @@ console.log(result.status, result.objectiveValue, x.value(), y.value());
 - [API reference](#api-reference)
 - [Solver backends](#solver-backends)
 - [Concurrency, memory and the threadpool](#concurrency-memory-and-the-threadpool)
-- [Callbacks and search monitors](#callbacks-and-search-monitors)
 - [How it works](#how-it-works)
 - [Development](#development)
 - [Roadmap](#roadmap)
@@ -53,18 +52,24 @@ console.log(result.status, result.objectiveValue, x.value(), y.value());
 ## Features
 
 - **One API for many solvers.** Switch between LP, MIP and constraint-programming
-  backends by changing one string.
+  backends by changing one string, or use Python's `model_builder` and
+  `mathopt` APIs (`modelBuilder`, `mathOpt`).
+- **Every major OR-Tools component.** CP-SAT (`CpModel`, `CpSolver`), the
+  classic constraint solver (`cp`) with JS search monitors, vehicle routing with
+  progress events, min-cost flow, max flow, linear sum assignment, knapsack, set
+  cover and vector bin packing. Names follow OR-Tools' Python API in camelCase.
 - **Non-blocking.** `solve()` runs on the libuv threadpool and returns a Promise;
   `solveSync()` is there for scripts.
-- **Cancellable.** `interrupt()` stops a running solve on backends that support
-  it safely, and `setTimeLimit()` bounds any solve.
+- **Cancellable.** `interrupt()` (or `stopSearch()`) stops a running solve on
+  backends that support it safely, and a time limit bounds any solve.
 - **Fails loudly.** Reading a value when there is no current solution, using a
-  variable from another solver, or passing `NaN` all throw a clear error. You
-  never silently get a stale `0`.
-- **Constraint programming and vehicle routing.** `cp.CpSolver`, `RoutingModel`
-  and `RoutingIndexManager` follow OR-Tools' Python API with camelCase names.
-- **Typed.** TypeScript definitions are included.
-- **Debuggable.** Export any model as LP or MPS text with `toLp()` and `toMps()`.
+  variable from another model, or passing `NaN` all throw a clear error, and
+  input OR-Tools would abort on is rejected first. You never silently get a
+  stale `0`, and a bad call never kills the process.
+- **Exact integers.** int64 inputs take numbers or BigInts, and int64 results
+  beyond 2^53 come back as BigInts where the module allows them.
+- **Typed.** TypeScript definitions are included and tested against the runtime.
+- **Debuggable.** Export models as LP or MPS text, or as protobuf JSON.
 - **Faster than Python at building models.** Building a model is 2.3 to 5.8
   times faster than with OR-Tools' official Python binding, and solve times are
   identical. See [Performance](#performance).
@@ -173,6 +178,10 @@ mirrors, and `run.js` drives both and prints the tables above.
 
 You need Node.js 22 or later. CI tests Node.js 22, 24 and 26.
 
+> **Not yet published on npm; build from source until the first release.** The
+> `npm install` commands below describe the published package; until then,
+> follow [Building from source](#building-from-source) in a clone.
+
 ### Prebuilt binaries (Linux x64 and arm64)
 
 ```bash
@@ -185,23 +194,13 @@ the addon built against OR-Tools 9.15 and the OR-Tools shared libraries it
 needs. There is nothing to compile and no OR-Tools to download. Check what
 loaded with `node -p "require('ortools-node').buildInfo"`.
 
-| Platform | OR-Tools 9.15 (installed automatically) | OR-Tools 9.14 (install it yourself) |
-|---|---|---|
-| Linux x64, glibc | `@ortools-node/linux-x64-gnu-ortools9.15` | `@ortools-node/linux-x64-gnu-ortools9.14` |
-| Linux arm64, glibc | `@ortools-node/linux-arm64-gnu-ortools9.15` | `@ortools-node/linux-arm64-gnu-ortools9.14` |
-
-- **The platform package must have the same version as ortools-node.** A
-  prebuilt at another version is not loaded, and the error prints the exact
-  `npm install <package>@<version>` to run. Install one yourself the same way,
-  for example when npm skipped optional dependencies (`--omit=optional`, or a
-  lockfile made on another platform).
-- **OR-Tools 9.14:** install the 9.14 package for your CPU at ortools-node's
-  version, for example
-  `npm install @ortools-node/linux-x64-gnu-ortools9.14@0.1.0`. When several
-  releases are installed, the newest loads, so set `ORTOOLS_NODE_PIN=9.14` to
-  pick 9.14.
-- **Alpine and other musl systems** are not supported by the prebuilts: use a
-  glibc-based image such as `node:22-trixie-slim`, or build from source.
+The platform package must have exactly ortools-node's version. For OR-Tools
+9.14, install its package yourself
+(`npm install @ortools-node/linux-x64-gnu-ortools9.14@0.1.0`, or `linux-arm64-gnu`)
+and set `ORTOOLS_NODE_PIN=9.14` when both are present. Alpine and other musl
+systems have no prebuilts: use a glibc-based image such as `node:22-trixie-slim`,
+or build from source. The packages, load order, install hook, environment
+variables and loader errors are in [docs/install.md](docs/install.md).
 
 ### Building from source
 
@@ -252,7 +251,10 @@ OR-Tools libraries, so it finds `libortools` at runtime without
 `LD_LIBRARY_PATH`. On Windows, add `%ORTOOLS_ROOT%\bin` to `PATH` or copy the
 DLLs next to `build/Release/ortools_node.node`.
 
+
 ## Usage
+
+More examples, one page per module, are in the [API reference](#api-reference).
 
 ### Linear programming with duals
 
@@ -268,73 +270,27 @@ lp.addLessEq([[x, 1], [y, -1]], 2);
 lp.maximize([[x, 3], [y, 4]]);
 
 const r = lp.solveSync();
-console.log(r.status, r.objectiveValue.toFixed(2));   // OPTIMAL 34.00
-console.log(capacity.dualValue());         // 2.333…  (shadow price of `capacity`)
+console.log(r.status, r.objectiveValue.toFixed(2));   //=> OPTIMAL 34.00
+console.log(capacity.dualValue().toFixed(3));         //=> 2.333
 lp.dispose();
 ```
 
-### Mixed-integer programming with a time limit
+### CP-SAT
 
 ```js
-const { Solver, supportsBackend } = require('ortools-node');
+const { CpModel, CpSolver } = require('ortools-node');
 
-async function main() {
-  const backend = ['SCIP', 'HIGHS', 'CBC', 'CP_SAT'].find(supportsBackend);
-  const items = [
-    { name: 'a', weight: 4, value: 10 }, { name: 'b', weight: 7, value: 13 },
-    { name: 'c', weight: 5, value: 9 }, { name: 'd', weight: 3, value: 7 },
-  ];
+const model = new CpModel();
+const x = model.newIntVar(0, 10, 'x');
+const y = model.newIntVar(0, 10, 'y');
+model.add(x.plus(y.times(2)).le(14));
+model.addAllDifferent([x, y]);
+model.maximize(x.times(3).plus(y.times(4)));
 
-  const mip = new Solver(backend).setTimeLimit(5_000);
-  const take = items.map((item) => mip.boolVar(item.name));
-  mip.addLessEq(items.map((item, i) => [take[i], item.weight]), 12, 'capacity');
-  mip.maximize(items.map((item, i) => [take[i], item.value]));
-
-  const result = await mip.solve();
-  if (!result.feasible) throw new Error(`no solution: ${result.status}`);
-  const chosen = items.filter((_, i) => take[i].value() > 0.5).map((item) => item.name);
-  console.log(result.status, result.objectiveValue, chosen);   // OPTIMAL 26 [ 'a', 'c', 'd' ]
-  mip.dispose();
-}
-
-main();
-```
-
-### Stopping a long solve
-
-```js
-const { Solver } = require('ortools-node');
-
-async function solveWithDeadline(solver, ms) {
-  const timer = setTimeout(() => solver.interrupt(), ms);  // CP_SAT, GLOP, PDLP, Gurobi
-  try {
-    return await solver.solve();       // resolves early with NOT_SOLVED or FEASIBLE
-  } finally {
-    clearTimeout(timer);
-  }
-}
-```
-
-For backends that cannot be interrupted safely, `interrupt()` returns `false`.
-Use `setTimeLimit()` instead, which every backend honours.
-
-### Linear expressions
-
-Every method that takes an expression accepts any of these forms:
-
-```js
-const { Solver } = require('ortools-node');
-
-const s = new Solver('GLOP');
-const x = s.numVar(0, 10, 'x');
-const y = s.numVar(0, 10, 'y');
-
-s.addLessEq([[x, 3], [y, 4]], 24);                 // [variable, coefficient] pairs
-s.addLessEq([[3, x], [4, y]], 24);                 // [coefficient, variable] pairs
-s.addLessEq(new Map([[x, 3], [y, 4]]), 24);        // Map<Variable, number>
-s.addLessEq(x, 5);                                 // a single variable
-s.addLessEq({ terms: [[x, 1], [y, 1]], constant: 2 }, 12);   // x + y + 2 <= 12
-s.dispose();
+const solver = new CpSolver();
+const status = await solver.solve(model);              // off the main thread
+console.log(status, solver.objectiveValue, solver.value(x), solver.value(y)); //=> OPTIMAL 38 10 2
+solver.dispose();
 ```
 
 ### Constraint programming
@@ -351,7 +307,7 @@ s.add(x.plus(y).eq(z.times(2)));                              // x + y == 2z
 const objective = s.maximize(x.times(100).plus(y.times(10)).plus(z), 1);
 const best = s.lastSolutionCollector().add([x, y, z]);
 s.solve(s.phase([x, y, z], 'CHOOSE_FIRST_UNBOUND', 'ASSIGN_MAX_VALUE'), [best, objective]);
-console.log([x, y, z].map((v) => best.value(0, v)));          // [ 9, 7, 8 ]
+console.log([x, y, z].map((v) => best.value(0, v)));          //=> [ 9, 7, 8 ]
 s.dispose();
 ```
 
@@ -360,149 +316,78 @@ s.dispose();
 ```js
 const { RoutingIndexManager, RoutingModel } = require('ortools-node');
 
-async function main() {
-  const distances = [[0, 2, 9, 10], [1, 0, 6, 4], [15, 7, 0, 8], [6, 3, 12, 0]];
-  const manager = new RoutingIndexManager(distances.length, 1, 0);   // nodes, vehicles, depot
-  const model = new RoutingModel(manager);
-  model.setArcCostEvaluatorOfAllVehicles(model.registerTransitMatrix(distances));
+const distances = [[0, 2, 9, 10], [1, 0, 6, 4], [15, 7, 0, 8], [6, 3, 12, 0]];
+const manager = new RoutingIndexManager(distances.length, 1, 0);   // nodes, vehicles, depot
+const model = new RoutingModel(manager);
+model.setArcCostEvaluatorOfAllVehicles(model.registerTransitMatrix(distances));
 
-  const solution = await model.solveWithParameters({ firstSolutionStrategy: 'PATH_CHEAPEST_ARC' });
-  console.log(solution.objectiveValue());                     // 21
-  console.log(manager.indicesToNodes(solution.routes()[0]));  // [ 0, 2, 3, 1, 0 ]
-  model.dispose();
-}
+const solution = await model.solveWithParameters({ firstSolutionStrategy: 'PATH_CHEAPEST_ARC' });
+console.log(solution.objectiveValue());                     //=> 21
+console.log(manager.indicesToNodes(solution.routes()[0]));  //=> [ 0, 2, 3, 1, 0 ]
+model.dispose();
+```
 
-main();
+### Graph algorithms
+
+```js
+const { SimpleMaxFlow } = require('ortools-node');
+
+const flow = new SimpleMaxFlow();
+flow.addArcsWithCapacity([0, 0, 1, 1, 2], [1, 2, 2, 3, 3], [20, 30, 10, 30, 20]);
+console.log(await flow.solve(0, 3), flow.optimalFlow());   //=> OPTIMAL 40
+flow.dispose();
 ```
 
 ## API reference
 
-### `new Solver(backend = 'GLOP', name?)`
+One page per module. Each page has runnable examples, every class and member,
+the errors it throws and its int64 rules.
 
-Creates a model with the given backend; see [Solver backends](#solver-backends).
-It throws if the backend is not compiled into your OR-Tools build. `name`
-appears in exported LP and MPS files.
+| Module | Main exports | Reference |
+|---|---|---|
+| Linear solver (`MPSolver`) | `Solver`, `supportsBackend`, `INF` | [docs/linear_solver.md](docs/linear_solver.md) |
+| Model builder (Python's `model_builder`) | `modelBuilder` | [docs/model_builder.md](docs/model_builder.md) |
+| MathOpt (Python's `mathopt`) | `mathOpt` | [docs/math_opt.md](docs/math_opt.md) |
+| CP-SAT | `CpModel`, `CpSolver`, `Domain`, `CpLinearExpr` | [docs/sat.md](docs/sat.md) |
+| Classic constraint solver, search monitors | `cp` | [docs/cp.md](docs/cp.md) |
+| Vehicle routing, progress events | `RoutingIndexManager`, `RoutingModel` | [docs/routing.md](docs/routing.md) |
+| Parameter objects | `defaultRoutingSearchParameters`, `defaultSatParameters`, `durationMs` | [docs/params.md](docs/params.md) |
+| Graph algorithms | `SimpleMinCostFlow`, `SimpleMaxFlow`, `SimpleLinearSumAssignment` | [docs/graph.md](docs/graph.md) |
+| Knapsack | `KnapsackSolver`, `KnapsackSolverType` | [docs/knapsack.md](docs/knapsack.md) |
+| Set cover | `setCover` | [docs/set_cover.md](docs/set_cover.md) |
+| Vector bin packing | `solveVectorBinPacking` | [docs/bin_packing.md](docs/bin_packing.md) |
+| Installation and loading | `ortoolsVersion`, `buildInfo` | [docs/install.md](docs/install.md) |
 
-| Method | Description |
-|---|---|
-| `numVar(lb?, ub?, name?)` | Continuous variable; bounds default to `-Infinity` / `Infinity`. |
-| `intVar(lb?, ub?, name?)` | Integer variable. |
-| `boolVar(name?)` | 0/1 integer variable. |
-| `addConstraint(expr, lb?, ub?, name?)` | `lb ≤ expr ≤ ub`; returns a `Constraint`. |
-| `addLessEq(expr, rhs, name?)` / `addGreaterEq` / `addEquality` | `expr ≤ rhs`, `expr ≥ rhs`, `expr = rhs`. |
-| `minimize(expr)` / `maximize(expr)` | Replaces the objective. |
-| `setTimeLimit(ms)` | Wall-clock limit; `0` means no limit. |
-| `setNumThreads(n)` | Threads for backends that support it (SCIP, CP-SAT, …). |
-| `setSolverSpecificParameters(text)` | Backend parameter string, for example SCIP `"limits/gap = 0.01"`. Returns `false` if the backend rejects it. |
-| `enableOutput(on = true)` | Print the backend's search log. |
-| `solve()` → `Promise<SolveResult>` | Solves on the libuv threadpool. |
-| `solveSync()` → `SolveResult` | Solves on the calling thread. |
-| `interrupt()` → `boolean` | Asks a pending `solve()` to stop. Returns `false` if nothing is running or the backend cannot be interrupted safely. |
-| `clear()` | Removes all variables and constraints. Existing handles become invalid. |
-| `dispose()` | Frees the native model immediately; later calls throw. During a `solve()` it frees the model once that solve settles. Also runs on scope exit with `using solver = new Solver(...)` (Node.js ≥ 24): `return solver.solve()` from the scope still resolves, but `await` it inside the scope to read variable values. |
-| `toLp(obfuscated?)` / `toMps(fixed?, obfuscated?)` | The model in LP or MPS format. |
-| `solverVersion()` | For example `"Glop solver v9.15.6755"`. |
-| `numVariables`, `numConstraints`, `variables`, `constraints`, `busy` | Read-only properties. |
+### Conventions
 
-### `Variable` and `Constraint`
+Every module follows the same rules:
 
-| Member | Description |
-|---|---|
-| `variable.value()` | Value in the current solution. |
-| `variable.reducedCost()` | Reduced cost; LP backends only. |
-| `variable.setBounds(lb, ub)` | Changes the bounds. |
-| `constraint.dualValue()` | Dual value (shadow price); LP backends only. |
-| `constraint.setCoefficient(variable, coef)` / `constraint.setBounds(lb, ub)` | Edits the row. |
-| `index`, `name` (and `variable.isInteger`) | Read-only properties. |
-
-### `SolveResult`
-
-| Field | Description |
-|---|---|
-| `status` | `'OPTIMAL' \| 'FEASIBLE' \| 'INFEASIBLE' \| 'UNBOUNDED' \| 'ABNORMAL' \| 'MODEL_INVALID' \| 'NOT_SOLVED'` |
-| `optimal`, `feasible` | Booleans derived from `status`. |
-| `objectiveValue`, `bestBound` | `NaN` when there is no solution. |
-| `wallTimeMs`, `iterations`, `nodes` | Solver statistics; `nodes` is `0` for LP backends. |
-
-### Module exports
-
-`supportsBackend(name)` reports whether a backend is compiled into your OR-Tools
-build. `INF` is `Infinity`.
-
-### `new cp.CpSolver(name?)`
-
-The classic constraint programming solver (`pywrapcp.Solver`). Integer inputs
-accept safe integers and BigInts; `removeValues`, `memberCt` and similar take an
-Array or a typed array. Every int64 result (`min()`, `max()`, `value()`,
-`size()`, collector values and objectives) is a number up to
-`Number.MAX_SAFE_INTEGER`, an exact BigInt beyond it, and `-Infinity` /
-`Infinity` for the int64 extremes (the unbounded markers, so
-`intVar(-Infinity, Infinity)` reads back as it was made). `size()` is never
-Infinity: the full int64 domain is `2n ** 64n`. Search counters (`wallTime()`,
-`branches()`, `failures()`, `solutions()` and the collector's per-solution
-ones) are plain numbers, exact up to 2^53, which no realistic search reaches.
-
-| Method | Description |
-|---|---|
-| `intVar(min, max, name?)` / `intVar(values, name?)` / `boolVar` / `intConst` | Variables (`cp.IntVar`). |
-| `x.plus(y)`, `minus`, `times`, `abs`, `square`, `opposite`; `sum`, `scalProd`, `min`, `max`, `element` | Integer expressions (`cp.IntExpr`). |
-| `x.eq(y)`, `ne`, `le`, `lt`, `ge`, `gt`; `allDifferent`, `allowedAssignments`, `memberCt`, `notMemberCt` | Constraints; pass them to `add()`. |
-| `isEqualVar(a, b)`, `isLessVar`, …, `isMemberVar` | 0/1 variables reifying a condition. |
-| `x.setMin/setMax/setRange/setValue`, `x.removeValue(s)` | Domain changes outside a search; emptying a domain throws `CP solver failure`. |
-| `phase(vars, varStrategy, valueStrategy)`, `compose(...)` | Decision builders. |
-| `minimize(expr, step?)` / `maximize`, `limit({ timeMs, branches, failures, solutions })`, `searchLog(period)` | Search monitors. |
-| `firstSolutionCollector()`, `lastSolutionCollector()`, `bestValueSolutionCollector(maximize)`, `allSolutionCollector()` | Collectors; read with `collector.value(n, x)` after the search. |
-| `solve(db, monitors?)` → `boolean` | Searches on the calling thread. Monitors may be plain objects with search monitor hooks; see [Callbacks and search monitors](#callbacks-and-search-monitors). |
-| `solveAsync(db, monitors?)` → `Promise<boolean>` | Searches on the libuv threadpool; `interrupt()` stops it. |
-| `newSearch(db, monitors?)`, `nextSolution()`, `endSearch()` | Iterate solutions one by one; `x.value()` reads the current one. |
-| `wallTime()`, `branches()`, `failures()`, `solutions()`, `busy`, `dispose()` | Statistics and lifetime. |
-
-OR-Tools stores holes in a domain as a bitset of at most 2^32 values, so making
-a hole in a wider domain (`removeValue(s)`, `memberCt`, `notMemberCt`,
-`isMemberVar`) throws a `RangeError`; removing values at the bounds only moves
-the bounds and is always accepted.
-
-### Routing
-
-`new RoutingIndexManager(numNodes, numVehicles, depot)`, or `(numNodes,
-numVehicles, starts, ends)`, maps nodes to solver indices (`nodeToIndex`,
-`indexToNode`, `nodesToIndices`, `indicesToNodes`). `new RoutingModel(manager)`
-builds the model:
-
-| Method | Description |
-|---|---|
-| `registerTransitMatrix(matrix)`, `registerUnaryTransitVector(values)` | Transit evaluators indexed by node; return an evaluator id. |
-| `registerTransitCallback(fn)`, `registerUnaryTransitCallback(fn)` | `fn(fromIndex, toIndex)` is evaluated once per pair when registered, so it must be pure; limited to 16384 indices. |
-| `setArcCostEvaluatorOfAllVehicles(id)`, `setFixedCostOfVehicle(cost, v)`, … | Costs. |
-| `addDimension(id, slackMax, capacity, fixStartCumulToZero, name)` and its `WithVehicle…`, `Constant`, `Vector` and `Matrix` variants | Dimensions; `getDimensionOrDie(name)` returns one with `cumulVar(i)`, span bounds and costs, and soft bounds. |
-| `addDisjunction(indices, penalty?, maxCardinality?)`, `addPickupAndDelivery(p, d)`, `setAllowedVehiclesForIndex`, visit types | Routing constraints. |
-| `nextVar(i)`, `vehicleVar(i)`, `activeVar(i)`, `costVar()` | Model variables; constrain them through `model.solver()`, the model's `cp.CpSolver`. |
-| `solveWithParameters(params?, { onSolution?, includeRoutes?, onProgress?, progressIntervalMs? })` → `Promise<RoutingSolution \| null>` | Solves on the libuv threadpool; `interrupt()` stops it with the best solution so far. `…Sync` variants and `solveFromAssignmentWithParameters` exist too. See [Callbacks and search monitors](#callbacks-and-search-monitors). |
-| `closeModelWithParameters(params?)`, `applyLocks`, `readAssignmentFromRoutes(routes, ignoreInactive)` | Close the model, fix route prefixes, build a solution from routes. |
-| `status()`, `busy`, `dispose()` | Search status, lifetime. |
-
-`params` are `RoutingSearchParameters` fields in camelCase, validated against
-OR-Tools' protobuf (`defaultRoutingSearchParameters()`,
-`validateRoutingSearchParameters(params)`, `durationMs(ms)` for time limits). A
-`RoutingSolution` has `objectiveValue()`, `routes()`, `cumuls(dimension)`,
-`slacks(dimension)` and `value/min/max(variable)`, and stays valid until the
-model is solved again, changed or disposed. Solution values follow the CP rule
-(numbers up to `Number.MAX_SAFE_INTEGER`, BigInts beyond, ±Infinity for the
-int64 extremes), so large penalties are exact.
-
-### Errors
-
-The binding throws instead of returning a misleading number:
-
-| Situation | Error |
-|---|---|
-| Reading `value()`, `objectiveValue`, … before a solve, or after the model changed | `No solve result` |
-| Reading a value after a solve that ended without a solution | `No solution available` |
-| `dualValue()` or `reducedCost()` on a MIP backend | `only available for LP backends` |
-| Using a `Variable` or `Constraint` with another solver | `belongs to a different Solver` |
-| Using a handle after `clear()` or `dispose()` | `no longer valid` |
-| Any call while `solve()` is pending, except `busy` and `interrupt()` | `Solver is busy` |
-| `NaN` bounds, non-finite coefficients, or non-numeric bounds | `TypeError`; the model is left unchanged |
+- **Async and sync.** `solve()` (and `solveAsync()`, `nextSolution()`,
+  `solveWithParameters()`) returns a Promise and runs on the libuv threadpool;
+  the `...Sync` variant blocks the calling thread. One solve per object at a
+  time: while it is pending, every other call throws, except `busy` and
+  `interrupt()` (or `stopSearch()`).
+- **Explicit lifetime.** Objects that own native memory have `dispose()` and
+  `[Symbol.dispose]()`, so `using solver = new Solver(...)` (Node.js 24 and
+  later) frees them at scope exit. Later calls throw.
+- **int64 and BigInt.** Integer inputs take a safe-integer number or a BigInt.
+  Results are numbers up to `Number.MAX_SAFE_INTEGER`. Beyond it, CP-SAT,
+  classic CP and routing return an exact BigInt (classic CP and routing return
+  `-Infinity` / `Infinity` for the int64 extremes); graph results are
+  `-Infinity` / `Infinity` at the extremes and throw a `RangeError` in between.
+  Parameter objects read int64 fields back as decimal strings. The linear
+  solver, `modelBuilder`, `mathOpt` and set cover work in doubles.
+- **Errors, not stale values.** Reading a result without a current solution
+  throws, and so does a handle from another model or a disposed one. Arguments
+  OR-Tools would `CHECK` (and abort the process on) are validated first and
+  throw a `TypeError` or `RangeError`; running out of memory inside OR-Tools is
+  a `RangeError`.
+- **Callbacks run on the JS thread** that started the solve and receive
+  copies of the values, never live native objects. A throw stops the search and
+  the solve rejects (or rethrows) with it. See CP-SAT `onSolution`
+  ([docs/sat.md](docs/sat.md)), classic CP search monitors with 14 hooks
+  ([docs/cp.md](docs/cp.md)) and routing `onSolution` / `onProgress`
+  ([docs/routing.md](docs/routing.md)).
 
 ## Solver backends
 
@@ -545,117 +430,32 @@ The OR-Tools 9.15 release archives include all open-source backends below. Run
   monitor hook, and without one it runs to its limits like any blocking native
   call.
 
-## Callbacks and search monitors
-
-Every callback runs on the JS thread that started the solve. What runs on a
-solver thread is native code only; it hands JS a copy of the values (a
-snapshot), never a live native object.
-
-**Classic CP (`cp.CpSolver`), synchronous.** `solve()` and `newSearch()` accept
-plain objects next to `SearchMonitor` handles. Any of these
-OR-Tools `SearchMonitor` hooks, camelCased, is called from inside the search
-(the restart, local search and progress hooks are not exposed: nothing in this
-API can trigger them):
-
-| Hook | Called |
-|---|---|
-| `enterSearch()`, `exitSearch()` | When the search starts and ends. |
-| `beginInitialPropagation()`, `endInitialPropagation()` | Around the propagation before the first decision. |
-| `beginNextDecision()`, `endNextDecision(decision \| null)` | Around asking the decision builder for a decision (`null`: none left, a solution). |
-| `applyDecision(decision)`, `refuteDecision(decision)`, `afterDecision(decision, apply)` | When a decision is taken, refuted, and after either. |
-| `beginFail()`, `endFail()` | Around each backtrack. |
-| `acceptSolution()` | Return `false` to reject the solution. |
-| `atSolution()` | Return `false` to stop the search, `true` to ask for more solutions. |
-| `noMoreSolutions()` | When the search space is exhausted. |
-
-<!-- no-run -->
-
-```js
-const fails = { n: 0, beginFail() { this.n++; } };
-solver.solve(db, [fails, { atSolution: () => x.value() < 3 }]);
-```
-
-- A decision is passed as its description (`'[x(0..2) == 0] or [x(0..2) != 0]'`),
-  which reflects the domains at that call.
-- Hooks are read once, when the search starts; replacing a method later has no
-  effect. A hook that is missing costs nothing; one that is present costs about
-  a microsecond per call. A hook set to `undefined` counts as missing; any
-  other value that is not a function throws a `TypeError` naming the hook.
-- Inside a hook, values can be read (`x.value()`, `x.min()`), and `interrupt()`
-  stops the search. Changing the model or starting a search (`solve`,
-  `newSearch`, `nextSolution`, `endSearch`) throws.
-- A throw stops the search through the interrupt limit (not
-  `FinishCurrentSearch()`, whose flag would also end the next search). No hook
-  runs after it, not even `exitSearch()`, and the error is rethrown by the
-  `solve()`, `nextSolution()` or `endSearch()` call that was running, once
-  OR-Tools has unwound. The solver stays usable.
-- `solveAsync()` takes `SearchMonitor` handles only: JS cannot run on the
-  threadpool.
-
-**Routing.** `solveWithParameters(params, options)` and its `…Sync` variants
-take two callbacks:
-
-- `onSolution({ objective, solutionIndex, routes? })` for each solution
-  (`includeRoutes: true` adds the routes), from OR-Tools' at-solution hook.
-- `onProgress({ solutions, objective, branches, failures, wallTimeMs, done })`
-  from a native search monitor, at most every `progressIntervalMs` (default
-  500, `0` for every check) while the search runs, then once with `done: true`
-  after it ends. `objective` is the best so far, `null` before the first
-  solution; the counters cover this solve only.
-
-<!-- no-run -->
-
-```js
-const solution = await model.solveWithParameters({ timeLimit: '30s', localSearchMetaheuristic: 'GUIDED_LOCAL_SEARCH' }, {
-  progressIntervalMs: 1000,
-  onProgress: ({ objective, solutions, wallTimeMs, done }) => console.log({ objective, solutions, wallTimeMs, done }),
-});
-```
-
-During an async solve the solver never waits for JS (`NonBlockingCall`):
-
-- **Solutions are all delivered.** A snapshot is queued per solution, so a slow
-  `onSolution` costs memory (with `includeRoutes`, one route list per
-  solution), never solver time.
-- **Progress coalesces.** At most one progress call is queued; while it waits,
-  newer values replace the queued ones. A slow `onProgress` sees fewer events,
-  each with the latest values. The final `done: true` event arrives even when
-  the solve fails natively, unless a callback threw or the worker thread is
-  terminating.
-- The Promise settles after the last callback has run.
-
-In both modes the first throw in either callback stops the search (like
-`interrupt()`), no callback runs after it, and the solve rejects or rethrows
-with it. Inside a callback, the model is busy: every model call throws except
-`busy` and `interrupt()`, which stops the search and keeps the best solution.
-
-**CP-SAT.** `solve(model, { onSolution })` waits for each callback before the
-search continues, like Python's solution callback, so `stopSearch()` inside it
-takes effect before the next solution. See `lib/sat.d.ts`.
 
 ## How it works
 
 ```
-lib/index.js     JavaScript API: Variable / Constraint handles, expression parsing,
-                 ownership checks, SolveResult
-lib/index.d.ts   TypeScript definitions
-src/addon.cc     Napi::ObjectWrap<Solver> owning a std::unique_ptr<MPSolver>
-                 - variables and constraints addressed by integer index
-                 - SolveWorker (Napi::AsyncWorker) runs MPSolver::Solve() off the
-                   main thread and resolves a Promise
-CMakeLists.txt   find_package(ortools CONFIG) and link ortools::ortools via cmake-js
+lib/index.js         Entry point: re-exports every module
+lib/<module>.js      JavaScript API per OR-Tools component: handles, validation, results
+lib/<module>.d.ts    TypeScript declarations
+lib/loader.js        Finds the source build or the prebuilt addon (docs/install.md)
+src/addon.cc         Registers every component; checks the loaded OR-Tools release
+src/<component>/     Napi::ObjectWrap classes per OR-Tools component; async work in
+                     PromiseWorker (src/common/async_worker.h) off the main thread
+CMakeLists.txt       find_package(ortools CONFIG) and link ortools::ortools via cmake-js
 ```
 
-The C++ layer is deliberately small: it validates every argument and tracks
-whether a current solution exists. Everything that does not need C++ lives in
-JavaScript.
+The C++ layer validates every argument and tracks whether a current solution
+exists. Everything that does not need C++ lives in JavaScript.
 
 ### Adding a method
 
-1. Declare and implement it in the `Solver` class in `src/addon.cc`, then
-   register it with `InstanceMethod("jsName", &Solver::CppName)` in `Solver::Init`.
-2. Expose it in `lib/index.js` and `lib/index.d.ts`.
-3. Add tests in `test/`, then run `npm run build && npm test`.
+1. Implement it in the component's class under `src/<component>/` and register
+   it in that class's `Init`.
+2. Expose it in `lib/<module>.js` and declare it in `lib/<module>.d.ts`;
+   `test/types_runtime.test.js` fails until the declaration matches the
+   runtime.
+3. Add tests in `test/`, a usage check in `test/types/` and an entry in the
+   module's page in `docs/`, then run `npm run build && npm test && npm run typecheck`.
 
 ### Rules for native code
 
@@ -681,30 +481,49 @@ JavaScript.
 - Never use `std::regex`. libstdc++'s implementation recurses once per
   character and crashes on long input; scan text with a plain loop instead.
 
+
 ## Development
 
 ```bash
 npm run build          # incremental native build   (npm run rebuild for a clean one)
-npm test               # node:test suite, 24 tests
-npm run typecheck      # checks the TypeScript definitions
+npm test               # node:test suite, including every example in README.md and docs/
+npm run typecheck      # compiles lib/**/*.d.ts and the usage checks in test/types/
 npm run example        # examples/basic.js
 npm run bench          # Node.js vs Python benchmark (see Performance)
 ```
 
 Tests cover solving, every error path, ownership after `clear()` and `dispose()`,
-interruption, input validation and memory release. CI runs the tests, the type
-check and the example on Node.js 22, 24 and 26 for every push and pull request.
-See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request; changes
-are recorded in [CHANGELOG.md](CHANGELOG.md).
+interruption, worker termination, input validation and memory release.
+`test/types_runtime.test.js` checks the TypeScript declarations against the
+loaded addon. `test/docs_examples.test.js` runs every ```` ```js ```` block of
+this README and `docs/` as a script: `console.log(...); //=> text` lines must
+print exactly `text`, and a block preceded by `<!-- no-run -->` is a fragment
+that is not run. CI runs the tests, the type check and the example against
+OR-Tools 9.14 and 9.15 on Node.js 22, 24 and 26 for every push and pull
+request. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request;
+changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap
 
-- **Prebuilt binaries** for Linux, macOS and Windows, so installing needs no C++
-  toolchain or OR-Tools download.
-- **CI on macOS and Windows.** Linux CI already covers Node.js 22, 24 and 26.
-- **CP-SAT API**: intervals, `NoOverlap`, `AllDifferent`, cumulative
-  constraints and other scheduling features.
-- **Bulk model building** from typed arrays for models with millions of nonzeros.
+- **Publish to npm.** Neither `ortools-node` nor the `@ortools-node/*` platform
+  packages are on npm yet; the publish workflow releases them from a `v*` tag.
+- **Prebuilt binaries for macOS and Windows,** with CI on both. Linux x64 and
+  arm64 with glibc have prebuilts; musl (Alpine) has none.
+- **More search monitor hooks.** JS monitors on `cp.CpSolver` do not get
+  `restartSearch`, `periodicCheck`, `progressPercent` or the local search hooks
+  (`atLocalOptimum`, `acceptDelta`, `acceptNeighbor`, `acceptUncheckedNeighbor`):
+  nothing in the API can trigger them until restarts and local search are
+  exposed. `solveAsync()` takes `SearchMonitor` handles only.
+- **CP-SAT `onSolution` in `solveSync()`,** which supports no callbacks today.
+- **Live routing callbacks.** Transit callbacks are evaluated once, when
+  registered (at most 16384 indices), because solving runs off the JS thread.
+- **Quadratic and general constraints.** `mathOpt` models are linear only, and
+  `modelBuilder` rejects models with general constraints other than indicators,
+  or a quadratic objective.
+- **Exact large graph results.** Graph results beyond 2^53 throw a `RangeError`
+  instead of returning a BigInt.
+- **Bulk model building** from typed arrays for linear models with millions of
+  nonzeros.
 
 ## License
 
