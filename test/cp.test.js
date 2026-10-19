@@ -280,6 +280,26 @@ test('removeValues() that empties a domain with holes changes nothing', () => {
   assert.deepEqual(domainOf(y), [0, 5, 10]);
 });
 
+test('removeValues() on the full int64 domain removes only what is listed', () => {
+  const [MIN, MAX] = [-(2n ** 63n), 2n ** 63n - 1n];
+  const s = new CpSolver();
+  const x = s.intVar(MIN, MAX).removeValues([]);
+  assert.deepEqual([x.contains(MIN), x.contains(0), x.contains(MAX)], [true, true, true], 'an empty removal is a no-op');
+  x.removeValues([MAX]);
+  assert.deepEqual([x.contains(MAX), x.contains(MAX - 1n), x.contains(MIN)], [false, true, true]);
+  x.removeValues([MIN]);
+  assert.deepEqual([x.contains(MIN), x.contains(MIN + 1n)], [false, true]);
+  const y = s.intVar(MIN, MAX);
+  assert.throws(() => y.removeValues([0]), /^RangeError: removeValues\(\): OR-Tools cannot make holes/);
+  assert.deepEqual([y.contains(0), y.contains(MIN), y.contains(MAX)], [true, true, true], 'a refused hole changes nothing');
+});
+
+test('size() of a domain wider than int64 is Infinity, never a wrapped 0', () => {
+  const s = new CpSolver();
+  assert.equal(s.intVar(-(2n ** 63n), 2n ** 63n - 1n).size(), Infinity, 'the full int64 domain holds 2^64 values');
+  assert.equal(s.intVar(-(2n ** 63n) + 1n, 2n ** 63n - 1n).size(), Infinity);
+});
+
 test('removeValues() matches a removeValue() loop, and a failed call changes nothing', () => {
   let seed = 12345;
   const rand = (n) => {
