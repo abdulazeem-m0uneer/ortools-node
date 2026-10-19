@@ -236,3 +236,12 @@ test('mipParameters the backend rejects are an error, not ignored or an UNSPECIF
     assert.equal(solveVectorBinPackingSync(problem, { solverType, mipParameters }).objectiveValue, 4, solverType);
   }
 });
+
+test('CBC and HIGHS say they take no mipParameters, even valid ones', () => {
+  const problem = classic();
+  const valid = [['CBC', '-maxnodes 10'], ['CBC', ' '], ['HIGHS', 'output_flag=false'], ['HIGHS', 'threads = 1']];
+  for (const [solverType, mipParameters] of valid.filter(([s]) => s in VectorBinPackingSolverType)) {
+    assert.throws(() => solveVectorBinPackingSync(problem, { solverType, mipParameters }),
+      { name: 'TypeError', message: `mipParameters: ${solverType} takes none here (only SCIP and CP_SAT do)` });
+  }
+});
