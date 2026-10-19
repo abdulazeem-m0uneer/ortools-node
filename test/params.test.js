@@ -324,9 +324,13 @@ test('deeply nested values are a short TypeError, without protobuf-internal Stru
     { name: 'TypeError', message: /is nested more than 64 levels deep/ });
   assert.throws(() => validateRoutingSearchParameters({ localSearchOperators: nest(63, 'x') }), { name: 'TypeError', message: /'localSearchOperators\.x/ });
   // The native layer, reached without the JS limit, must not echo Struct-internal paths either.
+  // Protobuf picks random spacing on every call, so one call hits a given spacing variant only
+  // some of the time; 64 calls make a variant the stripping misses all but certain to fail.
   const deep = JSON.stringify(nest(150, 'localSearchOperators'));
-  assert.throws(() => native.validateRoutingSearchParameters(deep),
-    (error) => error instanceof TypeError && !error.message.includes('<struct>') && error.message.length < 1000);
+  for (let call = 0; call < 64; call++) {
+    assert.throws(() => native.validateRoutingSearchParameters(deep),
+      (error) => error instanceof TypeError && !error.message.includes('<struct>') && error.message.length < 1000);
+  }
 });
 
 test('integer fields given as strings take only canonical decimals that fit the field type', () => {
