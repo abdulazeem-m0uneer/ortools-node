@@ -276,10 +276,15 @@ Napi::Value RoutingModelWrap::Status(const Napi::CallbackInfo& info) {
   return Napi::String::New(env, operations_research::RoutingSearchStatus::Value_Name(model_->status()));
 }
 
-// Asks a running solve to stop; false when none is running.
+// Asks a running solve to stop; false when none is running. The busy state is
+// shared with the model's CpSolver, so this also stops a CP solveAsync on it
+// (which watches the context's own stop flag).
 Napi::Value RoutingModelWrap::Interrupt(const Napi::CallbackInfo& info) {
   const bool running = solve_state_.busy();
-  if (running) solve_state_.RequestStop();
+  if (running) {
+    solve_state_.RequestStop();
+    context_->stop_flag()->store(true);
+  }
   return Napi::Boolean::New(info.Env(), running);
 }
 

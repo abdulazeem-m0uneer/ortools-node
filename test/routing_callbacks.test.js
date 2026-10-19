@@ -163,3 +163,18 @@ test('cumuls and values beyond 2^53 come back as bigints, safe ones as numbers',
   assert.equal(solution.value(dim.cumulVar(model.end(0))), 3n * huge);
   assert.equal(typeof solution.value(model.nextVar(0)), 'number');
 });
+
+test('model.interrupt() also stops a CP search running on the model solver', { timeout: 15000 }, async () => {
+  const model = vrp();
+  const s = model.solver();
+  const q = Array.from({ length: 13 }, (_, i) => s.intVar(0, 12, `q${i}`));
+  s.add(s.allDifferent(q));
+  s.add(s.allDifferent(q.map((v, i) => v.plus(i).var())));
+  s.add(s.allDifferent(q.map((v, i) => v.minus(i).var())));
+  const all = s.allSolutionCollector().add(q);
+  const pending = s.solveAsync(s.phase(q, 'CHOOSE_MIN_SIZE_LOWEST_MIN', 'ASSIGN_MIN_VALUE'), [all]);
+  assert.equal(model.interrupt(), true);
+  await pending;
+  assert.ok(all.solutionCount() < 73712, `${all.solutionCount()} solutions: the search was not stopped`);
+  assert.equal(model.interrupt(), false);
+});
