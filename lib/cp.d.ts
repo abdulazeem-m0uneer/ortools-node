@@ -74,12 +74,37 @@ export class SolutionCollector extends SearchMonitor {
   failures(n: number): number;
 }
 
-/** A JS object used as a search monitor by solve() and newSearch(). */
+/**
+ * A JS object used as a search monitor by solve() and newSearch(): any of
+ * these OR-Tools SearchMonitor hooks, camelCased (pywrapcp's restart,
+ * local search and progress hooks are not exposed: nothing in this API can
+ * trigger them). Hooks are read once when the
+ * search starts and run synchronously on the calling thread. A throw stops the
+ * search, no hook runs after it, and solve() / nextSolution() / endSearch()
+ * rethrows it. Inside a hook, values can be read but the model cannot change and
+ * no search can start. A hook set to undefined is absent; any other value that
+ * is not a function throws a TypeError when the search starts. Decisions are
+ * passed as their description, e.g. '[x(0..2) == 0] or [x(0..2) != 0]', which
+ * reflects the domains at the call.
+ */
 export interface JsSearchMonitor {
   enterSearch?(): void;
   exitSearch?(): void;
+  beginNextDecision?(): void;
+  /** `decision` is null when the decision builder has no more decisions (a solution). */
+  endNextDecision?(decision: string | null): void;
+  applyDecision?(decision: string): void;
+  refuteDecision?(decision: string): void;
+  afterDecision?(decision: string, apply: boolean): void;
+  beginFail?(): void;
+  endFail?(): void;
+  beginInitialPropagation?(): void;
+  endInitialPropagation?(): void;
+  /** Return false to reject the solution; anything else accepts it. */
+  acceptSolution?(): boolean | void;
   /** Return false to stop the search, true to ask for more solutions. */
   atSolution?(): boolean | void;
+  noMoreSolutions?(): void;
 }
 
 export interface SearchLimitOptions {

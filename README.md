@@ -44,6 +44,7 @@ console.log(result.status, result.objectiveValue, x.value(), y.value());
 - [API reference](#api-reference)
 - [Solver backends](#solver-backends)
 - [Concurrency, memory and the threadpool](#concurrency-memory-and-the-threadpool)
+- [Callbacks and search monitors](#callbacks-and-search-monitors)
 - [How it works](#how-it-works)
 - [Development](#development)
 - [Roadmap](#roadmap)
@@ -451,7 +452,7 @@ ones) are plain numbers, exact up to 2^53, which no realistic search reaches.
 | `phase(vars, varStrategy, valueStrategy)`, `compose(...)` | Decision builders. |
 | `minimize(expr, step?)` / `maximize`, `limit({ timeMs, branches, failures, solutions })`, `searchLog(period)` | Search monitors. |
 | `firstSolutionCollector()`, `lastSolutionCollector()`, `bestValueSolutionCollector(maximize)`, `allSolutionCollector()` | Collectors; read with `collector.value(n, x)` after the search. |
-| `solve(db, monitors?)` → `boolean` | Searches on the calling thread. Monitors may be plain objects with `enterSearch`, `exitSearch` and `atSolution` (return `false` to stop). |
+| `solve(db, monitors?)` → `boolean` | Searches on the calling thread. Monitors may be plain objects with search monitor hooks; see [Callbacks and search monitors](#callbacks-and-search-monitors). |
 | `solveAsync(db, monitors?)` → `Promise<boolean>` | Searches on the libuv threadpool; `interrupt()` stops it. |
 | `newSearch(db, monitors?)`, `nextSolution()`, `endSearch()` | Iterate solutions one by one; `x.value()` reads the current one. |
 | `wallTime()`, `branches()`, `failures()`, `solutions()`, `busy`, `dispose()` | Statistics and lifetime. |
@@ -537,6 +538,51 @@ The OR-Tools 9.15 release archives include all open-source backends below. Run
   `crypto` and `zlib`. The default is 4 threads. Set `UV_THREADPOOL_SIZE` above
   your maximum number of concurrent solves before Node.js starts, and give every
   solve a time limit.
+
+## Callbacks and search monitors
+
+Every callback runs on the JS thread that started the solve. What runs on a
+solver thread is native code only; it hands JS a copy of the values (a
+snapshot), never a live native object.
+
+**Classic CP (`cp.CpSolver`), synchronous.** `solve()` and `newSearch()` accept
+plain objects next to `SearchMonitor` handles. Any of these
+OR-Tools `SearchMonitor` hooks, camelCased, is called from inside the search
+(the restart, local search and progress hooks are not exposed: nothing in this
+API can trigger them):
+
+| Hook | Called |
+|---|---|
+| `enterSearch()`, `exitSearch()` | When the search starts and ends. |
+| `beginInitialPropagation()`, `endInitialPropagation()` | Around the propagation before the first decision. |
+| `beginNextDecision()`, `endNextDecision(decision \| null)` | Around asking the decision builder for a decision (`null`: none left, a solution). |
+| `applyDecision(decision)`, `refuteDecision(decision)`, `afterDecision(decision, apply)` | When a decision is taken, refuted, and after either. |
+| `beginFail()`, `endFail()` | Around each backtrack. |
+| `acceptSolution()` | Return `false` to reject the solution. |
+| `atSolution()` | Return `false` to stop the search, `true` to ask for more solutions. |
+| `noMoreSolutions()` | When the search space is exhausted. |
+
+```js
+const fails = { n: 0, beginFail() { this.n++; } };
+solver.solve(db, [fails, { atSolution: () => x.value() < 3 }]);
+```
+
+- A decision is passed as its description (`'[x(0..2) == 0] or [x(0..2) != 0]'`),
+  which reflects the domains at that call.
+- Hooks are read once, when the search starts; replacing a method later has no
+  effect. A hook that is missing costs nothing; one that is present costs about
+  a microsecond per call. A hook set to `undefined` counts as missing; any
+  other value that is not a function throws a `TypeError` naming the hook.
+- Inside a hook, values can be read (`x.value()`, `x.min()`), and `interrupt()`
+  stops the search. Changing the model or starting a search (`solve`,
+  `newSearch`, `nextSolution`, `endSearch`) throws.
+- A throw stops the search through the interrupt limit (not
+  `FinishCurrentSearch()`, whose flag would also end the next search). No hook
+  runs after it, not even `exitSearch()`, and the error is rethrown by the
+  `solve()`, `nextSolution()` or `endSearch()` call that was running, once
+  OR-Tools has unwound. The solver stays usable.
+- `solveAsync()` takes `SearchMonitor` handles only: JS cannot run on the
+  threadpool.
 
 ## How it works
 
