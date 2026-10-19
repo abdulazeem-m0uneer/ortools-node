@@ -227,21 +227,25 @@ test('protobuf parse errors keep the field and expected type but not positions i
   const sat = messageOf(() => validateSatParameters({ logSearchProgress: 1 }));
   for (const [error, field, type] of [[routing, 'timeLimit', 'google.protobuf.Duration'], [sat, 'logSearchProgress', 'bool']]) {
     assert.equal(error.name, 'TypeError');
-    assert.ok(error.message.includes(`@ ${field}: `) && error.message.includes(type), error.message);
+    // protobuf may space its own words irregularly, so match its words, not its spacing.
+    assert.match(error.message, new RegExp(`@\\s+${field}:\\s`));
+    assert.ok(error.message.includes(type), error.message);
     assert.doesNotMatch(error.message, /near|offset|\d+:\d+/);
-    assert.doesNotMatch(error.message, /\s{2}/);
   }
 });
 
 test('cleaning protobuf errors never rewrites the caller\'s echoed value', () => {
-  const position = ' near 1:2 (offset 3)';
   const combined = [];
-  // Quotes, a lookalike position (with and without the ':' real ones have),
-  // ':' and '@ <struct>' in every order inside the value.
-  for (const quote of ['', "'", "';", " '"]) {
-    for (const fake of [position, `${position}:`, `${position}: y`, `,${position}: y`]) {
-      for (const tail of ['', ': z', ' @ <struct>q: z', "' @ <struct>q: z"]) {
-        combined.push(`x${quote}${fake}${tail}`, `${quote}x @ <struct>p${fake}${tail}`);
+  // Quotes, a lookalike position (with and without the ':' real ones have, and
+  // after a single space, a double space or a tab), ':' and '@ <struct>' in
+  // every order inside the value.
+  for (const gap of [' ', '  ', '\t']) {
+    const position = `${gap}near 1:2 (offset 3)`;
+    for (const quote of ['', "'", "';", " '"]) {
+      for (const fake of [position, `${position}:`, `${position}: y`, `,${position}: y`]) {
+        for (const tail of ['', ': z', ' @ <struct>q: z', "' @ <struct>q: z"]) {
+          combined.push(`x${quote}${fake}${tail}`, `${quote}x @ <struct>p${fake}${tail}`);
+        }
       }
     }
   }

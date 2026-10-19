@@ -139,67 +139,43 @@ size_t MatchJsonPosition(absl::string_view text, size_t start) {
 
 // Where protobuf quotes a value, which may be the caller's text verbatim
 // (unescaped, so it may hold quotes itself): a quote after a space, ':' or
-// '(' opens, and one before the end, a space, ';', ',' or ')' closes.
+// '(' opens.
 bool OpensQuote(absl::string_view text, size_t i) {
   return text[i] == '\'' && (i == 0 || IsSpace(text[i - 1]) || text[i - 1] == ':' || text[i - 1] == '(');
 }
 
-bool ClosesQuote(absl::string_view text, size_t i) {
-  if (text[i] != '\'') return false;
-  if (i + 1 == text.size()) return true;
-  const char next = text[i + 1];
-  return IsSpace(next) || next == ';' || next == ',' || next == ')';
-}
-
-// Collapses protobuf's irregular spacing outside quoted values, so the caller's
-// echoed text stays exactly as given, and drops protobuf's one "near L:C
-// (offset N)" position (which points into JSON the binding prints internally).
-// protobuf writes that position in its own prefix, before any quoted value, so
-// the search for it ends at the first opening quote and never looks inside the
-// caller's text.
-std::string NormalizeProtobufMessage(absl::string_view text) {
-  std::string out;
-  out.reserve(text.size());
-  bool quoted = false;
-  bool pending_space = false;
-  bool position_possible = true;
-  for (size_t i = 0; i < text.size();) {
-    if (quoted) {
-      quoted = !ClosesQuote(text, i);
-      out += text[i++];
-      continue;
-    }
+// Drops protobuf's one "near L:C (offset N)" position (which points into JSON
+// the binding prints internally) and leaves every other character, spacing
+// included, as protobuf wrote it, so the caller's echoed text stays exactly as
+// given. protobuf writes that position in its own prefix, before any quoted
+// value, so the search for it ends at the first opening quote and never looks
+// inside the caller's text.
+std::string StripJsonPosition(absl::string_view text) {
+  for (size_t i = 0; i < text.size() && !OpensQuote(text, i); ++i) {
     // Only where a position can begin (a comma, or the first of a run of
-    // spaces), so a long run is scanned once and the loop stays linear.
-    const bool may_start = text[i] == ',' || (IsSpace(text[i]) && (i == 0 || !IsSpace(text[i - 1])));
-    if (position_possible && may_start) {
-      const size_t end = MatchJsonPosition(text, i);
-      if (end != i) {
-        position_possible = false;
-        i = end;
-        continue;
-      }
-    }
-    if (IsSpace(text[i])) {
-      pending_space = !out.empty();
-      ++i;
-      continue;
-    }
-    if (pending_space) out += ' ';
-    pending_space = false;
-    quoted = OpensQuote(text, i);
-    if (quoted) position_possible = false;
-    out += text[i++];
+    // spaces), so a long run is scanned once and the search stays linear.
+    if (text[i] != ',' && !(IsSpace(text[i]) && (i == 0 || !IsSpace(text[i - 1])))) continue;
+    const size_t end = MatchJsonPosition(text, i);
+    if (end != i) return absl::StrCat(text.substr(0, i), text.substr(end));
   }
-  return out;
+  return std::string(text);
 }
 
-// Struct parse errors name internal paths such as " @ <struct>[0].struct_value.<struct>[0]...: ".
+// Struct parse errors name internal paths such as " @ <struct>[0].struct_value.<struct>[0]...: ",
+// where protobuf may write any run of whitespace in place of each space.
 std::string StripStructPath(std::string text) {
-  const size_t start = text.find(" @ <struct>");
-  if (start == std::string::npos) return text;
-  const size_t end = text.find(": ", start);
-  text.erase(start, end == std::string::npos ? std::string::npos : end - start);
+  for (size_t at = text.find('@'); at != std::string::npos; at = text.find('@', at + 1)) {
+    size_t start = at;
+    while (start > 0 && IsSpace(text[start - 1])) --start;
+    size_t path = at + 1;
+    while (path < text.size() && IsSpace(text[path])) ++path;
+    const bool spaced = start != at && path != at + 1;
+    if (!spaced || !absl::StartsWith(absl::string_view(text).substr(path), "<struct>")) continue;
+    size_t end = text.find(':', path);
+    while (end != std::string::npos && (end + 1 == text.size() || !IsSpace(text[end + 1]))) end = text.find(':', end + 1);
+    text.erase(start, end == std::string::npos ? std::string::npos : end - start);
+    return text;
+  }
   return text;
 }
 
@@ -214,7 +190,7 @@ std::string Abbreviate(absl::string_view text, size_t max_bytes) {
 
 std::string BoundedErrorMessage(absl::string_view message) { return Abbreviate(message, kMaxErrorMessageBytes); }
 
-std::string JsonParseErrorMessage(const absl::Status& status) { return NormalizeProtobufMessage(status.message()); }
+std::string JsonParseErrorMessage(const absl::Status& status) { return StripJsonPosition(status.message()); }
 
 // Only here: a parameter message has no Struct field, so its errors cannot hold
 // a Struct path, and " @ <struct>" in them is the caller's own value.
