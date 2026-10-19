@@ -100,6 +100,7 @@ export class Model {
   objectiveOffset: number;
   readonly maximizing: boolean;
 
+  /** A second hint for the same variable replaces the first. HiGHS ignores hints (OR-Tools crashes on them). */
   addHint(variable: Variable, value: number): this;
   clearHints(): this;
 
