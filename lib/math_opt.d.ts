@@ -137,7 +137,10 @@ export interface SolveOptions {
   interrupter?: SolveInterrupter;
 }
 
-/** Stops the solves it was passed to; once interrupted it stays interrupted. */
+/**
+ * Stops the solves it was passed to; once interrupted it stays interrupted.
+ * HiGHS ignores it (the solve runs to its own limits).
+ */
 export class SolveInterrupter {
   constructor();
   interrupt(): void;
