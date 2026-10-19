@@ -34,15 +34,18 @@ export class KnapsackSolver {
    */
   init(profits: KnapsackIntArray, weights: ReadonlyArray<KnapsackIntArray>, capacities: KnapsackIntArray): this;
   /**
-   * Resolves to the best total profit found. The MIP types stop within a
-   * relative gap of 1e-4 (OR-Tools gives no way to change it), so when the
-   * profits add up to 1e4 or more they may return a few units less than the
-   * optimum; isSolutionOptimal() then says false.
+   * Resolves to the total profit of the packed items (bestSolutionContains()).
+   * The MIP types may return less than the optimum: SCIP stops within a relative
+   * gap of 1e-4 (OR-Tools gives no way to change it), and CBC proves wrong bounds.
    */
   solve(): Promise<number>;
   solveSync(): number;
   bestSolutionContains(item: number): boolean;
-  /** True only when the profit is proven optimal: false when the time limit stopped the search early, and for the MIP types whenever the profits add up to 1e4 or more. */
+  /**
+   * True only when the profit is proven optimal: false when the time limit
+   * stopped the search early, always for the CBC, XPRESS and CPLEX types, and for
+   * SCIP when the profit found (weightless items aside) is 1e4 or more.
+   */
   isSolutionOptimal(): boolean;
   /** Seconds per solve; Infinity (the default) means no limit. The MIP types count limits under 1 ms (0 included) as 1 ms. */
   setTimeLimit(seconds: number): this;
