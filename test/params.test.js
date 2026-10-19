@@ -255,6 +255,23 @@ test('huge values echoed in parse errors neither crash nor flood the message', (
   assert.equal(child.status, 0, child.stderr);
 });
 
+test('deeply nested values are a short TypeError, without protobuf-internal Struct paths', () => {
+  const nest = (levels, key) => {
+    let value = {};
+    for (let i = 0; i < levels; i++) value = { [key]: value };
+    return value;
+  };
+  assert.throws(() => validateRoutingSearchParameters(nest(65, 'localSearchOperators')),
+    { name: 'TypeError', message: /'localSearchOperators(\.localSearchOperators){64}' is nested more than 64 levels deep/ });
+  assert.throws(() => validateSatParameters({ subsolverParams: [nest(70, 'x')] }),
+    { name: 'TypeError', message: /is nested more than 64 levels deep/ });
+  assert.throws(() => validateRoutingSearchParameters({ localSearchOperators: nest(63, 'x') }), { name: 'TypeError', message: /'localSearchOperators\.x/ });
+  // The native layer, reached without the JS limit, must not echo Struct-internal paths either.
+  const deep = JSON.stringify(nest(150, 'localSearchOperators'));
+  assert.throws(() => native.validateRoutingSearchParameters(deep),
+    (error) => error instanceof TypeError && !error.message.includes('<struct>') && error.message.length < 1000);
+});
+
 test('integer fields given as strings take only canonical decimals that fit the field type', () => {
   for (const bad of ['1e3', '007', ' 7', '7 ', '+7', '-0', '1.5', '', '-', '0x10']) {
     assert.throws(() => validateRoutingSearchParameters({ solutionLimit: bad }),

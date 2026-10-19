@@ -155,6 +155,15 @@ std::string StripJsonPositions(absl::string_view text) {
   return out;
 }
 
+// Struct parse errors name internal paths such as " @ <struct>[0].struct_value.<struct>[0]...: ".
+std::string StripStructPath(std::string text) {
+  const size_t start = text.find(" @ <struct>");
+  if (start == std::string::npos) return text;
+  const size_t end = text.find(": ", start);
+  text.erase(start, end == std::string::npos ? std::string::npos : end - start);
+  return text;
+}
+
 // protobuf echoes the caller's value, which may be megabytes long.
 std::string TruncateMessage(std::string text) {
   constexpr size_t kMaxLength = 500;
@@ -168,7 +177,7 @@ std::string TruncateMessage(std::string text) {
 }  // namespace
 
 std::string JsonParseErrorMessage(const absl::Status& status) {
-  return TruncateMessage(StripJsonPositions(CollapseWhitespace(status.message())));
+  return TruncateMessage(StripStructPath(StripJsonPositions(CollapseWhitespace(status.message()))));
 }
 
 bool ParseProtoJson(Napi::Env env, const Napi::Value& json, const char* what, google::protobuf::Message* out) {
