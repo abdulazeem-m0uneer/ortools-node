@@ -8,7 +8,7 @@
 **Native Node.js bindings for [Google OR-Tools](https://developers.google.com/optimization)**:
 linear and mixed-integer programming with GLOP, PDLP, CLP, SCIP, CBC, HiGHS and
 CP-SAT, plus Gurobi, CPLEX or Xpress where your OR-Tools build can load them,
-all behind one API.
+all behind one API, and the constraint programming solver with vehicle routing.
 
 Google publishes official OR-Tools bindings for C++, Python, Java and .NET, but
 not for Node.js. `ortools-node` calls the OR-Tools C++ library directly through
@@ -58,6 +58,8 @@ console.log(result.status, result.objectiveValue, x.value(), y.value());
 - **Fails loudly.** Reading a value when there is no current solution, using a
   variable from another solver, or passing `NaN` all throw a clear error. You
   never silently get a stale `0`.
+- **Constraint programming and vehicle routing.** `cp.CpSolver`, `RoutingModel`
+  and `RoutingIndexManager` follow OR-Tools' Python API with camelCase names.
 - **Typed.** TypeScript definitions are included.
 - **Debuggable.** Export any model as LP or MPS text with `toLp()` and `toMps()`.
 - **Faster than Python at building models.** Building a model is 2.3 to 5.8
@@ -289,6 +291,44 @@ s.addLessEq({ terms: [[x, 1], [y, 1]], constant: 2 }, 12);   // x + y + 2 <= 12
 s.dispose();
 ```
 
+### Constraint programming
+
+`cp` is the classic constraint solver (pywrapcp); the top-level `CpModel` / `CpSolver` are CP-SAT.
+
+```js
+const { cp } = require('ortools-node');
+
+const s = new cp.CpSolver('puzzle');
+const [x, y, z] = ['x', 'y', 'z'].map((name) => s.intVar(0, 9, name));
+s.add(s.allDifferent([x, y, z]));
+s.add(x.plus(y).eq(z.times(2)));                              // x + y == 2z
+const objective = s.maximize(x.times(100).plus(y.times(10)).plus(z), 1);
+const best = s.lastSolutionCollector().add([x, y, z]);
+s.solve(s.phase([x, y, z], 'CHOOSE_FIRST_UNBOUND', 'ASSIGN_MAX_VALUE'), [best, objective]);
+console.log([x, y, z].map((v) => best.value(0, v)));          // [ 9, 7, 8 ]
+s.dispose();
+```
+
+### Vehicle routing
+
+```js
+const { RoutingIndexManager, RoutingModel } = require('ortools-node');
+
+async function main() {
+  const distances = [[0, 2, 9, 10], [1, 0, 6, 4], [15, 7, 0, 8], [6, 3, 12, 0]];
+  const manager = new RoutingIndexManager(distances.length, 1, 0);   // nodes, vehicles, depot
+  const model = new RoutingModel(manager);
+  model.setArcCostEvaluatorOfAllVehicles(model.registerTransitMatrix(distances));
+
+  const solution = await model.solveWithParameters({ firstSolutionStrategy: 'PATH_CHEAPEST_ARC' });
+  console.log(solution.objectiveValue());                     // 21
+  console.log(manager.indicesToNodes(solution.routes()[0]));  // [ 0, 2, 3, 1, 0 ]
+  model.dispose();
+}
+
+main();
+```
+
 ## API reference
 
 ### `new Solver(backend = 'GLOP', name?)`
@@ -342,6 +382,59 @@ appears in exported LP and MPS files.
 
 `supportsBackend(name)` reports whether a backend is compiled into your OR-Tools
 build. `INF` is `Infinity`.
+
+### `new cp.CpSolver(name?)`
+
+The classic constraint programming solver (`pywrapcp.Solver`). Integer inputs
+accept safe integers and BigInts; `removeValues`, `memberCt` and similar take an
+Array or a typed array.
+
+| Method | Description |
+|---|---|
+| `intVar(min, max, name?)` / `intVar(values, name?)` / `boolVar` / `intConst` | Variables (`cp.IntVar`). |
+| `x.plus(y)`, `minus`, `times`, `abs`, `square`, `opposite`; `sum`, `scalProd`, `min`, `max`, `element` | Integer expressions (`cp.IntExpr`). |
+| `x.eq(y)`, `ne`, `le`, `lt`, `ge`, `gt`; `allDifferent`, `allowedAssignments`, `memberCt`, `notMemberCt` | Constraints; pass them to `add()`. |
+| `isEqualVar(a, b)`, `isLessVar`, …, `isMemberVar` | 0/1 variables reifying a condition. |
+| `x.setMin/setMax/setRange/setValue`, `x.removeValue(s)` | Domain changes outside a search; emptying a domain throws `CP solver failure`. |
+| `phase(vars, varStrategy, valueStrategy)`, `compose(...)` | Decision builders. |
+| `minimize(expr, step?)` / `maximize`, `limit({ timeMs, branches, failures, solutions })`, `searchLog(period)` | Search monitors. |
+| `firstSolutionCollector()`, `lastSolutionCollector()`, `bestValueSolutionCollector(maximize)`, `allSolutionCollector()` | Collectors; read with `collector.value(n, x)` after the search. |
+| `solve(db, monitors?)` → `boolean` | Searches on the calling thread. Monitors may be plain objects with `enterSearch`, `exitSearch` and `atSolution` (return `false` to stop). |
+| `solveAsync(db, monitors?)` → `Promise<boolean>` | Searches on the libuv threadpool; `interrupt()` stops it. |
+| `newSearch(db, monitors?)`, `nextSolution()`, `endSearch()` | Iterate solutions one by one; `x.value()` reads the current one. |
+| `wallTime()`, `branches()`, `failures()`, `solutions()`, `busy`, `dispose()` | Statistics and lifetime. |
+
+OR-Tools stores holes in a domain as a bitset of at most 2^32 values, so making
+a hole in a wider domain (`removeValue(s)`, `memberCt`, `notMemberCt`,
+`isMemberVar`) throws a `RangeError`; removing values at the bounds only moves
+the bounds and is always accepted.
+
+### Routing
+
+`new RoutingIndexManager(numNodes, numVehicles, depot)`, or `(numNodes,
+numVehicles, starts, ends)`, maps nodes to solver indices (`nodeToIndex`,
+`indexToNode`, `nodesToIndices`, `indicesToNodes`). `new RoutingModel(manager)`
+builds the model:
+
+| Method | Description |
+|---|---|
+| `registerTransitMatrix(matrix)`, `registerUnaryTransitVector(values)` | Transit evaluators indexed by node; return an evaluator id. |
+| `registerTransitCallback(fn)`, `registerUnaryTransitCallback(fn)` | `fn(fromIndex, toIndex)` is evaluated once per pair when registered, so it must be pure; limited to 16384 indices. |
+| `setArcCostEvaluatorOfAllVehicles(id)`, `setFixedCostOfVehicle(cost, v)`, … | Costs. |
+| `addDimension(id, slackMax, capacity, fixStartCumulToZero, name)` and its `WithVehicle…`, `Constant`, `Vector` and `Matrix` variants | Dimensions; `getDimensionOrDie(name)` returns one with `cumulVar(i)`, span bounds and costs, and soft bounds. |
+| `addDisjunction(indices, penalty?, maxCardinality?)`, `addPickupAndDelivery(p, d)`, `setAllowedVehiclesForIndex`, visit types | Routing constraints. |
+| `nextVar(i)`, `vehicleVar(i)`, `activeVar(i)`, `costVar()` | Model variables; constrain them through `model.solver()`, the model's `cp.CpSolver`. |
+| `solveWithParameters(params?, { onSolution?, includeRoutes? })` → `Promise<RoutingSolution \| null>` | Solves on the libuv threadpool; `interrupt()` stops it with the best solution so far. `…Sync` variants and `solveFromAssignmentWithParameters` exist too. |
+| `closeModelWithParameters(params?)`, `applyLocks`, `readAssignmentFromRoutes(routes, ignoreInactive)` | Close the model, fix route prefixes, build a solution from routes. |
+| `status()`, `busy`, `dispose()` | Search status, lifetime. |
+
+`params` are `RoutingSearchParameters` fields in camelCase, validated against
+OR-Tools' protobuf (`defaultRoutingSearchParameters()`,
+`validateRoutingSearchParameters(params)`, `durationMs(ms)` for time limits). A
+`RoutingSolution` has `objectiveValue()`, `routes()`, `cumuls(dimension)`,
+`slacks(dimension)` and `value/min/max(variable)`, and stays valid until the
+model is solved again, changed or disposed. Solution values are numbers up to
+2^53 and BigInts beyond, so large penalties are exact.
 
 ### Errors
 
@@ -463,8 +556,6 @@ are recorded in [CHANGELOG.md](CHANGELOG.md).
 - **CI on macOS and Windows.** Linux CI already covers Node.js 22, 24 and 26.
 - **CP-SAT API**: intervals, `NoOverlap`, `AllDifferent`, cumulative
   constraints and other scheduling features.
-- **Routing** (vehicle routing problems) with distance matrices passed in from
-  JavaScript.
 - **Bulk model building** from typed arrays for models with millions of nonzeros.
 
 ## License
