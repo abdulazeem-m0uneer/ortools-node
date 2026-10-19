@@ -4,8 +4,8 @@ export type SetCoverMipSolverName = 'SCIP' | 'SAT' | 'GUROBI' | 'GLOP' | 'PDLP';
 /** MIP backends this build can run for SetCoverMip. */
 export const SetCoverMipSolver: Readonly<Partial<{ [K in SetCoverMipSolverName]: K }>>;
 
-/** Subset indices: an Array or a typed array of integers. */
-export type SubsetList = ReadonlyArray<number> | Int32Array | Uint32Array;
+/** Subset indices: an Array of integer numbers or BigInts, or an Int32Array, Uint32Array, Float64Array or BigInt64Array. */
+export type SubsetList = ReadonlyArray<number | bigint> | Int32Array | Uint32Array | Float64Array | BigInt64Array;
 
 /** SetCoverProto in protobuf's JSON form. */
 export interface SetCoverProto {
