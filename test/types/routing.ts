@@ -14,6 +14,8 @@ import {
 
 const manager = new RoutingIndexManager(5, 2, 0);
 const multiDepot = new RoutingIndexManager(5, 2, [0, 1], [2, 2]);
+const bigDepots = new RoutingIndexManager(5, 2, [0n, 1], new BigInt64Array([2n, 2n]));
+const viaBigInt: number[] = bigDepots.nodesToIndices(new BigInt64Array([3n])).concat(manager.indicesToNodes([1n]));
 const model = new RoutingModel(manager);
 const transit: number = model.registerTransitCallback((i, j) => i + j);
 const matrix: number = model.registerTransitMatrix([new Int32Array(5), [0, 1, 2, 3, 4n], [], [], []]);

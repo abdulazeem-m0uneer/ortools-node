@@ -14,8 +14,8 @@ export type PickupAndDeliveryPolicyName =
 export const VisitTypePolicy: Readonly<{ [K in VisitTypePolicyName]: K }>;
 export const PickupAndDeliveryPolicy: Readonly<{ [K in PickupAndDeliveryPolicyName]: K }>;
 
-/** Indices, nodes and vehicles: an Array of numbers, or an Int32Array, Uint32Array or Float64Array. */
-export type IndexValues = ReadonlyArray<number> | Int32Array | Uint32Array | Float64Array;
+/** Indices, nodes and vehicles: an Array of integer numbers or BigInts, or an Int32Array, Uint32Array, Float64Array or BigInt64Array. */
+export type IndexValues = ReadonlyArray<number | bigint> | Int32Array | Uint32Array | Float64Array | BigInt64Array;
 
 export class RoutingIndexManager {
   constructor(numNodes: number, numVehicles: number, depot: number);
