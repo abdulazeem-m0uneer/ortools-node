@@ -1,6 +1,7 @@
 #include "sat/solution_channel.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <utility>
 
@@ -55,7 +56,28 @@ napi_status SnapshotToJs(napi_env env, const SolutionSnapshot& snapshot, napi_va
   return status;
 }
 
+// SolutionChannel::Stats, process-wide (test-only).
+std::atomic<int64_t> g_issued{0};
+std::atomic<int64_t> g_delivered{0};
+std::atomic<int64_t> g_max_pending{0};
+
+void RaiseMaxPending(int64_t pending) {
+  int64_t seen = g_max_pending.load();
+  while (pending > seen && !g_max_pending.compare_exchange_weak(seen, pending)) {
+  }
+}
+
 }  // namespace
+
+SolutionChannel::Stats SolutionChannel::TestingStats() {
+  return {g_issued.load(), g_delivered.load(), g_max_pending.load()};
+}
+
+void SolutionChannel::ResetTestingStats() {
+  g_issued.store(0);
+  g_delivered.store(0);
+  g_max_pending.store(0);
+}
 
 Napi::Value SolutionValuesToJs(Napi::Env env, const std::vector<int64_t>& values) {
   napi_value array;
@@ -115,6 +137,8 @@ void SolutionChannel::Deliver(const CpSolverResponse& response) {
     return;
   }
   const int64_t ticket = ++queued_;
+  g_issued.fetch_add(1);
+  RaiseMaxPending(queued_ - delivered_);
   delivered_cv_.wait(lock, [this, ticket] { return delivered_ >= ticket || abandoned_; });
 }
 
@@ -136,6 +160,7 @@ void SolutionChannel::Release() {
 void SolutionChannel::MarkDelivered() {
   std::lock_guard<std::mutex> lock(mutex_);
   ++delivered_;
+  g_delivered.fetch_add(1);
   delivered_cv_.notify_all();
 }
 

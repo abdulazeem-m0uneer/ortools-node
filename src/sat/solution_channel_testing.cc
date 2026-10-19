@@ -1,6 +1,8 @@
-// native._testing hook that proves a C++ exception while a solution is being
-// delivered rejects the way RunGuarded() does (test/sat_callback.test.js).
-// No real solve can make the delivery itself run out of memory.
+// native._testing hooks for test/sat_callback.test.js: publishSolutionFailure
+// proves a C++ exception while a solution is being delivered rejects the way
+// RunGuarded() does (no real solve can make the delivery itself run out of
+// memory); solutionChannelStats / resetSolutionChannelStats read the
+// SolutionChannel::Stats counters.
 
 #include "sat/solution_channel_testing.h"
 
@@ -34,6 +36,19 @@ void InitSolutionChannelTesting(Napi::Env env, Napi::Object testing) {
     channel->Release();
     if (channel->ThrowCallbackError(env)) return env.Undefined();
     return Napi::Boolean::New(env, stop_flag.load());
+  }));
+  // { issued, delivered, maxPending } since the last reset.
+  testing.Set("solutionChannelStats", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+    const SolutionChannel::Stats stats = SolutionChannel::TestingStats();
+    Napi::Object out = Napi::Object::New(info.Env());
+    out.Set("issued", Napi::Number::New(info.Env(), static_cast<double>(stats.issued)));
+    out.Set("delivered", Napi::Number::New(info.Env(), static_cast<double>(stats.delivered)));
+    out.Set("maxPending", Napi::Number::New(info.Env(), static_cast<double>(stats.max_pending)));
+    return out;
+  }));
+  testing.Set("resetSolutionChannelStats", Napi::Function::New(env, [](const Napi::CallbackInfo& info) -> Napi::Value {
+    SolutionChannel::ResetTestingStats();
+    return info.Env().Undefined();
   }));
 }
 

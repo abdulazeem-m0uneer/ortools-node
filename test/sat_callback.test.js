@@ -115,12 +115,45 @@ test('reading the solver inside the callback throws busy (use the snapshot inste
   assert.match(message, /busy/);
 });
 
-test('a multi-worker search waits for each callback: solutions found later carry later wall times', async () => {
-  // Each callback holds the main thread for HOLD_MS. The solver thread waits
-  // for it, so the next solution cannot be found earlier than HOLD_MS later in
-  // the solver's own clock. Without that wait, workers keep finding solutions
-  // during the callback, and their snapshots carry earlier wall times.
-  const HOLD_MS = 30;
+// SolutionChannel counts every snapshot queued for JS and delivered, and the
+// most snapshots of one solve ever queued and not yet delivered (native
+// _testing hooks). A solver thread waits until its callback ran, so that
+// maximum is 1: no solution is found while a callback holds the main thread.
+const { solutionChannelStats, resetSolutionChannelStats } = native._testing;
+
+/** Solves with an onSolution that holds the main thread for holdMs; returns the count and stats. */
+async function solveHolding(m, parameters, holdMs, check = () => {}) {
+  resetSolutionChannelStats();
+  const solver = new CpSolver();
+  solver.parameters = parameters;
+  let solutions = 0;
+  const status = await solver.solve(m, {
+    onSolution(s) {
+      solutions += 1;
+      check(s);
+      const until = performance.now() + holdMs;
+      while (performance.now() < until) { /* hold the main thread */ }
+    },
+  });
+  solver.dispose();
+  return { status, solutions, stats: solutionChannelStats() };
+}
+
+test('each solution waits for its callback: exactly one delivery pending at a time', async () => {
+  // Every assignment of 6 Booleans is a solution: 64 deliveries, guaranteed.
+  const { m } = boolModel(6);
+  const { status, solutions, stats } = await solveHolding(m, { enumerateAllSolutions: true, numWorkers: 1 }, 1);
+  assert.equal(status, 'OPTIMAL');
+  assert.equal(solutions, 64);
+  assert.deepEqual(stats, { issued: 64, delivered: 64, maxPending: 1 });
+});
+
+test('a multi-worker search also waits for each callback (smoke check)', async () => {
+  // The 64-solution test above carries the guarantee. This one checks the same
+  // invariant with 8 workers: they keep searching while a callback holds the
+  // main thread, so without the wait improving solutions would queue up and
+  // maxPending would exceed 1. Whether one lands inside a given hold is up to
+  // the scheduler, so a pass shows no violation, not that one was provoked.
   const n = 30;
   let seed = 7;
   const random = () => {
@@ -133,27 +166,24 @@ test('a multi-worker search waits for each callback: solutions found later carry
     m.addExactlyOne(x[i]);
     m.addExactlyOne(x.map((row) => row[i]));
   }
-  const costs = x.flat().map(() => 1 + Math.floor(random() * 1000));
-  m.minimize(CpLinearExpr.weightedSum(x.flat(), costs));
-  const solver = new CpSolver();
-  solver.parameters = { numWorkers: 8, maxTimeInSeconds: 5 };
-  const snapshots = [];
-  const status = await solver.solve(m, {
-    onSolution(s) {
-      snapshots.push({ wallTime: s.wallTime, objective: s.objectiveValue });
-      for (let i = 0; i < n; ++i) assert.equal(x[i].filter((v) => s.booleanValue(v)).length, 1);
-      const until = performance.now() + HOLD_MS;
-      while (performance.now() < until) { /* hold the main thread */ }
-    },
+  m.minimize(CpLinearExpr.weightedSum(x.flat(), x.flat().map(() => 1 + Math.floor(random() * 1000))));
+  const { status, solutions, stats } = await solveHolding(m, { numWorkers: 8, maxTimeInSeconds: 5 }, 30, (s) => {
+    for (let i = 0; i < n; ++i) assert.equal(x[i].filter((v) => s.booleanValue(v)).length, 1);
   });
   assert.ok(status === 'OPTIMAL' || status === 'FEASIBLE', status);
-  assert.ok(snapshots.length >= 2, `only ${snapshots.length} solution(s): the check needs several`);
-  for (let i = 1; i < snapshots.length; ++i) {
-    const gapMs = (snapshots[i].wallTime - snapshots[i - 1].wallTime) * 1000;
-    assert.ok(gapMs >= HOLD_MS * 0.9, `solution ${i} came ${gapMs.toFixed(1)} ms after the previous one`);
-    assert.ok(snapshots[i].objective < snapshots[i - 1].objective);
-  }
-  assert.equal(snapshots.at(-1).objective, solver.objectiveValue);
+  // A random 30 x 30 assignment improves several times (3 or more in practice);
+  // with a single solution there would be nothing for maxPending to catch.
+  assert.ok(solutions >= 2, `only ${solutions} solution(s): the check needs several`);
+  assert.deepEqual(stats, { issued: solutions, delivered: solutions, maxPending: 1 });
+});
+
+test('solutionChannelStats counts nothing without onSolution and resets to zero', async () => {
+  resetSolutionChannelStats();
+  const { m } = boolModel(3);
+  const solver = new CpSolver();
+  assert.equal(await solver.solve(m), 'OPTIMAL');
+  solver.dispose();
+  assert.deepEqual(solutionChannelStats(), { issued: 0, delivered: 0, maxPending: 0 });
 });
 
 test('concurrent solves each deliver to their own callback', async () => {
