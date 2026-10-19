@@ -1,7 +1,8 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { Solver, supportsBackend } = require('..');
+const { spawnSync } = require('node:child_process');
+const { Solver, supportsBackend, ortoolsVersion } = require('..');
 
 function assertNear(actual, expected, eps = 1e-6) {
   assert.ok(Math.abs(actual - expected) < eps, `expected ${actual} to be within ${eps} of ${expected}`);
@@ -326,4 +327,41 @@ test('dispose() keeps memory flat in a synchronous loop', () => {
   for (let i = 0; i < 5000; i++) { const { s } = smallLp(); s.solveSync(); s.dispose(); }
   const grown = rss() - before;
   assert.ok(grown < 50, `RSS grew by ${grown.toFixed(0)} MB over 5000 disposed models`);
+});
+
+// OR-Tools 9.14's HiGHS interface drops solver-specific parameters, so its banner cannot be turned off.
+const highsQuietSkip = (!supportsBackend('HIGHS') && 'no HiGHS')
+  || (/^9\.14\./.test(ortoolsVersion) && 'OR-Tools 9.14 always prints the HiGHS banner');
+test('HiGHS writes nothing to stdout unless output is enabled', { skip: highsQuietSkip }, () => {
+  const run = (body) => {
+    const script = `const { Solver } = require(${JSON.stringify(require.resolve('..'))});
+      function knapsack() {
+        const s = new Solver('HIGHS');
+        const a = s.boolVar('a'), b = s.boolVar('b'), c = s.boolVar('c');
+        s.addLessEq([[a, 4], [b, 7], [c, 5]], 10);
+        s.maximize([[a, 10], [b, 13], [c, 9]]);
+        return s;
+      }
+      ${body}`;
+    const child = spawnSync(process.execPath, ['-e', script], { encoding: 'utf8', timeout: 60000 });
+    assert.equal(child.status, 0, `child exited with ${child.status} (${child.signal}): ${child.stderr}`);
+    return child.stdout;
+  };
+  const quiet = run(`
+    const results = [];
+    const s = knapsack();
+    results.push(s.solveSync().status, s.solveSync().status);
+    // A caller's own parameters still apply, and output can be switched back off.
+    const tuned = knapsack();
+    tuned.setSolverSpecificParameters('presolve=off');
+    results.push(tuned.solveSync().status);
+    tuned.enableOutput(true);
+    tuned.enableOutput(false);
+    results.push(tuned.solveSync().status);
+    knapsack().solve().then((r) => { results.push(r.status); process.stdout.write(JSON.stringify(results)); });`);
+  assert.deepEqual(JSON.parse(quiet), ['OPTIMAL', 'OPTIMAL', 'OPTIMAL', 'OPTIMAL', 'OPTIMAL']);
+  assert.match(run('knapsack().enableOutput().solveSync();'), /HiGHS/);
+  // The caller's own output_flag still wins.
+  const flagged = run(`const s = knapsack(); s.setSolverSpecificParameters('output_flag=true'); s.solveSync();`);
+  assert.match(flagged, /HiGHS/);
 });
