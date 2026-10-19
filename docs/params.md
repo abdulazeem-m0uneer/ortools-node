@@ -191,7 +191,7 @@ when the native side rejects a field, or `RoutingSearchParameters:` /
 | `params` not a plain object (`null`, array, `Map`) | `TypeError`: `SatParameters must be a plain object` |
 | Unknown field | `TypeError`: `Invalid RoutingSearchParameters: unknown field 'firstSolutionStratgy'` |
 | `__proto__` key (from `JSON.parse`) | `TypeError`: `Invalid SatParameters: unknown field '__proto__'` |
-| One field in camelCase and snake_case | `TypeError`: `Invalid SatParameters: 'numWorkers' and 'num_workers' name the same field` |
+| One field in camelCase and snake_case | `TypeError`: `Invalid SatParameters: 'num_workers' and 'numWorkers' name the same field` (keys are checked in sorted order, so the message is always the same) |
 | Unknown enum name | `TypeError`: `Invalid RoutingSearchParameters: unknown enum value: 'NOPE'` |
 | Enum number without a name | `TypeError`: `'firstSolutionStrategy': no FirstSolutionStrategy.Value value has number 999` |
 | Two members of one oneof | `TypeError`: names the field path; protobuf's text says the member `has already been set` (its spacing varies) |

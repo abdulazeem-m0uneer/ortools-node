@@ -167,6 +167,19 @@ test('the same field given in snake_case and camelCase is a TypeError', () => {
   assert.throws(() => validateSatParameters({ numWorkers: 1, num_workers: 2 }), { name: 'TypeError', message: /num_?[wW]orkers/ });
 });
 
+test('object keys are checked in sorted order, so the error is always the same', () => {
+  // protobuf keeps JSON objects in a hash map; without sorting, which alias is
+  // reported (and which of two bad fields) changed from call to call.
+  for (let i = 0; i < 200; ++i) {
+    assert.throws(() => validateSatParameters({ num_workers: 1, numWorkers: 2 }),
+      { name: 'TypeError', message: "Invalid SatParameters: 'num_workers' and 'numWorkers' name the same field" });
+    assert.throws(() => validateRoutingSearchParameters({ localSearchOperators: { use_relocate: 'BOOL_TRUE', useRelocate: 'BOOL_FALSE' } }),
+      { name: 'TypeError', message: "Invalid RoutingSearchParameters: 'localSearchOperators.use_relocate' and 'localSearchOperators.useRelocate' name the same field" });
+    assert.throws(() => validateSatParameters({ zzzUnknown: 1, aaaUnknown: 2 }),
+      { name: 'TypeError', message: "Invalid SatParameters: unknown field 'aaaUnknown'" });
+  }
+});
+
 test('nested routing parameters merge field by field', () => {
   const p = validateRoutingSearchParameters({ localSearchOperators: { useRelocate: 'BOOL_FALSE' } });
   const d = defaultRoutingSearchParameters().localSearchOperators;

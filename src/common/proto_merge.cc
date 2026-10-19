@@ -226,10 +226,15 @@ std::string CheckValue(Value* value, const FieldDescriptor* field, const std::st
   }
 }
 
-// Also rejects one field named twice (camelCase and snake_case).
+// Also rejects one field named twice (camelCase and snake_case). Keys are
+// checked in sorted order: a Struct is a hash map, and its own order would make
+// the reported field (and alias) change from call to call.
 std::string CheckObject(Struct* object, const Descriptor* descriptor, const std::string& path) {
   std::map<const FieldDescriptor*, std::string> keys;  // field -> path of the key that named it
-  for (auto& [key, value] : *object->mutable_fields()) {
+  std::map<std::string, Value*> sorted;
+  for (auto& [key, value] : *object->mutable_fields()) sorted.emplace(key, &value);
+  for (auto& [key, value_ptr] : sorted) {
+    Value& value = *value_ptr;
     if (ContainsInfinityMarker(key)) return MarkerInKeyError(path);
     const std::string key_path = KeyPath(path, key);
     const FieldDescriptor* field = FindFieldByKey(descriptor, key);
