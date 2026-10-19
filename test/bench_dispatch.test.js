@@ -7,7 +7,9 @@ const { percentile, median, summary } = require('../bench/lib/stats');
 const { pinnedCpu, pinned } = require('../bench/lib/cpu');
 const { canonical, groupOf, compareCases } = require('../bench/dispatch/lib/parity');
 const { Exact } = require('../bench/dispatch/node/common');
-const { parseArgs, command, RUNS } = require('../bench/dispatch/bench');
+const { parseArgs, command } = require('../bench/dispatch/bench');
+const { RUNS } = require('../bench/dispatch/lib/matrix');
+const { render } = require('../bench/dispatch/report');
 const caby = require('../bench/dispatch/node/caby_model');
 
 test('percentile picks the nearest rank of the sorted sample', () => {
@@ -108,8 +110,9 @@ test('parseArgs validates suites, runs and repeats', () => {
   assert.equal(d.repeats, 5);
   assert.equal(d.force, false);
   assert.deepEqual(d.runs, RUNS.map((r) => r.label));
-  const o = parseArgs(['--suites', 't1,t3', '--runs', 'py-9.15', '--repeats', '2', '--flavors', 'exact', '--force']);
+  const o = parseArgs(['--suites', 't1,t3', '--runs', 'py-9.15', '--repeats', '2', '--flavors', 'exact', '--force', '--results', 'r']);
   assert.deepEqual([o.suites, o.runs, o.repeats, o.flavors, o.force], [['t1', 't3'], ['py-9.15'], 2, ['exact'], true]);
+  assert.equal(o.results, require('node:path').resolve('r'));
   assert.throws(() => parseArgs(['--suites', 'nope']), /unknown suite/);
   assert.throws(() => parseArgs(['--runs', 'py-8']), /unknown run/);
   assert.throws(() => parseArgs(['--repeats', '0']), /positive integer/);
@@ -154,4 +157,27 @@ test('loadBus resolves the plan to rider objects; checkRoute flags seats and pre
   const reversed = { ...bus, seats: 1 };
   assert.deepEqual(caby.checkRoute(reversed, [[w, 'D'], [w, 'P']]), ['precedence b0w0']);
   assert.deepEqual(caby.checkRoute(reversed, []), ['unserved b0w0']);
+});
+
+test('report renders with no results', () => {
+  const md = render({}, []);
+  assert.match(md, /^# caby-dispatch spikes/);
+  assert.match(md, /Exact flavour: no differences/);
+  assert.match(md, /## Latency/);
+});
+
+test('bench.js as the entry point loads the run matrix and writes its report (require-cycle regression)', () => {
+  const { execFileSync } = require('node:child_process');
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-bench-'));
+  try {
+    // t5 has no exact flavour: nothing runs, so this needs no fixtures, Python or OR-Tools.
+    execFileSync(process.execPath, [require.resolve('../bench/dispatch/bench'), '--flavors', 'exact', '--suites', 't5',
+      '--results', dir], { stdio: 'pipe' });
+    assert.match(fs.readFileSync(path.join(dir, 'RESULTS.md'), 'utf8'), /^# caby-dispatch spikes/);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
