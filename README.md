@@ -498,7 +498,7 @@ interruption, worker termination, input validation and memory release.
 loaded addon. `test/docs_examples.test.js` runs every ```` ```js ```` block of
 this README and `docs/` as a script: `console.log(...); //=> text` lines must
 print exactly `text`, and a block preceded by `<!-- no-run -->` is a fragment
-that is not run. CI runs the tests, the type check and the example against
+that is not run; it also checks every relative link and anchor. CI runs the tests, the type check and the example against
 OR-Tools 9.14 and 9.15 on Node.js 22, 24 and 26 for every push and pull
 request. See [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request;
 changes are recorded in [CHANGELOG.md](CHANGELOG.md).
