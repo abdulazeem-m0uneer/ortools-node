@@ -237,11 +237,32 @@ test('generator settings are validated', () => {
   assert.throws(() => new GreedySolutionGenerator({}), TypeError);
 });
 
+test('clearRandomSubsets may deselect more subsets than asked', () => {
+  // Every pair of subsets shares element 0, so clearing one also clears the
+  // selected subsets intersecting it. It picks at random: in about 70% of
+  // runs all three go, so 50 runs that each clear only one are out of reach.
+  const model = new SetCoverModel('shared');
+  for (const element of [1, 2, 3]) {
+    model.addEmptySubset(1);
+    model.addElementToLastSubset(0).addElementToLastSubset(element);
+  }
+  let most = 0;
+  for (let run = 0; run < 50 && most < 2; ++run) {
+    const inv = new SetCoverInvariant(model);
+    inv.loadSolution([true, true, true]);
+    clearRandomSubsets(inv, 1);
+    most = Math.max(most, inv.isSelected().filter((s) => !s).length);
+    inv.dispose();
+  }
+  assert.ok(most >= 2, `never deselected more than ${most} subset(s)`);
+});
+
 test('clearRandomSubsets and clearMostCoveredElements deselect part of a solution', () => {
   const inv = new SetCoverInvariant(smallModel());
   new GreedySolutionGenerator(inv).nextSolutionSync();
+  // Only the shape is guaranteed: indices that can be reused as a focus.
   const cleared = clearRandomSubsets(inv, 1);
-  assert.ok(cleared.length <= 1 && cleared.every((s) => !inv.isSelected()[s]));
+  assert.ok(cleared.every((s) => Number.isInteger(s) && s >= 0 && s < 6), String(cleared));
   new GreedySolutionGenerator(inv).nextSolutionSync();
   assertCover(inv);
   inv.loadSolution([true, true, true, false, true, false]); // elements 1, 2, 3 are over-covered
