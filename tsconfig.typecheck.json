@@ -8,6 +8,6 @@
   },
   "include": [
     "lib/**/*.d.ts",
-    "test/types/*.ts"
+    "types-test/*.ts"
   ]
 }

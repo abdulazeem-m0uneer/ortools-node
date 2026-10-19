@@ -49,7 +49,8 @@ Everything merged since 0.1.0: pull requests [#1] to [#9].
 - Enum constants `FirstSolutionStrategy`, `LocalSearchMetaheuristic` and
   `RoutingSearchStatus`, read from the OR-Tools build in use, and
   `durationMs(ms)` for protobuf Duration strings. ([#2])
-- `npm run typecheck` also compiles usage checks in `test/types/`. ([#2])
+- `npm run typecheck` also compiles usage checks, now in `types-test/` (outside
+  `test/`, so a bare `node --test` does not run them as tests). ([#2])
 - Graph algorithms, mirroring Python's `ortools.graph.python` modules:
   `SimpleMinCostFlow`, `SimpleMaxFlow` and `SimpleLinearSumAssignment`, with
   bulk adders that take typed arrays, `solve()` on the threadpool (plus

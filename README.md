@@ -454,7 +454,7 @@ exists. Everything that does not need C++ lives in JavaScript.
 2. Expose it in `lib/<module>.js` and declare it in `lib/<module>.d.ts`;
    `test/types_runtime.test.js` fails until the declaration matches the
    runtime.
-3. Add tests in `test/`, a usage check in `test/types/` and an entry in the
+3. Add tests in `test/`, a usage check in `types-test/` and an entry in the
    module's page in `docs/`, then run `npm run build && npm test && npm run typecheck`.
 
 ### Rules for native code
@@ -487,7 +487,7 @@ exists. Everything that does not need C++ lives in JavaScript.
 ```bash
 npm run build          # incremental native build   (npm run rebuild for a clean one)
 npm test               # node:test suite, including every example in README.md and docs/
-npm run typecheck      # compiles lib/**/*.d.ts and the usage checks in test/types/
+npm run typecheck      # compiles lib/**/*.d.ts and the usage checks in types-test/
 npm run example        # examples/basic.js
 npm run bench          # Node.js vs Python benchmark (see Performance)
 ```

@@ -1,7 +1,7 @@
 // Compile-time checks for the linear solver in lib/index.d.ts (run by `npm run typecheck`).
 import {
   Constraint, INF, LinearExpr, SolveResult, Solver, Status, Variable, buildInfo, ortoolsVersion, supportsBackend,
-} from '../../lib/index';
+} from '../lib/index';
 
 const solver = new Solver('GLOP', 'lp');
 const custom = new Solver('SOME_FUTURE_BACKEND');

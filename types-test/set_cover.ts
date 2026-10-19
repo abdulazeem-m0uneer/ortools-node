@@ -1,5 +1,5 @@
 // Compile-time checks for lib/set_cover.d.ts (run by `npm run typecheck`).
-import { setCover } from '../../lib/index';
+import { setCover } from '../lib/index';
 
 const { SetCoverModel, SetCoverInvariant, GreedySolutionGenerator, GuidedTabuSearch, SetCoverMip } = setCover;
 

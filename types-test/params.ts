@@ -9,7 +9,7 @@ import {
   durationMs,
   validateRoutingSearchParameters,
   validateSatParameters,
-} from '../../lib/index';
+} from '../lib/index';
 
 const routing: RoutingSearchParameters = {
   firstSolutionStrategy: FirstSolutionStrategy.PATH_CHEAPEST_ARC,

@@ -1,5 +1,5 @@
 // Compile-time checks for lib/cp.d.ts (run by `npm run typecheck`).
-import { cp } from '../../lib/index';
+import { cp } from '../lib/index';
 
 const s = new cp.CpSolver('types');
 const x: cp.IntVar = s.intVar(0, 10, 'x');
