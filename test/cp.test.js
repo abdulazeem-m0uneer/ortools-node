@@ -263,3 +263,55 @@ test('removeValues() moves bounds and keeps holes when given in any order', () =
   assert.throws(() => y.removeValues([1, 0]), /CP solver failure: removeValues\(\)/);
   assert.deepEqual([y.min(), y.max()], [0, 1], 'a failed removal changes nothing');
 });
+
+const domainOf = (x) => {
+  const values = [];
+  for (let v = x.min(); v <= x.max(); v++) if (x.contains(v)) values.push(v);
+  return values;
+};
+
+test('removeValues() that empties a domain with holes changes nothing', () => {
+  const s = new CpSolver();
+  const x = s.intVar(-2, 2).removeValue(1).removeValue(0);
+  assert.throws(() => x.removeValues([-1, -2, 2]), /CP solver failure: removeValues\(\)/);
+  assert.deepEqual(domainOf(x), [-2, -1, 2]);
+  const y = s.intVar([0, 5, 10]);
+  assert.throws(() => y.removeValues([0, 5, 10]), /CP solver failure: removeValues\(\)/);
+  assert.deepEqual(domainOf(y), [0, 5, 10]);
+});
+
+test('removeValues() matches a removeValue() loop, and a failed call changes nothing', () => {
+  let seed = 12345;
+  const rand = (n) => {
+    seed = (seed * 1103515245 + 12345) % 2147483648;
+    return seed % n;
+  };
+  for (let i = 0; i < 4000; i++) {
+    const lo = rand(7) - 3;
+    const hi = lo + rand(7);
+    const pre = Array.from({ length: rand(3) }, () => lo + rand(hi - lo + 1));
+    const values = Array.from({ length: rand(7) }, () => lo - 2 + rand(hi - lo + 5));
+    const make = () => {
+      const x = new CpSolver().intVar(lo, hi);
+      for (const v of pre) if (x.size() > 1) x.removeValue(v);
+      return x;
+    };
+    const naive = make();
+    const before = domainOf(naive);
+    let naiveFailed = false;
+    try {
+      for (const v of values) naive.removeValue(v);
+    } catch {
+      naiveFailed = true;
+    }
+    const x = make();
+    const label = JSON.stringify({ lo, hi, pre, values });
+    if (naiveFailed) {
+      assert.throws(() => x.removeValues(values), /CP solver failure: removeValues\(\)/, label);
+      assert.deepEqual(domainOf(x), before, label);
+    } else {
+      x.removeValues(values);
+      assert.deepEqual(domainOf(x), domainOf(naive), label);
+    }
+  }
+});
