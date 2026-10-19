@@ -371,3 +371,20 @@ test('getters that change the model or start a solve while options are read are 
   assert.match(out, /outer OPTIMAL 0/);
   assert.match(out, /inner OPTIMAL/);
 });
+
+test('an invalid timeLimit is reported in seconds, under its own name', () => {
+  const { model } = gettingStarted();
+  const cases = [
+    [-1, RangeError, /SolveParameters\.timeLimit must be >= 0 seconds/],
+    [-Infinity, RangeError, /SolveParameters\.timeLimit must be >= 0 seconds/],
+    [1e300, RangeError, /SolveParameters\.timeLimit must be at most 315576000000 seconds/],
+    [NaN, TypeError, /SolveParameters\.timeLimit must not be NaN/],
+    [true, TypeError, /SolveParameters\.timeLimit must be a number of seconds or a Duration string/],
+  ];
+  for (const [timeLimit, type, message] of cases) {
+    assert.throws(() => solveSync(model, 'GLOP', { parameters: { timeLimit } }), (e) => e instanceof type &&
+      message.test(e.message) && !/durationMs|ms must/.test(e.message), String(timeLimit));
+  }
+  assert.equal(solveSync(model, 'GLOP', { parameters: { timeLimit: 315576000000 } }).termination.reason, 'OPTIMAL');
+  assert.equal(solveSync(model, 'GLOP', { parameters: { timeLimit: 0.0015 } }).termination.reason, 'OPTIMAL');
+});
