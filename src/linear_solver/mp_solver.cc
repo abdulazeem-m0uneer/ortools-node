@@ -19,8 +19,11 @@
 #include <memory>
 #include <string>
 
+#include "absl/cleanup/cleanup.h"
+
 #include "common/async_worker.h"
 #include "common/cpp_guard.h"
+#include "common/highs_output.h"
 #include "common/napi_util.h"
 #include "ortools/linear_solver/linear_solver.h"
 
@@ -72,8 +75,17 @@ class Solver : public Napi::ObjectWrap<Solver> {
   static Napi::Object Init(Napi::Env env, Napi::Object exports);
   explicit Solver(const Napi::CallbackInfo& info);
 
-  // Used by the async worker.
-  MPSolver* raw() { return solver_.get(); }
+  // Runs on the worker thread while busy, or on the main thread for
+  // solveSync(). May throw C++ exceptions: callers guard it.
+  MPSolver::ResultStatus RunSolve() {
+    if (!IsHighs(solver_->ProblemType()) || solver_->OutputIsEnabled()) return solver_->Solve();
+    // HiGHS keeps the text although its interface reports false; the caller's
+    // own parameters are restored afterwards.
+    const std::string parameters = solver_->GetSolverSpecificParametersAsString();
+    solver_->SetSolverSpecificParametersAsString(QuietHighsParameters(parameters));
+    absl::Cleanup restore = [&] { solver_->SetSolverSpecificParametersAsString(parameters); };
+    return solver_->Solve();
+  }
   void FinishSolve(MPSolver::ResultStatus status) {
     solve_state_.End();
     solved_ = true;
@@ -192,7 +204,7 @@ class SolveWorker : public PromiseWorker {
  protected:
   void Execute() override {
     // Runs on the threadpool.  Do NOT touch any Napi:: value here.
-    RunGuarded("solve", [this] { status_ = wrapper_->raw()->Solve(); });
+    RunGuarded("solve", [this] { status_ = wrapper_->RunSolve(); });
   }
 
   void Finish(bool succeeded) override {
@@ -486,7 +498,7 @@ Napi::Value Solver::SolveSync(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
   MPSolver::ResultStatus status = MPSolver::NOT_SOLVED;
-  if (!GuardCpp(env, "solveSync", [&] { status = solver_->Solve(); })) {
+  if (!GuardCpp(env, "solveSync", [&] { status = RunSolve(); })) {
     MarkModelChanged();
     return env.Undefined();
   }
