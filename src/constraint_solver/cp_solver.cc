@@ -136,25 +136,25 @@ Napi::Value CpSolver::IsDisposed(const Napi::CallbackInfo& info) {
 Napi::Value CpSolver::WallTime(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJsNumberOrBigInt(env, context_->solver()->wall_time());
+  return Napi::Number::New(env, static_cast<double>(context_->solver()->wall_time()));
 }
 
 Napi::Value CpSolver::Branches(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJsNumberOrBigInt(env, context_->solver()->branches());
+  return Napi::Number::New(env, static_cast<double>(context_->solver()->branches()));
 }
 
 Napi::Value CpSolver::Failures(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJsNumberOrBigInt(env, context_->solver()->failures());
+  return Napi::Number::New(env, static_cast<double>(context_->solver()->failures()));
 }
 
 Napi::Value CpSolver::Solutions(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (!CheckUsable(env)) return env.Undefined();
-  return Int64ToJsNumberOrBigInt(env, context_->solver()->solutions());
+  return Napi::Number::New(env, static_cast<double>(context_->solver()->solutions()));
 }
 
 // ---- variables ---------------------------------------------------------------

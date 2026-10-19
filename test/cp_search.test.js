@@ -107,6 +107,18 @@ test('collector values and objectives beyond MAX_SAFE_INTEGER are exact BigInts'
   assert.equal(typeof best.wallTime(0), 'number', 'counters below 2^53 stay numbers');
 });
 
+test('solver and collector counters are always plain numbers', () => {
+  const s = new CpSolver();
+  const x = s.intVar(0, 3);
+  const all = s.allSolutionCollector().add(x);
+  assert.equal(s.solve(s.phase([x], FIRST, MIN), [all]), true);
+  for (const counter of [s.wallTime(), s.branches(), s.failures(), s.solutions()]) {
+    assert.equal(typeof counter, 'number');
+  }
+  for (const counter of [all.wallTime(0), all.branches(0), all.failures(0)]) assert.equal(typeof counter, 'number');
+  assert.equal(s.solutions(), 4);
+});
+
 test('maximize with a step', () => {
   const s = new CpSolver();
   const x = s.intVar(0, 20, 'x');

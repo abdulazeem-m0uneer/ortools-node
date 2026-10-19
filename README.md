@@ -388,11 +388,13 @@ build. `INF` is `Infinity`.
 The classic constraint programming solver (`pywrapcp.Solver`). Integer inputs
 accept safe integers and BigInts; `removeValues`, `memberCt` and similar take an
 Array or a typed array. Every int64 result (`min()`, `max()`, `value()`,
-`size()`, collector values and statistics) is a number up to
+`size()`, collector values and objectives) is a number up to
 `Number.MAX_SAFE_INTEGER`, an exact BigInt beyond it, and `-Infinity` /
 `Infinity` for the int64 extremes (the unbounded markers, so
 `intVar(-Infinity, Infinity)` reads back as it was made). `size()` is never
-Infinity: the full int64 domain is `2n ** 64n`.
+Infinity: the full int64 domain is `2n ** 64n`. Search counters (`wallTime()`,
+`branches()`, `failures()`, `solutions()` and the collector's per-solution
+ones) are plain numbers, exact up to 2^53, which no realistic search reaches.
 
 | Method | Description |
 |---|---|

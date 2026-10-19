@@ -18,7 +18,10 @@ while (s.nextSolution()) {
 s.endSearch();
 const count: number = best.solutionCount();
 const objective: cp.CpValue = best.objectiveValue(0);
-const bounds: Array<number | bigint> = [e.min(), e.max(), x.size(), best.value(0, x), s.branches(), best.wallTime(0)];
+const bounds: Array<number | bigint> = [e.min(), e.max(), x.size(), best.value(0, x)];
+// Counters are plain numbers, so arithmetic needs no narrowing.
+const counters: number[] = [s.solutions(), s.branches() + 1, s.failures(), s.wallTime() / 1000];
+const rate: number = best.branches(0) / (best.wallTime(0) + 1) + best.failures(0);
 // @ts-expect-error int64 results past 2^53 are bigints, so they are not plain numbers
 const narrow: number = x.max();
 // @ts-expect-error size() of a wide domain is a bigint

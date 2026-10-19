@@ -68,9 +68,10 @@ export class SolutionCollector extends SearchMonitor {
   solutionCount(): number;
   value(n: number, variable: IntVar): CpValue;
   objectiveValue(n: number): CpValue;
-  wallTime(n: number): CpValue;
-  branches(n: number): CpValue;
-  failures(n: number): CpValue;
+  /** Search counters are plain numbers: exact up to Number.MAX_SAFE_INTEGER, approximate beyond (unreachable in practice). */
+  wallTime(n: number): number;
+  branches(n: number): number;
+  failures(n: number): number;
 }
 
 /** A JS object used as a search monitor by solve() and newSearch(). */
@@ -143,10 +144,11 @@ export class CpSolver {
   interrupt(): boolean;
   readonly busy: boolean;
 
-  wallTime(): CpValue;
-  branches(): CpValue;
-  failures(): CpValue;
-  solutions(): CpValue;
+  /** Search counters are plain numbers: exact up to Number.MAX_SAFE_INTEGER, approximate beyond (unreachable in practice). */
+  wallTime(): number;
+  branches(): number;
+  failures(): number;
+  solutions(): number;
   /** Frees the native solver now; later calls throw. A RoutingModel's solver is freed with the model. */
   dispose(): void;
   [Symbol.dispose](): void;

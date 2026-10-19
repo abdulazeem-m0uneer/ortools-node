@@ -424,9 +424,9 @@ Napi::Value CpSolver::CollectorStat(const Napi::CallbackInfo& info) {
     }
     return Int64ToJsNumberOrBigInt(env, c->objective_value(i));
   }
-  if (stat == "wallTime") return Int64ToJsNumberOrBigInt(env, c->wall_time(i));
-  if (stat == "branches") return Int64ToJsNumberOrBigInt(env, c->branches(i));
-  if (stat == "failures") return Int64ToJsNumberOrBigInt(env, c->failures(i));
+  if (stat == "wallTime") return Napi::Number::New(env, static_cast<double>(c->wall_time(i)));
+  if (stat == "branches") return Napi::Number::New(env, static_cast<double>(c->branches(i)));
+  if (stat == "failures") return Napi::Number::New(env, static_cast<double>(c->failures(i)));
   THROW_TYPE_AND_RETURN(env, "unknown collector statistic '" + stat + "'", env.Undefined());
 }
 
