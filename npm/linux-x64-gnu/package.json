@@ -4,7 +4,7 @@
   "cpu": ["x64"],
   "libc": ["glibc"],
   "main": "ortools_node.node",
-  "files": ["ortools_node.node", "*.so*", "LICENSES/", "THIRD_PARTY_NOTICES.md"],
+  "files": ["ortools_node.node", "*.so*", "LICENSES/", "NOTICE", "THIRD_PARTY_NOTICES.md"],
   "engines": {
     "node": ">=22"
   },

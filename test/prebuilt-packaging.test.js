@@ -10,6 +10,7 @@ const {
   assemble,
   collectLibraries,
   componentOf,
+  copyAddonLicences,
   copyLicences,
   findLibDir,
   licenseExpression,
@@ -87,9 +88,23 @@ describe('componentOf', () => {
   });
 });
 
-test('licenseExpression lists the addon licence first and each licence once', () => {
+describe('licenseExpression', () => {
   const components = ['libortools.so.9', 'libscip.so.10.0', 'libhighs.so.1', 'libz.so.1'].map(componentOf);
-  assert.equal(licenseExpression(components), 'MIT AND Apache-2.0 AND Zlib');
+
+  test('lists the addon licence first and each licence once', () => {
+    assert.equal(licenseExpression('MIT', components), 'MIT AND Apache-2.0 AND Zlib');
+  });
+
+  test('keeps every licence of a compound addon licence', () => {
+    assert.equal(licenseExpression('MIT AND Apache-2.0', components), 'MIT AND Apache-2.0 AND Zlib');
+    assert.equal(licenseExpression('MIT AND BSD-3-Clause', []), 'MIT AND BSD-3-Clause');
+  });
+
+  test('fails on an addon licence it cannot combine with AND', () => {
+    for (const bad of [undefined, '', 'MIT OR Apache-2.0', '(MIT AND Apache-2.0)', 'MIT AND ', { type: 'MIT' }]) {
+      assert.throws(() => licenseExpression(bad, components), /Cannot combine the package\.json licence/, String(bad));
+    }
+  });
 });
 
 test('releaseOf accepts only full versions of supported releases', () => {
@@ -131,6 +146,9 @@ describe('platform package templates', () => {
       assert.equal(template.main, ADDON_FILE);
       assert.ok(template.files.includes(ADDON_FILE));
       assert.ok(template.files.includes('*.so*'));
+      // assemble() copies ortools-node's NOTICE and LICENSES/ when the repository has them.
+      assert.ok(template.files.includes('NOTICE'));
+      assert.ok(template.files.includes('LICENSES/'));
       assert.equal(template.repository.directory, `npm/${target}`);
       // Set per OR-Tools release by scripts/prebuilt/assemble.js.
       for (const field of ['name', 'version', 'license']) assert.equal(template[field], undefined, field);
@@ -215,7 +233,21 @@ describe('assemble', () => {
     const writeTemplate = (template) =>
       fs.writeFileSync(path.join(templateDir, 'linux-x64-gnu', 'package.json'), JSON.stringify(template));
     writeTemplate({ description: 'Prebuilt', os: ['linux'], cpu: ['x64'] });
-    return { root, libDir, addon, templateDir, writeTemplate, outDir: path.join(tmp, 'pkg') };
+    // A fake ortools-node repository: its version, licence and licence files.
+    const repoRoot = path.join(tmp, 'repo');
+    fs.mkdirSync(repoRoot);
+    const writeRootPackage = (fields) =>
+      fs.writeFileSync(path.join(repoRoot, 'package.json'), JSON.stringify({ name: 'ortools-node', version: '2.3.4', license: 'MIT', ...fields }));
+    writeRootPackage({});
+    fs.writeFileSync(path.join(repoRoot, 'LICENSE'), 'MIT licence');
+    return { root, libDir, addon, templateDir, writeTemplate, repoRoot, writeRootPackage, outDir: path.join(tmp, 'pkg') };
+  }
+  // What the solvers' vendored Apache-2.0 code adds to the repository.
+  function addApacheCode(f) {
+    f.writeRootPackage({ license: 'MIT AND Apache-2.0' });
+    fs.writeFileSync(path.join(f.repoRoot, 'NOTICE'), 'arc_flow.cc: Apache-2.0 (LICENSES/Apache-2.0.txt)');
+    fs.mkdirSync(path.join(f.repoRoot, 'LICENSES'));
+    fs.writeFileSync(path.join(f.repoRoot, 'LICENSES', 'Apache-2.0.txt'), 'Apache text');
   }
   const collect = () => ({ bundled: ['libortools.so.9', 'libz.so.1'], system: ['libc.so.6'] });
   const run = (f, extra = {}) =>
@@ -227,7 +259,7 @@ describe('assemble', () => {
       outDir: f.outDir,
       templateDir: f.templateDir,
       collect,
-      packageVersion: '2.3.4',
+      repoRoot: f.repoRoot,
       ...extra,
     });
 
@@ -264,6 +296,20 @@ describe('assemble', () => {
     assert.ok(!fs.existsSync(f.outDir));
   });
 
+  test('refuses a repository without its LICENSE, before writing anything', (t) => {
+    const f = fakeOrtools(t);
+    fs.rmSync(path.join(f.repoRoot, 'LICENSE'));
+    assert.throws(() => run(f), /ortools-node has no licence at .*repo.LICENSE/);
+    assert.ok(!fs.existsSync(f.outDir));
+  });
+
+  test('refuses a root licence it cannot combine, before writing anything', (t) => {
+    const f = fakeOrtools(t);
+    f.writeRootPackage({ license: 'MIT OR Apache-2.0' });
+    assert.throws(() => run(f), /Cannot combine the package\.json licence "MIT OR Apache-2\.0"/);
+    assert.ok(!fs.existsSync(f.outDir));
+  });
+
   test('refuses an existing output directory', (t) => {
     const f = fakeOrtools(t);
     fs.mkdirSync(f.outDir);
@@ -295,6 +341,41 @@ describe('assemble', () => {
     assert.deepEqual(manifest.cpu, ['x64']);
   });
 
+  test('takes the licence from the root package.json and copies its LICENSE', (t) => {
+    const f = fakeOrtools(t);
+    run(f);
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.outDir, 'package.json'), 'utf8'));
+    assert.equal(manifest.license, 'MIT AND Apache-2.0 AND Zlib');
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSE'), 'utf8'), 'MIT licence');
+    assert.ok(!fs.existsSync(path.join(f.outDir, 'NOTICE')));
+    const notice = fs.readFileSync(path.join(f.outDir, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+    assert.match(notice, /The addon itself is licensed under MIT \(LICENSE\)\./);
+  });
+
+  test('carries a compound root licence, its NOTICE and its LICENSES/ into the package', (t) => {
+    const f = fakeOrtools(t);
+    addApacheCode(f);
+    run(f);
+    const manifest = JSON.parse(fs.readFileSync(path.join(f.outDir, 'package.json'), 'utf8'));
+    assert.equal(manifest.license, 'MIT AND Apache-2.0 AND Zlib');
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'NOTICE'), 'utf8'), 'arc_flow.cc: Apache-2.0 (LICENSES/Apache-2.0.txt)');
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'Apache-2.0.txt'), 'utf8'), 'Apache text');
+    // The OR-Tools archive's licences sit beside ortools-node's own.
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'scip', 'LICENSE'), 'utf8'), 'scip');
+    const notice = fs.readFileSync(path.join(f.outDir, 'THIRD_PARTY_NOTICES.md'), 'utf8');
+    assert.match(notice, /The addon itself is licensed under MIT AND Apache-2\.0 \(LICENSE, NOTICE\)\./);
+  });
+
+  test('copyAddonLicences refuses to overwrite a licence from the OR-Tools archive', (t) => {
+    const f = fakeOrtools(t);
+    fs.mkdirSync(path.join(f.repoRoot, 'LICENSES', 'scip'), { recursive: true });
+    fs.writeFileSync(path.join(f.repoRoot, 'LICENSES', 'scip', 'LICENSE'), 'ours');
+    fs.mkdirSync(f.outDir);
+    copyLicences(f.root, f.outDir);
+    assert.throws(() => copyAddonLicences(f.repoRoot, f.outDir), { code: 'ERR_FS_CP_EEXIST' });
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'scip', 'LICENSE'), 'utf8'), 'scip');
+  });
+
   test('copyLicences copies the OR-Tools licence and the archive\'s third-party ones', (t) => {
     const f = fakeOrtools(t);
     fs.mkdirSync(f.outDir);
@@ -318,7 +399,14 @@ describe('assemble', () => {
 
   test('noticeMarkdown joins several libraries of one component', () => {
     const absl = componentOf('libabsl_base.so.1');
-    const md = noticeMarkdown('9.14.6206', [absl], new Map([[absl, ['libabsl_base.so.1', 'libabsl_city.so.1']]]), []);
+    const md = noticeMarkdown({
+      ortoolsVersion: '9.14.6206',
+      addonLicense: 'MIT',
+      addonLicenceFiles: ['LICENSE'],
+      components: [absl],
+      librariesByComponent: new Map([[absl, ['libabsl_base.so.1', 'libabsl_city.so.1']]]),
+      licenceFiles: [],
+    });
     assert.match(md, /\| Apache-2\.0 \| `libabsl_base\.so\.1`, `libabsl_city\.so\.1` \|/);
   });
 });
