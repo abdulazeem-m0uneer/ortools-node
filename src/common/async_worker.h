@@ -12,6 +12,7 @@
 
 #include <atomic>
 #include <string>
+#include <utility>
 
 #include "common/cpp_guard.h"
 
@@ -52,8 +53,18 @@ class PromiseWorker : public Napi::AsyncWorker {
   Napi::Promise Promise() { return deferred_.Promise(); }
 
  protected:
-  // Main thread, before the Promise settles; `succeeded` is false when Execute()
-  // called SetError(). Typically ends the wrapper's AsyncSolveState.
+  // Execute() only: runs f() under GuardCppOffThread(); a C++ exception rejects
+  // the Promise with a RangeError (out of memory) or Error naming `what`.
+  template <typename F>
+  void RunGuarded(const char* what, F&& f) {
+    if (auto failure = GuardCppOffThread(what, std::forward<F>(f))) {
+      failure_ = std::move(*failure);
+      Napi::AsyncWorker::SetError(failure_.message);
+    }
+  }
+
+  // Main thread, before the Promise settles; `succeeded` is false when
+  // RunGuarded() caught a C++ exception. Typically ends the wrapper's AsyncSolveState.
   virtual void Finish(bool succeeded) {}
   // Main thread, after a successful Execute(): the resolution value. Throwing a
   // JS exception here rejects the Promise with it instead.
@@ -70,19 +81,23 @@ class PromiseWorker : public Napi::AsyncWorker {
     }
   }
 
-  // SetError() messages from GuardCppOffThread() that report out-of-memory
-  // reject with a RangeError, matching GuardCpp() on the main thread.
-  void OnError(const Napi::Error& error) override {
+  // Rejects from the C++ failure RunGuarded() recorded, never by reading the
+  // JS `error` back: in an exiting worker JS can no longer run, and only the
+  // settle call itself may fail there (swallowed, as on the OnOK() path; see
+  // NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS in CMakeLists.txt).
+  void OnError(const Napi::Error&) override {
     Finish(false);
-    const std::string message = error.Message();
-    const std::string suffix(kOutOfMemorySuffix);
-    const bool out_of_memory =
-        message.size() >= suffix.size() && message.compare(message.size() - suffix.size(), suffix.size(), suffix) == 0;
-    deferred_.Reject(out_of_memory ? Napi::RangeError::New(Env(), message).Value() : error.Value());
+    Napi::Env env = Env();
+    deferred_.Reject(failure_.out_of_memory ? Napi::RangeError::New(env, failure_.message).Value()
+                                            : Napi::Error::New(env, failure_.message).Value());
   }
 
  private:
+  // Subclasses fail through RunGuarded(), which records the failure OnError() needs.
+  using Napi::AsyncWorker::SetError;
+
   Napi::Promise::Deferred deferred_;
+  CppFailure failure_;
   Napi::ObjectReference owner_;
 };
 

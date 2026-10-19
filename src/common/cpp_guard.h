@@ -5,7 +5,7 @@
 // std::length_error, ...) reaches std::terminate and kills the Node process.
 // Wrap every OR-Tools call that can allocate or throw:
 // * on the main thread with GuardCpp(), which throws a JS error instead;
-// * in PromiseWorker::Execute() with GuardCppOffThread(), whose message goes to SetError().
+// * in PromiseWorker::Execute() with RunGuarded(), built on GuardCppOffThread().
 
 #ifndef ORTOOLS_NODE_COMMON_CPP_GUARD_H_
 #define ORTOOLS_NODE_COMMON_CPP_GUARD_H_
@@ -14,20 +14,24 @@
 
 #include <exception>
 #include <new>
+#include <optional>
 #include <string>
 #include <utility>
 
 namespace ortools_node {
 
-// Ends every out-of-memory message, so PromiseWorker can reject with a RangeError
-// exactly as GuardCpp() throws one on the main thread.
-inline constexpr char kOutOfMemorySuffix[] = ": out of memory (the input is too large)";
-
 // Message for a caught exception: out-of-memory is reported as a too-large input.
 inline std::string DescribeCppFailure(const char* what, const std::exception& e, bool out_of_memory) {
-  if (out_of_memory) return std::string(what) + kOutOfMemorySuffix;
+  if (out_of_memory) return std::string(what) + ": out of memory (the input is too large)";
   return std::string(what) + ": " + e.what();
 }
+
+// A C++ exception caught off the main thread, kept in C++ so it can be turned
+// into a JS RangeError (out of memory) or Error without reading JS back.
+struct CppFailure {
+  std::string message;
+  bool out_of_memory = false;
+};
 
 // Runs f() on the main thread. On a C++ exception throws a JS RangeError (out
 // of memory) or Error and returns false.
@@ -44,17 +48,16 @@ bool GuardCpp(Napi::Env env, const char* what, F&& f) {
   return false;
 }
 
-// Runs f() off the main thread. Returns "" on success, otherwise the message
-// to pass to AsyncWorker::SetError().
+// Runs f() off the main thread. Returns nothing on success, otherwise the failure.
 template <typename F>
-std::string GuardCppOffThread(const char* what, F&& f) {
+std::optional<CppFailure> GuardCppOffThread(const char* what, F&& f) {
   try {
     std::forward<F>(f)();
-    return "";
+    return std::nullopt;
   } catch (const std::bad_alloc& e) {
-    return DescribeCppFailure(what, e, true);
+    return CppFailure{DescribeCppFailure(what, e, true), true};
   } catch (const std::exception& e) {
-    return DescribeCppFailure(what, e, false);
+    return CppFailure{DescribeCppFailure(what, e, false), false};
   }
 }
 

@@ -192,8 +192,7 @@ class SolveWorker : public PromiseWorker {
  protected:
   void Execute() override {
     // Runs on the threadpool.  Do NOT touch any Napi:: value here.
-    const std::string error = GuardCppOffThread("solve", [this] { status_ = wrapper_->raw()->Solve(); });
-    if (!error.empty()) SetError(error);
+    RunGuarded("solve", [this] { status_ = wrapper_->raw()->Solve(); });
   }
 
   void Finish(bool succeeded) override {
