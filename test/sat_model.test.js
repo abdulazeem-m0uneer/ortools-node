@@ -467,3 +467,18 @@ test('comparisons with the int64 extremes become unbounded or exact domains', ()
   ok.add(y.le(MAX));
   assert.equal(new CpSolver().solveSync(ok), 'OPTIMAL');
 });
+
+test('names must be well-formed Unicode: lone surrogates are rejected where they enter', () => {
+  const m = new CpModel();
+  const x = m.newIntVar(0, 5, 'x');
+  const before = JSON.stringify(m.toJSON());
+  assert.throws(() => m.newIntVar(0, 1, 'a\ud800'), /Variable name must be well-formed Unicode/);
+  assert.throws(() => m.newBoolVar('\udc00'), /Variable name must be well-formed Unicode/);
+  assert.throws(() => m.newIntervalVar(x, 1, x.plus(1), 'i\ud800'), /Interval name must be well-formed Unicode/);
+  assert.throws(() => m.add(x.le(3)).withName('\udc00'), /withName\(name\): name must be well-formed Unicode/);
+  assert.throws(() => { m.name = 'm\ud800'; }, /CpModel name must be well-formed Unicode/);
+  m.name = 'model \u{1F600}';  // a surrogate pair is fine
+  m.newBoolVar('ok \u{1F600}');
+  assert.equal(m.validate(), '');
+  assert.equal(m.toJSON().constraints.length, JSON.parse(before).constraints.length + 1);  // only the add() above
+});
