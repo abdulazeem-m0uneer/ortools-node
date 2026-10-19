@@ -101,8 +101,14 @@ describe('licenseExpression', () => {
   });
 
   test('fails on an addon licence it cannot combine with AND', () => {
-    for (const bad of [undefined, '', 'MIT OR Apache-2.0', '(MIT AND Apache-2.0)', 'MIT AND ', { type: 'MIT' }]) {
+    for (const bad of [undefined, '', 'MIT OR Apache-2.0', '(MIT AND Apache-2.0)', 'MIT AND ', '-', 'MIT AND -x', { type: 'MIT' }]) {
       assert.throws(() => licenseExpression(bad, components), /Cannot combine the package\.json licence/, String(bad));
+    }
+  });
+
+  test('refuses an UNLICENSED addon: a prebuilt ships under the addon licence', () => {
+    for (const bad of ['UNLICENSED', 'unlicensed', 'MIT AND UNLICENSED']) {
+      assert.throws(() => licenseExpression(bad, components), /ortools-node must be licensed to ship prebuilts/, bad);
     }
   });
 });
@@ -310,6 +316,13 @@ describe('assemble', () => {
     assert.ok(!fs.existsSync(f.outDir));
   });
 
+  test('refuses an UNLICENSED root, before writing anything', (t) => {
+    const f = fakeOrtools(t);
+    f.writeRootPackage({ license: 'UNLICENSED' });
+    assert.throws(() => run(f), /ortools-node must be licensed to ship prebuilts/);
+    assert.ok(!fs.existsSync(f.outDir));
+  });
+
   test('refuses an existing output directory', (t) => {
     const f = fakeOrtools(t);
     fs.mkdirSync(f.outDir);
@@ -363,7 +376,35 @@ describe('assemble', () => {
     // The OR-Tools archive's licences sit beside ortools-node's own.
     assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'scip', 'LICENSE'), 'utf8'), 'scip');
     const notice = fs.readFileSync(path.join(f.outDir, 'THIRD_PARTY_NOTICES.md'), 'utf8');
-    assert.match(notice, /The addon itself is licensed under MIT AND Apache-2\.0 \(LICENSE, NOTICE\)\./);
+    assert.match(notice, /The addon itself is licensed under MIT AND Apache-2\.0 \(LICENSE, NOTICE, LICENSES\/Apache-2\.0\.txt\)\./);
+  });
+
+  test('copies symlinked root licence files as the files they point to', (t) => {
+    const f = fakeOrtools(t);
+    addApacheCode(f);
+    fs.renameSync(path.join(f.repoRoot, 'LICENSE'), path.join(f.repoRoot, 'REAL_LICENSE'));
+    fs.symlinkSync('REAL_LICENSE', path.join(f.repoRoot, 'LICENSE'));
+    fs.renameSync(path.join(f.repoRoot, 'LICENSES', 'Apache-2.0.txt'), path.join(f.repoRoot, 'Apache.txt'));
+    fs.symlinkSync(path.join(f.repoRoot, 'Apache.txt'), path.join(f.repoRoot, 'LICENSES', 'Apache-2.0.txt'));
+    run(f);
+    // npm pack leaves symlinks out, so each licence must be a regular file.
+    for (const file of ['LICENSE', path.join('LICENSES', 'Apache-2.0.txt')]) {
+      assert.ok(fs.lstatSync(path.join(f.outDir, file)).isFile(), file);
+    }
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSE'), 'utf8'), 'MIT licence');
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'Apache-2.0.txt'), 'utf8'), 'Apache text');
+  });
+
+  test('removes the partial package when a root licence clashes with the OR-Tools archive', (t) => {
+    const f = fakeOrtools(t);
+    fs.mkdirSync(path.join(f.repoRoot, 'LICENSES', 'scip'), { recursive: true });
+    fs.writeFileSync(path.join(f.repoRoot, 'LICENSES', 'scip', 'LICENSE'), 'ours');
+    assert.throws(() => run(f), { code: 'EEXIST' });
+    assert.ok(!fs.existsSync(f.outDir));
+    // With the clash gone, a rerun is not blocked by leftovers.
+    fs.rmSync(path.join(f.repoRoot, 'LICENSES'), { recursive: true });
+    run(f);
+    assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'scip', 'LICENSE'), 'utf8'), 'scip');
   });
 
   test('copyAddonLicences refuses to overwrite a licence from the OR-Tools archive', (t) => {
@@ -372,7 +413,7 @@ describe('assemble', () => {
     fs.writeFileSync(path.join(f.repoRoot, 'LICENSES', 'scip', 'LICENSE'), 'ours');
     fs.mkdirSync(f.outDir);
     copyLicences(f.root, f.outDir);
-    assert.throws(() => copyAddonLicences(f.repoRoot, f.outDir), { code: 'ERR_FS_CP_EEXIST' });
+    assert.throws(() => copyAddonLicences(f.repoRoot, f.outDir), { code: 'EEXIST' });
     assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'scip', 'LICENSE'), 'utf8'), 'scip');
   });
 
@@ -382,6 +423,18 @@ describe('assemble', () => {
     const files = copyLicences(f.root, f.outDir);
     assert.deepEqual(files, [path.join('LICENSES', 'or-tools', 'LICENSE'), path.join('LICENSES', 'scip', 'LICENSE')]);
     assert.equal(fs.readFileSync(path.join(f.outDir, 'LICENSES', 'or-tools', 'LICENSE'), 'utf8'), 'Apache');
+  });
+
+  test('copyLicences copies symlinked archive licences as the files they point to', (t) => {
+    const f = fakeOrtools(t);
+    const scip = path.join(f.root, 'share', 'licenses', 'scip', 'LICENSE');
+    fs.renameSync(scip, path.join(f.root, 'scip.txt'));
+    fs.symlinkSync(path.join(f.root, 'scip.txt'), scip);
+    fs.mkdirSync(f.outDir);
+    copyLicences(f.root, f.outDir);
+    const copied = path.join(f.outDir, 'LICENSES', 'scip', 'LICENSE');
+    assert.ok(fs.lstatSync(copied).isFile());
+    assert.equal(fs.readFileSync(copied, 'utf8'), 'scip');
   });
 
   test('THIRD_PARTY_NOTICES has one row per component and lists the licence files', (t) => {
