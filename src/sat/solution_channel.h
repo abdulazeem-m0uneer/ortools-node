@@ -17,8 +17,10 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "common/cpp_guard.h"
 #include "ortools/sat/cp_model.pb.h"
 
 namespace ortools_node {
@@ -56,6 +58,16 @@ class SolutionChannel : public std::enable_shared_from_this<SolutionChannel> {
   // until it ran. Does nothing once the callback has failed. Never throws.
   void Publish(const operations_research::sat::CpSolverResponse& response);
 
+  // Publish() with `deliver` in place of the delivery itself (the test hooks
+  // pass one that throws): a C++ exception from it ends the search, and
+  // ThrowCallbackError() reports it. Never throws.
+  template <typename F>
+  void PublishWith(F&& deliver) {
+    if (callback_failed_.load()) return;
+    // An exception must not escape into a CP-SAT worker thread (std::terminate).
+    if (auto failure = GuardCppOffThread("onSolution", std::forward<F>(deliver))) RecordFailure(std::move(*failure));
+  }
+
   // Any thread, once the solve returned: releases the thread-safe function.
   void Release();
 
@@ -73,6 +85,7 @@ class SolutionChannel : public std::enable_shared_from_this<SolutionChannel> {
   void Deliver(const operations_research::sat::CpSolverResponse& response);  // solver thread; may throw
   void CallCallback(Napi::Env env, Napi::Function callback, const SolutionSnapshot& snapshot);
   void MarkDelivered();
+  void RecordFailure(CppFailure failure);  // any thread
   static void Finalize(Napi::Env env, std::shared_ptr<SolutionChannel>* self_ref, SolutionChannel* self);
 
   using Tsfn = Napi::TypedThreadSafeFunction<SolutionChannel, SolutionSnapshot, &SolutionChannel::CallJs>;
@@ -87,7 +100,7 @@ class SolutionChannel : public std::enable_shared_from_this<SolutionChannel> {
   std::condition_variable delivered_cv_;
   int64_t queued_ = 0;     // guarded by mutex_; snapshots are delivered in queue order
   int64_t delivered_ = 0;  // guarded by mutex_
-  std::string native_failure_;  // guarded by mutex_: a C++ exception while publishing
+  CppFailure native_failure_;  // guarded by mutex_: a C++ exception while publishing
 
   // Main thread only: { error } holding the value the callback threw (a holder
   // object, since a reference to a primitive needs Node-API 10).

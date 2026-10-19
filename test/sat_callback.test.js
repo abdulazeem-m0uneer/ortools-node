@@ -3,7 +3,7 @@
 // leaked thread-safe function would keep the event loop (and this file) alive.
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { CpModel, CpSolver, CpLinearExpr, SolutionSnapshot } = require('..');
+const { CpModel, CpSolver, CpLinearExpr, SolutionSnapshot, native } = require('..');
 
 function boolModel(n) {
   const m = new CpModel();
@@ -182,4 +182,12 @@ test('an infeasible or invalid model never calls the callback', async () => {
   bad.newIntVar(3, 1, 'empty');
   await assert.rejects(solver.solve(bad, { onSolution: () => { called = true; } }), /Invalid CpModel/);
   assert.equal(called, false);
+});
+
+test('a C++ exception while delivering a solution is reported as RunGuarded does: out of memory is a RangeError', () => {
+  const { publishSolutionFailure } = native._testing;
+  assert.equal(publishSolutionFailure('ok'), false);
+  assert.throws(() => publishSolutionFailure('bad_alloc'),
+    (e) => e.constructor === RangeError && e.message === 'onSolution: out of memory (the input is too large)');
+  assert.throws(() => publishSolutionFailure('runtime'), (e) => e.constructor === Error && e.message === 'onSolution: boom');
 });
