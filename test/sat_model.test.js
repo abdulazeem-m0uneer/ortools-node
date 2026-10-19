@@ -437,6 +437,24 @@ test('addHint on a negated literal takes booleans, 0 / 1 and 0n / 1n', () => {
   assert.throws(() => m.addHint(b.not(), 2n), TypeError);
 });
 
+test('eq/ge at INT64_MAX and eq/le at INT64_MIN are rejected as in Python', () => {
+  const MIN = -(2n ** 63n);
+  const MAX = 2n ** 63n - 1n;
+  const m = new CpModel();
+  const x = m.newIntVar(0, 10, 'x');
+  // x + 5 == INT64_MAX would otherwise export x == INT64_MAX: the offset is
+  // lost on the unbounded end.
+  for (const make of [
+    () => x.eq(MAX), () => x.eq(MIN), () => x.ge(MAX), () => x.le(MIN),
+    () => x.plus(5).eq(MAX), () => x.plus(5).ge(Infinity), () => x.minus(5).eq(MIN), () => x.minus(5).le(-Infinity),
+  ]) {
+    assert.throws(make, RangeError, String(make));
+  }
+  assert.equal(m.toJSON().constraints.length, 0);
+  assert.deepEqual(x.plus(5).ge(MIN).toString(), x.plus(5).ge(-Infinity).toString());
+  assert.deepEqual(x.plus(5).le(MAX).toString(), x.plus(5).le(Infinity).toString());
+});
+
 test('CpLinearExpr cannot be constructed directly', () => {
   assert.throws(() => new CpLinearExpr(), /CpLinearExpr\.sum\(\)/);
   assert.ok(CpLinearExpr.constant(3) instanceof CpLinearExpr);
@@ -453,7 +471,6 @@ test('comparisons with the int64 extremes become unbounded or exact domains', ()
     [z.gt(MIN), [String(MIN + 1n), INT64_MAX]],
     [z.lt(MAX), [INT64_MIN, String(MAX - 1n)]],
     [z.ne(MIN), [String(MIN + 1n), INT64_MAX]],
-    [z.eq(MAX), [INT64_MAX, INT64_MAX]],
     [z.lt(MIN), []],
     [z.plus(5).le(7), [INT64_MIN, '2']],
   ];
