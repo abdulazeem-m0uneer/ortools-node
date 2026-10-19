@@ -7,48 +7,24 @@
 // hybrid Intel CPUs, else CPU 0) so neither lands on a slower core; needs Linux `taskset`.
 
 const { execFileSync } = require('node:child_process');
-const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const { pinnedCpu, hasTaskset, pinned } = require('./lib/cpu');
+const { median } = require('./lib/stats');
 
 const PYTHON = process.env.BENCH_PYTHON || path.join(__dirname, '.venv', 'bin', 'python');
 const REPEATS = 7;
 const WORKLOADS = ['transport-100', 'transport-400', 'knapsack-scip', 'small-lp-x2000'];
 const STYLES = ['idiomatic', 'lowlevel'];
 
-// On hybrid CPUs (e.g. Intel 12th gen+) a solve runs ~1.7x slower on an efficiency core.
-function pinnedCpu() {
-  if (process.env.BENCH_CPU) return process.env.BENCH_CPU;
-  if (process.platform !== 'linux') return null;
-  try {
-    return fs.readFileSync('/sys/devices/cpu_core/cpus', 'utf8').trim().split(/[-,]/)[0];
-  } catch {
-    return '0';
-  }
-}
-
-function hasTaskset() {
-  try {
-    execFileSync('taskset', ['-V'], { stdio: 'ignore' });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const CPU = pinnedCpu();
 const PIN = CPU !== null && hasTaskset();
 
 function runs(cmd, args) {
-  if (PIN) [cmd, args] = ['taskset', ['-c', CPU, cmd, ...args]];
+  [cmd, args] = pinned(PIN ? CPU : null, cmd, args);
   const out = execFileSync(cmd, args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1 << 24 });
   return out.trim().split('\n').map((line) => JSON.parse(line));
 }
-
-const median = (xs) => {
-  const s = [...xs].sort((a, b) => a - b);
-  return s.length % 2 ? s[s.length >> 1] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
-};
 
 function summarise(rs) {
   const pick = (k) => median(rs.map((r) => r[k]));
