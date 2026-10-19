@@ -29,6 +29,8 @@ export class KnapsackSolver {
    * profits[i]; weights[d][i] for item i in dimension d; capacities[d]. Needed
    * again before every solve(). The single-dimension types take exactly one
    * dimension; brute force takes at most 30 items, 64ITEMS at most 64.
+   * The MIP types need each dimension's weights to add up to at most 2^20 (their
+   * feasibility tolerance is relative), CP-SAT below 2^62.
    */
   init(profits: KnapsackIntArray, weights: ReadonlyArray<KnapsackIntArray>, capacities: KnapsackIntArray): this;
   /** Resolves to the best total profit. */
