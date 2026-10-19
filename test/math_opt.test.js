@@ -109,6 +109,19 @@ test('MathOpt rejects what a solver cannot handle, as a JS error', () => {
   assert.throws(() => solveSync(crossed, 'GLOP'), /lower_bound > upper_bound/);
 });
 
+test('MathOpt solve() rejects with the OR-Tools status when a solver cannot handle the model', async () => {
+  await assert.rejects(solve(simpleMip().model, 'GLOP'), (e) => {
+    assert.equal(e.constructor, Error);
+    assert.match(e.message, /^math_opt solve failed: INVALID_ARGUMENT: Glop does not support integer variables/);
+    return true;
+  });
+  await assert.rejects(solve(gettingStarted().model, 'GLOP', { parameters: { threads: -3 } }), (e) => {
+    assert.equal(e.constructor, Error);
+    assert.match(e.message, /^math_opt solve failed: .*threads = -3/);
+    return true;
+  });
+});
+
 test('infeasible, unbounded and empty models report their termination', async () => {
   const model = new Model();
   const v = model.addVariable({ lb: 0, ub: 1 });
