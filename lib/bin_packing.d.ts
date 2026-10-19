@@ -48,7 +48,10 @@ export interface VectorBinPackingOptions {
   solverType?: VectorBinPackingSolverName;
   /** > 0; Infinity (the default) for no limit. Limits under 1 ms count as 1 ms. */
   timeLimitSeconds?: number;
-  /** An integer in [1, 1024]; 1 by default. */
+  /**
+   * An integer in [1, 1024]; 1 by default. Known limitation: CBC above 1 prints
+   * `No match for threads` lines to stdout, even with enableOutput false.
+   */
   numThreads?: number;
   /**
    * Backend-specific parameter text, for SCIP and CP_SAT only: CBC and HIGHS
@@ -64,10 +67,15 @@ export interface VectorBinPackingOptions {
   enableOutput?: boolean;
 }
 
-/** Solves off the main thread. Invalid problems throw a RangeError or TypeError. */
+/**
+ * Solves off the main thread. Invalid input throws a TypeError or RangeError
+ * synchronously (as every async API here does); only a failure during the solve
+ * rejects. Option keys other than those of VectorBinPackingOptions are ignored.
+ */
 export function solveVectorBinPacking(
   problem: VectorBinPackingProblem, options?: VectorBinPackingOptions,
 ): Promise<VectorBinPackingSolution>;
+/** Blocking solveVectorBinPacking(); invalid input throws the same errors. */
 export function solveVectorBinPackingSync(
   problem: VectorBinPackingProblem, options?: VectorBinPackingOptions,
 ): VectorBinPackingSolution;
