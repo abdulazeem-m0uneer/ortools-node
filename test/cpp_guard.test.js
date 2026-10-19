@@ -30,3 +30,11 @@ test('threadpool: std::bad_alloc rejects the Promise with the out-of-memory mess
 test('threadpool: other std::exception rejects with its message', async () => {
   await assert.rejects(guardCppAsync('runtime'), (e) => e.constructor === Error && e.message === 'guardCppAsync: boom');
 });
+
+test('threadpool: Fail() rejects with exactly its message', async () => {
+  await assert.rejects(guardCppAsync('fail'), (e) => e.constructor === Error && e.message === 'custom message');
+});
+
+test('threadpool: Fail(message, true) rejects with a RangeError', async () => {
+  await assert.rejects(guardCppAsync('fail_oom'), (e) => e.constructor === RangeError && e.message === 'custom out of memory');
+});

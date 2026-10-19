@@ -44,8 +44,14 @@ inline bool CheckNotBusy(Napi::Env env, const AsyncSolveState& state, const char
   return false;
 }
 
-class PromiseWorker : public Napi::AsyncWorker {
+// Inherits AsyncWorker privately so subclasses cannot reach its SetError(), not
+// even qualified: a failure set there skips failure_ and would reject with an
+// empty Error. Subclasses fail only through RunGuarded() or Fail().
+class PromiseWorker : private Napi::AsyncWorker {
  public:
+  using Napi::AsyncWorker::Env;
+  using Napi::AsyncWorker::Queue;
+
   // `owner` is kept alive (and with it the native model) until the Promise settles.
   PromiseWorker(Napi::Env env, Napi::Object owner)
       : Napi::AsyncWorker(env), deferred_(Napi::Promise::Deferred::New(env)), owner_(Napi::Persistent(owner)) {}
@@ -58,13 +64,20 @@ class PromiseWorker : public Napi::AsyncWorker {
   template <typename F>
   void RunGuarded(const char* what, F&& f) {
     if (auto failure = GuardCppOffThread(what, std::forward<F>(f))) {
-      failure_ = std::move(*failure);
-      Napi::AsyncWorker::SetError(failure_.message);
+      Fail(std::move(failure->message), failure->out_of_memory);
     }
   }
 
-  // Main thread, before the Promise settles; `succeeded` is false when
-  // RunGuarded() caught a C++ exception. Typically ends the wrapper's AsyncSolveState.
+  // Execute() only: rejects the Promise with exactly `message`, as a RangeError
+  // when `out_of_memory`, for failures reported without a C++ exception.
+  void Fail(std::string message, bool out_of_memory = false) {
+    failure_ = {std::move(message), out_of_memory};
+    Napi::AsyncWorker::SetError(failure_.message);
+  }
+
+  // Main thread, before the Promise settles; `succeeded` is false after
+  // Fail() or a C++ exception caught by RunGuarded(). Typically ends the
+  // wrapper's AsyncSolveState.
   virtual void Finish(bool succeeded) {}
   // Main thread, after a successful Execute(): the resolution value. Throwing a
   // JS exception here rejects the Promise with it instead.
@@ -81,7 +94,7 @@ class PromiseWorker : public Napi::AsyncWorker {
     }
   }
 
-  // Rejects from the C++ failure RunGuarded() recorded, never by reading the
+  // Rejects from the C++ failure Fail() recorded, never by reading the
   // JS `error` back: in an exiting worker JS can no longer run, and only the
   // settle call itself may fail there (swallowed, as on the OnOK() path; see
   // NODE_API_SWALLOW_UNTHROWABLE_EXCEPTIONS in CMakeLists.txt).
@@ -93,9 +106,6 @@ class PromiseWorker : public Napi::AsyncWorker {
   }
 
  private:
-  // Subclasses fail through RunGuarded(), which records the failure OnError() needs.
-  using Napi::AsyncWorker::SetError;
-
   Napi::Promise::Deferred deferred_;
   CppFailure failure_;
   Napi::ObjectReference owner_;
