@@ -162,6 +162,20 @@ test('invalid problems are rejected before OR-Tools sees them', () => {
   assert.equal(limited.objectiveValue, 2);
 });
 
+test('a NaN names its field path', () => {
+  const nan = (problem, path) => assert.throws(() => solveVectorBinPackingSync(problem),
+    { name: 'TypeError', message: `VectorBinPackingProblem: '${path}' must not be NaN` });
+  nan({ resourceCapacity: [NaN], item: [{ resourceUsage: [1] }] }, 'resourceCapacity[0]');
+  nan({ resourceCapacity: [10, 10], item: [{ resourceUsage: [1, 1] }, { resourceUsage: [1, NaN] }] },
+    'item[1].resourceUsage[1]');
+  nan({ resourceCapacity: [10], item: [{ resourceUsage: [1], penaltyPerMissingCopy: NaN }] },
+    'item[0].penaltyPerMissingCopy');
+  nan({ resourceCapacity: [10], costPerBin: NaN, item: [{ resourceUsage: [1] }] }, 'costPerBin');
+  const shared = [NaN];
+  nan({ resourceCapacity: [10], item: [{ resourceUsage: [1] }, { resourceUsage: shared }], resourceName: shared },
+    'item[1].resourceUsage[0]');
+});
+
 test('options are validated', () => {
   const problem = classic();
   assert.throws(() => solveVectorBinPackingSync(problem, { solverType: 'GLOP' }), /Unsupported or unavailable MIP solver/);
