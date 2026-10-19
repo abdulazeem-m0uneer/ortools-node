@@ -294,10 +294,17 @@ test('removeValues() on the full int64 domain removes only what is listed', () =
   assert.deepEqual([y.contains(0), y.contains(MIN), y.contains(MAX)], [true, true, true], 'a refused hole changes nothing');
 });
 
-test('size() of a domain wider than int64 is Infinity, never a wrapped 0', () => {
+test('size() is exact up to Number.MAX_SAFE_INTEGER and Infinity above it, never a throw or a wrapped 0', () => {
   const s = new CpSolver();
-  assert.equal(s.intVar(-(2n ** 63n), 2n ** 63n - 1n).size(), Infinity, 'the full int64 domain holds 2^64 values');
-  assert.equal(s.intVar(-(2n ** 63n) + 1n, 2n ** 63n - 1n).size(), Infinity);
+  const MAX = 2n ** 63n - 1n;
+  assert.equal(s.intVar(0, 2n ** 53n - 2n).size(), Number.MAX_SAFE_INTEGER, 'the largest exact size');
+  assert.equal(s.intVar(0, 2n ** 53n - 1n).size(), Infinity, 'MAX_SAFE_INTEGER + 1 values');
+  assert.equal(s.intVar(0, 2n ** 53n).size(), Infinity);
+  assert.equal(s.intVar(0, 2n ** 60n).size(), Infinity);
+  assert.equal(s.intVar(2, MAX).size(), Infinity, '2^63 - 2 values');
+  assert.equal(s.intVar(1, MAX).size(), Infinity, '2^63 - 1 values');
+  assert.equal(s.intVar(-(2n ** 63n), MAX).size(), Infinity, 'the full int64 domain holds 2^64 values');
+  assert.equal(s.intVar(-(2n ** 63n) + 1n, MAX).size(), Infinity);
 });
 
 test('removeValues() matches a removeValue() loop, and a failed call changes nothing', () => {

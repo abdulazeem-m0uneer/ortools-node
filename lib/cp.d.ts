@@ -51,6 +51,7 @@ export class IntVar extends IntExpr {
   removeValue(value: CpInt): this;
   removeValues(values: Int64Values): this;
   contains(value: CpInt): boolean;
+  /** The number of values in the domain; Infinity when it exceeds Number.MAX_SAFE_INTEGER. */
   size(): number;
   name(): string;
 }

@@ -425,10 +425,12 @@ Napi::Value CpSolver::VarContains(const Napi::CallbackInfo& info) {
 Napi::Value CpSolver::VarSize(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   READ_VAR_OR_RETURN(env, info[0], var);
-  // Size() wraps to 0 on the full int64 domain (2^64 values).
+  // Size() wraps to 0 on the full int64 domain (2^64 values). A count is never
+  // negative or a position, so every size a JS number cannot hold exactly is Infinity.
   const uint64_t size = var->Size();
-  constexpr uint64_t kMax = static_cast<uint64_t>(std::numeric_limits<int64_t>::max());
-  return Int64ToJs(env, static_cast<int64_t>(size == 0 || size > kMax ? kMax : size), "size");
+  constexpr uint64_t kMaxSafeSize = (uint64_t{1} << 53) - 1;
+  if (size == 0 || size > kMaxSafeSize) return Napi::Number::New(env, std::numeric_limits<double>::infinity());
+  return Napi::Number::New(env, static_cast<double>(size));
 }
 
 Napi::Value CpSolver::VarName(const Napi::CallbackInfo& info) {
