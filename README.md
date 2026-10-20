@@ -174,6 +174,17 @@ npm run bench          # BENCH_CPU=<n> picks the pinned CPU; BENCH_PYTHON=<path>
 The sources are in [`bench/`](bench): `bench.js` and `bench.py` are line-for-line
 mirrors, and `run.js` drives both and prints the tables above.
 
+### Dispatch workloads
+
+[`bench/dispatch/RESULTS.md`](bench/dispatch/RESULTS.md) runs the caby-dispatch
+OR-Tools spikes (vehicle routing with pickups and deliveries, time windows,
+allowed vehicles and visit types; min cost flow; linear sum assignment; CP-SAT)
+in Python and as a line-for-line Node.js port on identical fixtures, on OR-Tools
+9.14 and 9.15. It checks that both return the same solutions and compares
+p50 / p95 / p99 build, solve and read latency, plus knapsack, set cover, max flow
+and math_opt. `npm run bench:dispatch` regenerates it; the header of
+[`bench/dispatch/bench.js`](bench/dispatch/bench.js) lists the one-time setup.
+
 ## Installation
 
 You need Node.js 22 or later. CI tests Node.js 22, 24 and 26.
@@ -490,6 +501,7 @@ npm test               # node:test suite, including every example in README.md a
 npm run typecheck      # compiles lib/**/*.d.ts and the usage checks in types-test/
 npm run example        # examples/basic.js
 npm run bench          # Node.js vs Python benchmark (see Performance)
+npm run bench:dispatch # dispatch parity + latency vs Python (bench/dispatch/RESULTS.md)
 ```
 
 Tests cover solving, every error path, ownership after `clear()` and `dispose()`,
