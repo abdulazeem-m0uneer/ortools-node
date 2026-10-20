@@ -25,8 +25,44 @@
   },
   {
     "always": true,
-    "title": "Routing solve latency vs Python (t2b, 20 buses, GLS sl=50)",
-    "verdict": "glibc malloc, not the binding; no cheap binding fix",
-    "analysis": "Measured on 9.15, pinned to CPU 0, 5 repeats x 60 cases: solve p50 1482 ms in Python, 1880 ms in Node (async) and 1975 ms (solveWithParametersSync), with identical solutions and identical search counters (branches, failures, solutions), so both do the same work; per-case Node/Python solve ratio 1.28 (p10 1.24, p90 1.30). Build is faster in Node (2.56 vs 3.49 ms) and read too (0.09 vs 0.49 ms). Breakdown: (1) glibc malloc takes a lock-free fast path only while a process has one thread; the Python benchmark is single-threaded, a Node process never is. Starting one idle thread in Python makes its solve 1.19x slower, leaving Node 1.07x behind it. GLIBC_TUNABLES=glibc.malloc.tcache_count=1000 cuts Node solve p50 to 1304 ms (-26%), within 1.05x (per-case median) of Python with the same setting. (2) The binding adds a custom search limit (interrupt()) and an at-solution hook (onSolution) to every RoutingModel; adding the same two to Python costs it about 3% (1443 to 1494 ms). (3) The OR-Tools C++ archive library vs the wheel's libortools: loading the wheel's library into Node (LD_LIBRARY_PATH) moves the ratio from 1.28 to 1.235. Async vs sync is not a factor. The tunable is read only at process start, so the binding cannot set it; services that are allocation-bound can set it in their environment."
+    "title": "Routing solve latency vs Python on OR-Tools 9.15 (t2b, 20 buses, GLS sl=50)",
+    "verdict": "Mostly glibc malloc's single-thread fast path (~19%); ~3% the binding's interrupt/onSolution hooks; ~4% the libortools build",
+    "analysis": "Baseline: OR-Tools 9.15, Python 3.13 single-threaded vs Node async, pinned to CPU 0, 5 repeats x 60 cases (300 solves each), one idle machine; every ratio below is per case against that baseline. Solve p50 1482 ms in Python, 1880 ms in Node async, 1975 ms in Node sync: Node/Python 1.28 (p10 1.24, p90 1.30). Both find identical solutions with identical branches, failures and solutions counts, so they do the same work; build (2.56 vs 3.49 ms) and read (0.09 vs 0.49 ms) are faster in Node, and sync vs async is not a factor. (1) glibc malloc takes a lock-free fast path only while a process has one thread; the Python baseline has one, a Node process never does. One idle thread in Python makes its solve 1.19x slower, leaving Node 1.07x behind; GLIBC_TUNABLES=glibc.malloc.tcache_count=1000 cuts Node solve p50 to 1304 ms, within 1.05x of Python with the same setting. (2) The binding adds a custom search limit (interrupt()) and an at-solution hook (onSolution) to every RoutingModel; the same two in Python cost it about 3% (1443 to 1494 ms). (3) Loading the Python wheel's libortools into Node (LD_LIBRARY_PATH) moves the ratio from 1.28 to 1.235, so about 4% is the C++ archive build. The tunable is read only at process start, so the binding cannot set it; there is no cheap binding fix. The 9.14 gap (0.79x in the latency table) was not analysed. Scripts and per-case results: bench/dispatch/experiments/t2b/."
+  },
+  {
+    "always": true,
+    "title": "Not investigated: Node slower on many tiny solves",
+    "verdict": "Open; likely a fixed per-solve overhead",
+    "analysis": "Workloads made of many solves of a few milliseconds or less are slower in Node: t2d two-stage 600 single-bus solves 0.52x (9.14) / 0.61x (9.15), t1 solve 0.43x (9.14), set cover 0.61x and math_opt knapsack MIP 0.62x (9.15) in the latency tables. The results are identical; the cost per call (parameter conversion, the threadpool hop, the hooks above, malloc) was not measured."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t2a",
+    "workload": "cold PCA+GD(tl1000)",
+    "pins": [
+      "9.14"
+    ],
+    "verdict": "Time limit, not a model difference",
+    "analysis": "On 2 of 300 cold PATH_CHEAPEST_ARC cases the first solution takes about the whole 1 s limit: Python stopped at 1001 ms with ROUTING_FAIL_TIMEOUT, Node found its first solution at 885 ms and 959 ms. On 9.15 every case agrees, and the exact-flavour t2a workloads are identical on both pins."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t2c",
+    "verdict": "Time limit (300 ms GLS), not a model difference",
+    "analysis": "Of the 300 ms GLS solves, 5 (9.14) and 4 (9.15) end in different local optima: on 9.14 Node is better in all 5 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509), on 9.15 worse in all 4 (e.g. gender:on/58 and gender:off/58: one newcomer fewer, 20,006,921 vs 7,130). The exact-flavour t2c workloads (same model, solution limit instead of a time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (see the t2b latency finding) but was not measured separately."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t2d",
+    "workload": "one_model_tl3000",
+    "verdict": "Time-limited difference: Node serves one newcomer fewer on both pins",
+    "analysis": "The 200-bus model under a 3000 ms GLS limit: objective Python 820,521,086 vs Node 840,518,994 on 9.14 and Python 840,518,994 vs Node 860,517,702 on 9.15, both ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED. Each gap is about 2 x BIG_PENALTY (10,000,000 per unserved pickup and per unserved delivery), so Node leaves one more newcomer unassigned. The same model with a solution limit (exact flavour, t2d 200 buses sl=30) is identical in both runtimes, so this is search progress within the time limit, consistent with Node's slower search per iteration (t2b finding); a dispatcher on Node needs a somewhat longer limit for the same result."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t5",
+    "workload": "tl",
+    "verdict": "Expected: the spike measures that time-limited solves are not reproducible",
+    "analysis": "The loaded time-limited runs vary between 960,508,411 and 1,000,504,178 within each runtime (Python itself returns both values across its 6 loaded runs); Node 9.15 once returns 980,506,300. The solution-limited half (sl/*) returns 440,556,967 in all 16 runs of every runtime and pin."
   }
 ]
