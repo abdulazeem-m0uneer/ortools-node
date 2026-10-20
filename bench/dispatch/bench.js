@@ -6,7 +6,8 @@
 // Setup once (see RESULTS.md for the exact versions used):
 //   uv venv --python 3.13 bench/.venv-9.14 && uv pip install --python bench/.venv-9.14/bin/python ortools==9.14.6206 numpy
 //   uv venv --python 3.13 bench/.venv-9.15 && uv pip install --python bench/.venv-9.15/bin/python ortools==9.15.6755 numpy
-//   ORTOOLS_ROOT=<OR-Tools 9.14 C++> npx cmake-js compile --out build/v9.14     (the 9.15 build is build/)
+//   ORTOOLS_ROOT=<OR-Tools 9.14 C++> npx cmake-js compile --out build/v9.14     (the 9.15 build is build/;
+//        `cmake-js rebuild` deletes build/, v9.14 included, so compile it again after one)
 //   bench/.venv-9.15/bin/python -I -B bench/dispatch/gen_instances.py          (needs CABY_DISPATCH_DIR)
 // Run: npm run bench:dispatch -- [--suites t1,t2a] [--flavors spike,exact] [--runs py-9.15,...]
 //        [--repeats 5] [--force] [--results dir]   (existing results are kept unless --force; the report
@@ -34,6 +35,13 @@ const ADDON = {
   '9.14': process.env.DISPATCH_ADDON_914 || path.join(ROOT, 'build', 'v9.14', 'Release', 'ortools_node.node'),
   '9.15': null,
 };
+
+/** Throws when an interpreter or addon this run needs does not exist (DISPATCH_PY_*, DISPATCH_ADDON_914). */
+function checkRun(run, { exists = fs.existsSync } = {}) {
+  const [what, file] = run.runtime === 'python' ? [`DISPATCH_PY_${run.version.replace('.', '')}`, PY[run.version]]
+    : ['DISPATCH_ADDON_914', ADDON[run.version]];
+  if (file && !exists(file)) throw new Error(`${run.label}: ${file} does not exist (set ${what}; see the header of this file)`);
+}
 
 const unpinned = (suite, flavor) => flavor === 'spike' && CONCURRENT.has(suite);
 
@@ -87,6 +95,7 @@ function main() {
         if (!fs.existsSync(path.join(FIXTURES, `${suite === 't5' ? 't2d' : suite}.json`))) {
           throw new Error(`no ${suite} fixture in ${FIXTURES}: run gen_instances.py first (see the header of this file)`);
         }
+        checkRun(run);
         const { cmd, args, env } = command(run, suite, flavor, opts.repeats, pin);
         const t0 = Date.now();
         process.stderr.write(`${run.label} ${suite} ${flavor} ... `);
@@ -111,4 +120,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { parseArgs, command };
+module.exports = { parseArgs, command, checkRun, ADDON, PY };
