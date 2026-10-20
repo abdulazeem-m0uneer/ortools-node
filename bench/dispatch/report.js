@@ -5,7 +5,8 @@
 //
 // Usage: node bench/dispatch/report.js [results_dir] [out_file]
 // Exits 1 when the parity gate fails: an exact-flavour case that differs, is missing, unstable or not run, no
-// exact case compared at all, or a time-limited (spike) difference without an analysis in findings.json.
+// exact case compared at all, a per-case spike suite with no cases, a time-limited (spike) difference that no
+// finding lists by pin, workload and case id, or such a finding whose case no longer differs.
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -193,11 +194,41 @@ function spikeMetrics(results) {
 const brief = (sig) => (sig && typeof sig === 'object' && 'objective' in sig
   ? `${sig.status ? `status ${sig.status}, ` : ''}objective ${sig.objective}` : canonical(sig).slice(0, 300));
 
-/** The differences grouped per pin / suite / workload with their analysis; `unexplained` lists the groups without one. */
-function findingsSection(mismatches, findings) {
+const caseOf = (m) => `${m.pin} ${m.suite} / ${m.id}`;
+
+/** A finding explains a difference when suite, workload, pin and case id all match (each optional unless strict). */
+const explains = (f, m) => f.suite === m.suite && (f.workload === undefined || f.workload === m.workload)
+  && (f.pins === undefined || f.pins.includes(m.pin)) && (f.ids === undefined || f.ids.includes(m.id));
+
+/**
+ * Problems with strict findings (the spike flavour): each needs pins, a workload and the exact case ids it
+ * explains, and every listed pin x id must still differ, so a stale finding cannot hide a new difference.
+ */
+function staleFindings(mismatches, findings) {
+  const problems = [];
+  for (const f of findings.filter((x) => !x.always)) {
+    const where = `${f.suite} / ${f.workload ?? '?'}`;
+    if (!Array.isArray(f.pins) || !f.pins.length || f.workload === undefined || !Array.isArray(f.ids) || !f.ids.length) {
+      problems.push(`finding ${where}: needs pins, workload and ids`);
+      continue;
+    }
+    for (const pin of f.pins) {
+      for (const id of f.ids) {
+        if (!mismatches.some((m) => m.pin === pin && m.suite === f.suite && m.workload === f.workload && m.id === id)) {
+          problems.push(`stale finding: ${pin} ${where} \`${id}\` no longer differs`);
+        }
+      }
+    }
+  }
+  return problems;
+}
+
+/**
+ * The differences grouped per pin / suite / workload with their analysis. `problems`: with strict, each case no
+ * finding explains, and each stale or incomplete finding (staleFindings); otherwise empty.
+ */
+function findingsSection(mismatches, findings, { strict = false } = {}) {
   const lines = [], unexplained = [];
-  const explained = (m) => findings.find((f) => f.suite === m.suite && (f.workload === undefined || f.workload === m.workload)
-    && (f.pins === undefined || f.pins.includes(m.pin)));
   const groups = new Map();
   for (const m of mismatches) {
     const key = `${m.pin}|${m.suite}|${m.workload}`;
@@ -206,14 +237,20 @@ function findingsSection(mismatches, findings) {
   }
   for (const [key, ms] of groups) {
     const [pin, suite, workload] = key.split('|');
-    const f = explained(ms[0]);
-    if (!f) unexplained.push(`${pin} ${suite} / ${workload}`);
+    const used = [...new Set(ms.map((m) => findings.find((f) => explains(f, m))).filter(Boolean))];
+    const open = ms.filter((m) => !findings.some((f) => explains(f, m)));
+    unexplained.push(...open);
+    const analysis = [...used.map((f) => `**${f.verdict}.** ${f.analysis}`),
+      ...(open.length ? [`**Not yet analysed:** ${open.map((m) => `\`${m.id}\``).join(', ')}.`] : [])].join(' ');
     lines.push(`- **${pin} ${suite} / ${workload}**: ${ms.length} case(s) differ (${ms.slice(0, 5).map((m) => `\`${m.id}\``).join(', ')}`
-      + `${ms.length > 5 ? ', ...' : ''}). ${f ? `**${f.verdict}.** ${f.analysis}` : '**Not yet analysed.**'}`);
+      + `${ms.length > 5 ? ', ...' : ''}). ${analysis}`);
     for (const m of ms.slice(0, 3)) lines.push(`  - \`${esc(m.id)}\`: Python ${esc(brief(m.a))}; Node ${esc(brief(m.b))}`);
   }
   for (const f of findings.filter((x) => x.always)) lines.push(`- **${f.title}**: **${f.verdict}.** ${f.analysis}`);
-  return { lines, unexplained };
+  const problems = strict
+    ? [...unexplained.map((m) => `${caseOf(m)} (spike): difference not analysed in findings.json`), ...staleFindings(mismatches, findings)]
+    : [];
+  return { lines, problems };
 }
 
 // ---------------------------------------------------------------- latency
@@ -267,8 +304,7 @@ function apiVersionSection(results) {
 
 /** The report's verdict: every exact case compared and identical, every spike difference analysed. */
 function gate(exact, spike, spikeFindings) {
-  const failures = [...exact.failures, ...spike.failures,
-    ...spikeFindings.unexplained.map((g) => `${g} (spike): difference not analysed in findings.json`)];
+  const failures = [...exact.failures, ...spike.failures, ...spikeFindings.problems];
   if (exact.compared === 0) failures.push('no exact-flavour case was compared');
   return failures;
 }
@@ -286,7 +322,7 @@ function analyse(results, findings) {
   const exact = exactParity(results);
   const spike = spikeParity(results);
   const exactFindings = findingsSection(exact.mismatches, findings.filter((f) => f.flavor !== 'spike'));
-  const spikeFindings = findingsSection(spike.mismatches, findings.filter((f) => f.flavor === 'spike'));
+  const spikeFindings = findingsSection(spike.mismatches, findings.filter((f) => f.flavor === 'spike'), { strict: true });
   const failures = gate(exact, spike, spikeFindings);
   const exactClean = exact.compared > 0 && !exact.failures.length;
   const head = (pairs) => [`| Suite | Workload | ${pairs.map(([v, a, b]) => `${v} (${a} vs ${b})`).join(' | ')} |`,
