@@ -35,7 +35,7 @@ how the layers fit together and the rules for native code.
 
 `npm install ortools-node` needs no compiler on Linux x64 and arm64 with glibc
 2.28 or newer: it installs a platform package such as
-`@ortools-node/linux-x64-gnu-ortools9.15`, which holds the addon and the
+`@ortools-nodejs/linux-x64-gnu-ortools9.15`, which holds the addon and the
 OR-Tools shared libraries it links (RUNPATH `$ORIGIN`), with their licences.
 There is one package per CPU and OR-Tools release. ortools-node lists the newest
 release's packages in `optionalDependencies`; they are added by

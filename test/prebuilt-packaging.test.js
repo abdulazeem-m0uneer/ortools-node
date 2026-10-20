@@ -125,8 +125,8 @@ describe('withPrebuiltOptionalDependencies', () => {
   test('adds the newest release prebuilts at the package version', () => {
     const manifest = { name: 'ortools-node', version: '1.2.3' };
     assert.deepEqual(withPrebuiltOptionalDependencies(manifest).optionalDependencies, {
-      '@ortools-node/linux-x64-gnu-ortools9.15': '1.2.3',
-      '@ortools-node/linux-arm64-gnu-ortools9.15': '1.2.3',
+      '@ortools-nodejs/linux-x64-gnu-ortools9.15': '1.2.3',
+      '@ortools-nodejs/linux-arm64-gnu-ortools9.15': '1.2.3',
     });
     assert.equal(manifest.optionalDependencies, undefined, 'input left unchanged');
   });
@@ -347,7 +347,7 @@ describe('assemble', () => {
     f.writeTemplate({ name: 'evil', version: '9.9.9', license: 'UNLICENSED', description: 'Prebuilt', cpu: ['x64'] });
     run(f);
     const manifest = JSON.parse(fs.readFileSync(path.join(f.outDir, 'package.json'), 'utf8'));
-    assert.equal(manifest.name, '@ortools-node/linux-x64-gnu-ortools9.15');
+    assert.equal(manifest.name, '@ortools-nodejs/linux-x64-gnu-ortools9.15');
     assert.equal(manifest.version, '2.3.4');
     assert.equal(manifest.license, 'MIT AND Apache-2.0 AND Zlib');
     assert.equal(manifest.description, 'Prebuilt, built against OR-Tools 9.15.6755');

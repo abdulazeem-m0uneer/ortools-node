@@ -17,12 +17,12 @@ const {
 } = require('../lib/loader');
 const { FAKE_VERSION, confinedTo, moduleRootWith } = require('./helpers/fake-packages');
 
-const X64_15 = '@ortools-node/linux-x64-gnu-ortools9.15';
-const X64_14 = '@ortools-node/linux-x64-gnu-ortools9.14';
+const X64_15 = '@ortools-nodejs/linux-x64-gnu-ortools9.15';
+const X64_14 = '@ortools-nodejs/linux-x64-gnu-ortools9.14';
 const linuxX64 = { platform: 'linux', arch: 'x64', libc: 'glibc', env: {}, version: FAKE_VERSION };
 
 test('prebuilt package names carry the target and the OR-Tools release', () => {
-  assert.equal(prebuiltPackageName('linux-arm64-gnu', '9.14'), '@ortools-node/linux-arm64-gnu-ortools9.14');
+  assert.equal(prebuiltPackageName('linux-arm64-gnu', '9.14'), '@ortools-nodejs/linux-arm64-gnu-ortools9.14');
 });
 
 describe('detectLibc', () => {
@@ -152,7 +152,7 @@ describe('findPrebuilt', () => {
   test('picks the newest OR-Tools release when several are installed', () => {
     const { addon } = findPrebuilt({ ...linuxX64, ...confinedTo(both) });
     assert.equal(addon.origin, X64_15);
-    assert.equal(addon.path, path.join(both, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', ADDON_FILE));
+    assert.equal(addon.path, path.join(both, 'node_modules', '@ortools-nodejs', 'linux-x64-gnu-ortools9.15', ADDON_FILE));
   });
 
   test('ORTOOLS_NODE_PIN selects an older release', () => {
@@ -206,11 +206,11 @@ describe('findPrebuilt', () => {
   });
 
   test('ignores packages for another CPU', () => {
-    const root = moduleRootWith(['@ortools-node/linux-arm64-gnu-ortools9.15']);
+    const root = moduleRootWith(['@ortools-nodejs/linux-arm64-gnu-ortools9.15']);
     assert.equal(findPrebuilt({ ...linuxX64, ...confinedTo(root) }).addon, null);
     assert.equal(
       findPrebuilt({ ...linuxX64, arch: 'arm64', ...confinedTo(root) }).addon.origin,
-      '@ortools-node/linux-arm64-gnu-ortools9.15',
+      '@ortools-nodejs/linux-arm64-gnu-ortools9.15',
     );
   });
 
@@ -245,7 +245,7 @@ describe('findPrebuilt', () => {
   // A package that is there but broken must not read as "not installed".
   test('a corrupt package.json is an error naming the package and file, not "not installed"', () => {
     const root = moduleRootWith([X64_15]);
-    const manifest = path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json');
+    const manifest = path.join(root, 'node_modules', '@ortools-nodejs', 'linux-x64-gnu-ortools9.15', 'package.json');
     fs.writeFileSync(manifest, '{');
     assert.throws(
       () => findPrebuilt({ ...linuxX64, ...confinedTo(root) }),
@@ -259,7 +259,7 @@ describe('findPrebuilt', () => {
 
   test('a package directory without package.json is an error too', () => {
     const root = moduleRootWith([X64_15]);
-    fs.rmSync(path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', 'package.json'));
+    fs.rmSync(path.join(root, 'node_modules', '@ortools-nodejs', 'linux-x64-gnu-ortools9.15', 'package.json'));
     assert.throws(() => findPrebuilt({ ...linuxX64, ...confinedTo(root) }), (err) => /has an unreadable .*package\.json; reinstall it/.test(err.message) && err.cause.code === 'ENOENT');
   });
 
@@ -309,8 +309,8 @@ describe('resolveAddon', () => {
         assert.equal(err.code, 'ORTOOLS_NODE_ADDON_NOT_FOUND');
         assert.match(err.message, /build[/\\]Release[/\\]ortools_node\.node: not found/);
         assert.match(err.message, /build[/\\]Debug[/\\]ortools_node\.node: not found/);
-        assert.match(err.message, /prebuilt @ortools-node\/linux-x64-gnu-ortools9\.14: not installed/);
-        assert.match(err.message, /\(npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
+        assert.match(err.message, /prebuilt @ortools-nodejs\/linux-x64-gnu-ortools9\.14: not installed/);
+        assert.match(err.message, /\(npm install @ortools-nodejs\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
         assert.match(err.message, /set ORTOOLS_ROOT to it and run `npm rebuild ortools-node`/);
         return true;
       },
@@ -324,7 +324,7 @@ describe('resolveAddon', () => {
       (err) => {
         assert.equal(err.code, 'ORTOOLS_NODE_ADDON_NOT_FOUND');
         assert.match(err.message, /version 0\.9\.0 is installed, but ortools-node is 1\.0\.0/);
-        assert.match(err.message, /\(npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
+        assert.match(err.message, /\(npm install @ortools-nodejs\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
         return true;
       },
     );
@@ -353,7 +353,7 @@ describe('loadAddon', () => {
       return { ok: true };
     });
     assert.deepEqual(addon, { ok: true });
-    assert.deepEqual(loaded, [path.join(root, 'node_modules', '@ortools-node', 'linux-x64-gnu-ortools9.15', ADDON_FILE)]);
+    assert.deepEqual(loaded, [path.join(root, 'node_modules', '@ortools-nodejs', 'linux-x64-gnu-ortools9.15', ADDON_FILE)]);
   });
 
   test('names the package when loading fails, keeping the cause', () => {
@@ -362,7 +362,7 @@ describe('loadAddon', () => {
     assert.throws(
       () => loadAddon({ ...linuxX64, ...confinedTo(root) }, () => { throw cause; }),
       (err) => {
-        assert.match(err.message, /failed to load the addon from @ortools-node\/linux-x64-gnu-ortools9\.15 \(.*\): libortools\.so\.9/);
+        assert.match(err.message, /failed to load the addon from @ortools-nodejs\/linux-x64-gnu-ortools9\.15 \(.*\): libortools\.so\.9/);
         assert.equal(err.cause, cause);
         return true;
       },

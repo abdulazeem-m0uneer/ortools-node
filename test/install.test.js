@@ -7,7 +7,7 @@ const { ADDON_FILE, findAddon } = require('../lib/loader');
 const { buildFromSourceRequested, compileFromSource, decideInstall, main } = require('../scripts/install');
 const { FAKE_VERSION, confinedTo, moduleRootWith } = require('./helpers/fake-packages');
 
-const X64_15 = '@ortools-node/linux-x64-gnu-ortools9.15';
+const X64_15 = '@ortools-nodejs/linux-x64-gnu-ortools9.15';
 const SOURCE_TRIED = 'source build /pkg/build/Release/ortools_node.node: not found';
 // Results of findAddon, the loader's own resolution.
 const prebuiltFound = () => ({ addon: { path: '/x/ortools_node.node', origin: X64_15 }, tried: [SOURCE_TRIED], suggested: null });
@@ -45,7 +45,7 @@ describe('buildFromSourceRequested', () => {
   });
 
   test('ignores a flag naming another package', () => {
-    for (const value of ['sqlite3', 'ortools-node-extra', '@ortools-node/linux-x64-gnu-ortools9.15']) {
+    for (const value of ['sqlite3', 'ortools-node-extra', '@ortools-nodejs/linux-x64-gnu-ortools9.15']) {
       assert.equal(buildFromSourceRequested({ npm_config_build_from_source: value }), false, value);
     }
   });
@@ -106,8 +106,8 @@ describe('decideInstall', () => {
     const { helpOnFailure: message } = decideInstall({ env: {}, lookup: missing });
     assert.match(message, /^no prebuilt addon for this system, and the source build failed/);
     assert.match(message, /source build .*: not found/);
-    assert.match(message, /prebuilt @ortools-node\/linux-x64-gnu-ortools9\.15: not installed/);
-    assert.match(message, /\(npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
+    assert.match(message, /prebuilt @ortools-nodejs\/linux-x64-gnu-ortools9\.15: not installed/);
+    assert.match(message, /\(npm install @ortools-nodejs\/linux-x64-gnu-ortools9\.15@1\.0\.0\)/);
     assert.match(message, /set ORTOOLS_ROOT/);
   });
 
@@ -145,7 +145,7 @@ describe('main', () => {
   test('exits 1 when the lookup throws', () => {
     const errors = [];
     const lookup = () => {
-      throw new Error('@ortools-node/linux-x64-gnu-ortools9.15 has an unreadable package.json; reinstall it');
+      throw new Error('@ortools-nodejs/linux-x64-gnu-ortools9.15 has an unreadable package.json; reinstall it');
     };
     const code = main({ env: {}, lookup, compile: () => assert.fail('compiled'), log: () => {}, logError: (m) => errors.push(m) });
     assert.equal(code, 1);
@@ -253,7 +253,7 @@ describe('a prebuilt at another version than ortools-node', () => {
     });
     assert.equal(code, 1);
     assert.match(errors[0], /version 0\.9\.0 is installed, but ortools-node is 1\.0\.0/);
-    assert.match(errors[0], /npm install @ortools-node\/linux-x64-gnu-ortools9\.15@1\.0\.0/);
+    assert.match(errors[0], /npm install @ortools-nodejs\/linux-x64-gnu-ortools9\.15@1\.0\.0/);
   });
 
   test('is built from source instead when ORTOOLS_ROOT is set', () => {

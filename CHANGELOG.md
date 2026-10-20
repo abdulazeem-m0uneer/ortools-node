@@ -173,11 +173,11 @@ published on npm, with prebuilt Linux x64 and arm64 packages.
   throw once the model is closed, and every argument OR-Tools would `CHECK` is
   validated first, so misuse throws instead of aborting the process. ([#7])
 - Prebuilt binaries for Linux x64 and arm64 (glibc 2.28 or newer): platform
-  packages such as `@ortools-node/linux-x64-gnu-ortools9.15` bundle the addon
+  packages such as `@ortools-nodejs/linux-x64-gnu-ortools9.15` bundle the addon
   and the OR-Tools libraries, so installing needs no compiler and no
   `ORTOOLS_ROOT`. The OR-Tools 9.15 packages install automatically; 9.14 users
   install theirs at the same version as ortools-node
-  (`npm install @ortools-node/linux-x64-gnu-ortools9.14@<version>`) and set
+  (`npm install @ortools-nodejs/linux-x64-gnu-ortools9.14@<version>`) and set
   `ORTOOLS_NODE_PIN=9.14` when both are present. A prebuilt at another version
   is not loaded; the error gives the exact install command. ([#8])
 - The install step follows the loader's order: it keeps (or, with
