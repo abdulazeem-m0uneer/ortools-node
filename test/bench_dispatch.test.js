@@ -9,7 +9,6 @@ const { canonical, groupOf, compareCases } = require('../bench/dispatch/lib/pari
 const { Exact } = require('../bench/dispatch/node/common');
 const { parseArgs, command } = require('../bench/dispatch/bench');
 const { RUNS } = require('../bench/dispatch/lib/matrix');
-const { render } = require('../bench/dispatch/report');
 const caby = require('../bench/dispatch/node/caby_model');
 
 test('percentile picks the nearest rank of the sorted sample', () => {
@@ -159,14 +158,7 @@ test('loadBus resolves the plan to rider objects; checkRoute flags seats and pre
   assert.deepEqual(caby.checkRoute(reversed, []), ['unserved b0w0']);
 });
 
-test('report renders with no results', () => {
-  const md = render({}, []);
-  assert.match(md, /^# caby-dispatch spikes/);
-  assert.match(md, /Exact flavour: no differences/);
-  assert.match(md, /## Latency/);
-});
-
-test('bench.js as the entry point loads the run matrix and writes its report (require-cycle regression)', () => {
+test('bench.js as the entry point writes its report and exits 1 when the gate fails (require-cycle regression)', () => {
   const { execFileSync } = require('node:child_process');
   const fs = require('node:fs');
   const os = require('node:os');
@@ -174,9 +166,14 @@ test('bench.js as the entry point loads the run matrix and writes its report (re
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-bench-'));
   try {
     // t5 has no exact flavour: nothing runs, so this needs no fixtures, Python or OR-Tools.
-    execFileSync(process.execPath, [require.resolve('../bench/dispatch/bench'), '--flavors', 'exact', '--suites', 't5',
-      '--results', dir], { stdio: 'pipe' });
-    assert.match(fs.readFileSync(path.join(dir, 'RESULTS.md'), 'utf8'), /^# caby-dispatch spikes/);
+    // An empty results directory compares nothing, so the gate fails.
+    assert.throws(() => execFileSync(process.execPath, [require.resolve('../bench/dispatch/bench'), '--flavors', 'exact',
+      '--suites', 't5', '--results', dir], { stdio: 'pipe' }), (err) => {
+      assert.equal(err.status, 1);
+      assert.match(String(err.stderr), /parity gate: FAIL\n {2}.*not run/);
+      return true;
+    });
+    assert.match(fs.readFileSync(path.join(dir, 'RESULTS.md'), 'utf8'), /^# caby-dispatch spikes[\s\S]*\*\*Gate: FAIL\*\*/);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
