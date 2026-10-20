@@ -10,7 +10,8 @@
 //   bench/.venv-9.15/bin/python -I -B bench/dispatch/gen_instances.py          (needs CABY_DISPATCH_DIR)
 // Run: npm run bench:dispatch -- [--suites t1,t2a] [--flavors spike,exact] [--runs py-9.15,...]
 //        [--repeats 5] [--force] [--results dir]   (existing results are kept unless --force; the report
-//        is rewritten: bench/dispatch/RESULTS.md, or <dir>/RESULTS.md with --results)
+//        is rewritten: bench/dispatch/RESULTS.md, or <dir>/RESULTS.md with --results; exit code 1 when its
+//        parity gate fails, see report.js). With every result present it only rewrites the report.
 // Overrides: DISPATCH_PY_914, DISPATCH_PY_915 (interpreters), DISPATCH_ADDON_914 (addon), BENCH_CPU.
 
 const { execFileSync } = require('node:child_process');
@@ -18,7 +19,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { pinnedCpu, hasTaskset, pinned } = require('../lib/cpu');
 const { RUNS, SPIKE_RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES, CONCURRENT } = require('./lib/matrix');
-const { writeReport } = require('./report');
+const { writeReport, reportGate } = require('./report');
 
 const ROOT = path.join(__dirname, '..', '..');
 const RESULTS = path.join(__dirname, 'results');
@@ -104,7 +105,7 @@ function main() {
     }
   }
   // The default results feed the committed RESULTS.md; any other directory gets its own report.
-  writeReport(opts.results, opts.results === RESULTS ? undefined : path.join(opts.results, 'RESULTS.md'));
+  reportGate(writeReport(opts.results, opts.results === RESULTS ? undefined : path.join(opts.results, 'RESULTS.md')));
 }
 
 if (require.main === module) main();

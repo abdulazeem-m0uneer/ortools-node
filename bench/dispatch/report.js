@@ -4,6 +4,8 @@
 // comes from the results; rerun this after any benchmark run instead of editing the file.
 //
 // Usage: node bench/dispatch/report.js [results_dir] [out_file]
+// Exits 1 when the parity gate fails: an exact-flavour case that differs, is missing, unstable or not run, no
+// exact case compared at all, or a time-limited (spike) difference without an analysis in findings.json.
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -16,6 +18,10 @@ const { RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES } = require('./lib/matrix');
 const FIXTURES = path.join(__dirname, 'fixtures');
 /** Python run, its Node counterpart (same pin, same allowed-vehicles mode). */
 const PAIRS = [['9.14', 'py-9.14', 'node-9.14-span'], ['9.15', 'py-9.15', 'node-9.15-removevalues']];
+/** Exact flavour only: Node's two allowed-vehicles modes on one pin must agree with each other too. */
+const MODE_PAIRS = [['9.14 modes', 'node-9.14-span', 'node-9.14-removevalues'],
+  ['9.15 modes', 'node-9.15-removevalues', 'node-9.15-span']];
+const EXACT_PAIRS = [...PAIRS, ...MODE_PAIRS];
 const PHASES = ['build', 'solve', 'read', 'total'];
 
 function loadResults(dir) {
@@ -78,51 +84,73 @@ function setupSection(results) {
 }
 
 // ---------------------------------------------------------------- parity
+// Both return table rows, the per-case differences, the gate failures and how many cases compared.
+
+/** Unstable keys ("<workload>/<id>") of either run that belong to workload w. */
+const unstableIn = (w, ...runs) => runs.flatMap((r) => r.unstable || []).filter((k) => k.startsWith(`${w}/`)).length;
+
 function exactParity(results) {
-  const rows = [], mismatches = [];
+  const rows = [], mismatches = [], failures = [];
+  let compared = 0;
   for (const suite of SUITES) {
     if (!EXACT_SUITES.has(suite)) continue;
-    const perPin = PAIRS.map(([v, py, node]) => {
-      const a = get(results, py, `${suite}-exact`), b = get(results, node, `${suite}-exact`);
-      return [v, a && b ? compareCases(a.cases, b.cases) : null, a, b];
+    const perPair = EXACT_PAIRS.map(([v, aRun, bRun]) => {
+      const a = get(results, aRun, `${suite}-exact`), b = get(results, bRun, `${suite}-exact`);
+      if (!a || !b) failures.push(`${v} ${suite}: not run (${[a ? null : aRun, b ? null : bRun].filter(Boolean).join(', ')})`);
+      const c = a && b ? compareCases(a.cases, b.cases) : null;
+      if (c && !Object.keys(c).length) failures.push(`${v} ${suite}: no cases recorded`);
+      return [v, c, a, b];
     });
-    const workloads = [...new Set(perPin.flatMap(([, c]) => (c ? Object.keys(c) : [])))];
+    const workloads = [...new Set(perPair.flatMap(([, c]) => (c ? Object.keys(c) : [])))];
     for (const w of workloads) {
-      const cells = perPin.map(([v, c, a, b]) => {
+      const cells = perPair.map(([v, c, a, b]) => {
         const x = c && c[w];
-        if (!x) return 'not run';
+        if (!x) {
+          if (c) failures.push(`${v} ${suite} / ${w}: not run`);
+          return 'not run';
+        }
+        compared += x.cases;
         for (const m of x.mismatches) mismatches.push({ pin: v, suite, workload: w, ...m });
-        const unstable = [...a.unstable, ...b.unstable].filter((k) => k.startsWith(`${w}/`)).length;
-        const extra = [x.guardHits && `${x.guardHits} guard`, unstable && `${unstable} unstable`, x.missing.length && `${x.missing.length} missing`]
-          .filter(Boolean).join(', ');
-        return `${x.match}/${x.cases}${x.mismatches.length ? ` (**${x.mismatches.length} differ**)` : ''}${extra ? ` (${extra})` : ''}`;
+        const unstable = unstableIn(w, a, b);
+        const bad = [x.mismatches.length && `${x.mismatches.length} differ`,
+          x.missing.length && `${x.missing.length} missing`, unstable && `${unstable} unstable`].filter(Boolean);
+        if (bad.length) failures.push(`${v} ${suite} / ${w}: ${bad.join(', ')}`);
+        const extra = [x.guardHits && `${x.guardHits} guard`, ...bad.map((t) => `**${t}**`)].filter(Boolean).join(', ');
+        return `${x.match}/${x.cases}${extra ? ` (${extra})` : ''}`;
       });
       rows.push(`| ${suite} | ${esc(w)} | ${cells.join(' | ')} |`);
     }
   }
-  return { rows, mismatches };
+  return { rows, mismatches, failures, compared };
 }
 
 function spikeParity(results) {
-  const rows = [], mismatches = [];
+  const rows = [], mismatches = [], failures = [];
+  let compared = 0;
   for (const suite of SUITES) {
     if (!SPIKE_SUITES.has(suite)) continue;
-    const perPin = PAIRS.map(([v, py, node]) => {
-      const a = get(results, py, `${suite}-spike`), b = get(results, node, `${suite}-spike`);
+    const perPin = PAIRS.map(([v, pyRun, nodeRun]) => {
+      const a = get(results, pyRun, `${suite}-spike`), b = get(results, nodeRun, `${suite}-spike`);
+      if (!a || !b) failures.push(`${v} ${suite} spike: not run (${[a ? null : pyRun, b ? null : nodeRun].filter(Boolean).join(', ')})`);
       return [v, a && b ? compareCases(a.cases, b.cases) : null];
     });
     const groups = [...new Set(perPin.flatMap(([, c]) => (c ? Object.keys(c) : [])))];
     for (const g of groups) {
       const cells = perPin.map(([v, c]) => {
         const x = c && c[g];
-        if (!x) return 'not run';
+        if (!x) {
+          if (c) failures.push(`${v} ${suite} spike / ${g}: not run`);
+          return 'not run';
+        }
+        compared += x.cases;
         for (const m of x.mismatches) mismatches.push({ pin: v, suite, workload: g, ...m });
-        return `${x.match}/${x.cases}`;
+        if (x.missing.length) failures.push(`${v} ${suite} spike / ${g}: ${x.missing.length} missing`);
+        return `${x.match}/${x.cases}${x.missing.length ? ` (**${x.missing.length} missing**)` : ''}`;
       });
       rows.push(`| ${suite} | ${esc(g)} | ${cells.join(' | ')} |`);
     }
   }
-  return { rows, mismatches };
+  return { rows, mismatches, failures, compared };
 }
 
 /** Flattens a spike's metrics into [path, value] rows; `ms` sample arrays become p50 / p95 / p99. */
@@ -159,8 +187,13 @@ function spikeMetrics(results) {
   return lines;
 }
 
+/** "status S, objective O" for a routing signature, else its canonical JSON (cut to 300 characters). */
+const brief = (sig) => (sig && typeof sig === 'object' && 'objective' in sig
+  ? `${sig.status ? `status ${sig.status}, ` : ''}objective ${sig.objective}` : canonical(sig).slice(0, 300));
+
+/** The differences grouped per pin / suite / workload with their analysis; `unexplained` lists the groups without one. */
 function findingsSection(mismatches, findings) {
-  const lines = [];
+  const lines = [], unexplained = [];
   const explained = (m) => findings.find((f) => f.suite === m.suite && (f.workload === undefined || f.workload === m.workload)
     && (f.pins === undefined || f.pins.includes(m.pin)));
   const groups = new Map();
@@ -172,13 +205,13 @@ function findingsSection(mismatches, findings) {
   for (const [key, ms] of groups) {
     const [pin, suite, workload] = key.split('|');
     const f = explained(ms[0]);
+    if (!f) unexplained.push(`${pin} ${suite} / ${workload}`);
     lines.push(`- **${pin} ${suite} / ${workload}**: ${ms.length} case(s) differ (${ms.slice(0, 5).map((m) => `\`${m.id}\``).join(', ')}`
       + `${ms.length > 5 ? ', ...' : ''}). ${f ? `**${f.verdict}.** ${f.analysis}` : '**Not yet analysed.**'}`);
-    const first = ms[0];
-    lines.push(`  - e.g. \`${esc(first.id)}\`: Python \`${canonical(first.a).slice(0, 300)}\`; Node \`${canonical(first.b).slice(0, 300)}\``);
+    for (const m of ms.slice(0, 3)) lines.push(`  - \`${esc(m.id)}\`: Python ${esc(brief(m.a))}; Node ${esc(brief(m.b))}`);
   }
   for (const f of findings.filter((x) => x.always)) lines.push(`- **${f.title}**: **${f.verdict}.** ${f.analysis}`);
-  return lines;
+  return { lines, unexplained };
 }
 
 // ---------------------------------------------------------------- latency
@@ -230,12 +263,33 @@ function apiVersionSection(results) {
   return lines;
 }
 
-function render(results, findings) {
+/** The report's verdict: every exact case compared and identical, every spike difference analysed. */
+function gate(exact, spike, spikeFindings) {
+  const failures = [...exact.failures, ...spike.failures,
+    ...spikeFindings.unexplained.map((g) => `${g} (spike): difference not analysed in findings.json`)];
+  if (exact.compared === 0) failures.push('no exact-flavour case was compared');
+  return failures;
+}
+
+function gateSection(failures, exact, spike) {
+  if (!failures.length) {
+    return [`**Gate: PASS.** ${exact.compared} exact-flavour case comparisons, all identical, none missing, unstable or`
+      + ` not run; ${spike.compared} time-limited case comparisons, each difference analysed below.`];
+  }
+  return [`**Gate: FAIL** (${failures.length}):`, '', ...failures.map((f) => `- ${esc(f)}`)];
+}
+
+/** {markdown, failures}: RESULTS.md and the parity gate's failures (none means it passes). */
+function analyse(results, findings) {
   const exact = exactParity(results);
   const spike = spikeParity(results);
-  const exactTotal = exact.rows.length;
-  const pinHead = PAIRS.map(([v, py, node]) => `${v} (${py} vs ${node})`);
-  return [
+  const exactFindings = findingsSection(exact.mismatches, findings.filter((f) => f.flavor !== 'spike'));
+  const spikeFindings = findingsSection(spike.mismatches, findings.filter((f) => f.flavor === 'spike'));
+  const failures = gate(exact, spike, spikeFindings);
+  const exactClean = exact.compared > 0 && !exact.failures.length;
+  const head = (pairs) => [`| Suite | Workload | ${pairs.map(([v, a, b]) => `${v} (${a} vs ${b})`).join(' | ')} |`,
+    `|---|---|${pairs.map(() => '--:').join('|')}|`];
+  const markdown = [
     '# caby-dispatch spikes: ortools-node vs Python', '',
     '<!-- Generated by bench/dispatch/report.js from bench/dispatch/results; do not edit by hand. -->', '',
     'The caby-dispatch OR-Tools spikes (rules, live latency, monthly placement, threads, determinism, rescue,',
@@ -245,22 +299,24 @@ function render(results, findings) {
     'return the same status, objective, routes and assignments, and times build / solve / read.', '',
     ...setupSection(results), '',
     '## Parity', '',
-    `### Exact flavour: identical results required (${exactTotal} workloads)`, '',
+    ...gateSection(failures, exact, spike), '',
+    `### Exact flavour: identical results required (${exact.rows.length} workloads)`, '',
     'Cells: matching cases / cases. "guard": GUIDED_LOCAL_SEARCH ran out of new solutions before its solution',
-    'limit and stopped at the guard time limit; those cases still compare, but are left out of the latency tables.', '',
-    `| Suite | Workload | ${pinHead.join(' | ')} |`, `|---|---|${PAIRS.map(() => '--:').join('|')}|`,
-    ...exact.rows, '',
+    'limit and stopped at the guard time limit; those cases still compare, but are left out of the latency tables.',
+    'The "modes" columns compare Node\'s SetAllowedVehiclesForIndex and VehicleVar().RemoveValues() runs on one pin.', '',
+    ...head(EXACT_PAIRS), ...exact.rows, '',
     '### Spike flavour: per-case agreement under time limits', '',
-    'Time-limited searches are not reproducible run to run, so these runs are compared on their accept',
-    'counts, violations and objective distributions (next table); the per-case agreement is informative.', '',
-    `| Suite | Experiment | ${pinHead.join(' | ')} |`, `|---|---|${PAIRS.map(() => '--:').join('|')}|`,
-    ...spike.rows, '',
+    'Time-limited searches are not reproducible run to run, so per-case agreement is not required: the cells',
+    'are informative. The spike metrics below (accept counts, violations, objective distributions) are shown',
+    'side by side and are not compared automatically. Every per-case difference is listed under "Differences',
+    'and their causes" with its analysis; an unanalysed one fails the gate.', '',
+    ...head(PAIRS), ...spike.rows, '',
     '### Spike metrics, side by side', ...spikeMetrics(results), '',
     '### Differences and their causes', '',
-    ...findingsSection(exact.mismatches, findings.filter((f) => f.flavor !== 'spike')),
-    ...(exact.mismatches.length ? [] : ['- Exact flavour: no differences.']), '',
-    `Spike flavour: ${spike.mismatches.length} per-case difference(s) under time limits.`,
-    ...findingsSection([], findings.filter((f) => f.flavor === 'spike')), '',
+    ...exactFindings.lines,
+    ...(exactClean ? ['- Exact flavour: no differences.'] : []), '',
+    `Spike flavour: ${spike.mismatches.length} per-case difference(s) under time limits.`, '',
+    ...spikeFindings.lines, '',
     '## Latency (exact flavour, pinned)', '',
     'Build = model construction (and the warm-start assignment), solve = the solve call, read = walking the',
     'routes. Ratio = Python / Node (above 1: Node is faster). Node solves with the async API (libuv threadpool).',
@@ -270,15 +326,29 @@ function render(results, findings) {
     'which Python 9.15 must use (google/or-tools#5415).',
     ...apiVersionSection(results), '',
   ].join('\n');
+  return { markdown, failures };
 }
 
+/** Writes RESULTS.md and returns the gate's failures (empty when it passes). */
 function writeReport(dir = path.join(__dirname, 'results'), out = path.join(__dirname, 'RESULTS.md')) {
   const findingsFile = path.join(__dirname, 'findings.json');
   const findings = fs.existsSync(findingsFile) ? JSON.parse(fs.readFileSync(findingsFile, 'utf8')) : [];
-  fs.writeFileSync(out, render(loadResults(dir), findings));
+  const { markdown, failures } = analyse(loadResults(dir), findings);
+  fs.writeFileSync(out, markdown);
   process.stderr.write(`wrote ${out}\n`);
+  return failures;
 }
 
-if (require.main === module) writeReport(process.argv[2], process.argv[3]);
+/** Prints the gate's verdict; exit code 1 when it fails. */
+function reportGate(failures) {
+  if (!failures.length) {
+    process.stderr.write('parity gate: PASS\n');
+    return;
+  }
+  process.stderr.write(`parity gate: FAIL\n${failures.map((f) => `  ${f}`).join('\n')}\n`);
+  process.exitCode = 1;
+}
 
-module.exports = { flatten, latencyStats, render, loadResults, writeReport };
+if (require.main === module) reportGate(writeReport(process.argv[2], process.argv[3]));
+
+module.exports = { flatten, latencyStats, analyse, loadResults, writeReport, reportGate };
