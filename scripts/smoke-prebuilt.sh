@@ -97,6 +97,8 @@ for image in "${images[@]}"; do
       status=0
       npm test > /tmp/test.log 2>&1 || status=$?
       grep -E "^not ok|^\s*✖" /tmp/test.log || true
+      # On failure, also print the reporter details (assertion messages, actual and expected).
+      [[ $status -eq 0 ]] || awk "/✖ failing tests:/ { f = 1 } f && n++ < 150" /tmp/test.log
       tail -n 9 /tmp/test.log
       [[ $status -eq 0 ]] || { echo "npm test failed in the installed package" >&2; exit 1; }
       node -e "

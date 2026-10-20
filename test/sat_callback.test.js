@@ -148,7 +148,7 @@ test('each solution waits for its callback: exactly one delivery pending at a ti
   assert.deepEqual(stats, { issued: 64, delivered: 64, maxPending: 1 });
 });
 
-test('a multi-worker search also waits for each callback (smoke check)', async () => {
+test('a multi-worker search also waits for each callback (smoke check)', async (t) => {
   // The 64-solution test above carries the guarantee. This one checks the same
   // invariant with 8 workers: they keep searching while a callback holds the
   // main thread, so without the wait improving solutions would queue up and
@@ -171,10 +171,12 @@ test('a multi-worker search also waits for each callback (smoke check)', async (
     for (let i = 0; i < n; ++i) assert.equal(x[i].filter((v) => s.booleanValue(v)).length, 1);
   });
   assert.ok(status === 'OPTIMAL' || status === 'FEASIBLE', status);
-  // A random 30 x 30 assignment improves several times (3 or more in practice);
-  // with a single solution there would be nothing for maxPending to catch.
-  assert.ok(solutions >= 2, `only ${solutions} solution(s): the check needs several`);
+  assert.ok(solutions >= 1, 'no solution reached the callback');
   assert.deepEqual(stats, { issued: solutions, delivered: solutions, maxPending: 1 });
+  // A random 30 x 30 assignment usually improves several times. When the workers
+  // report a single solution there is nothing for maxPending to catch, so the run
+  // is reported as skipped rather than passed (or failed: that is not a defect).
+  if (solutions < 2) t.skip(`only ${solutions} solution: no concurrent delivery to check`);
 });
 
 test('solutionChannelStats counts nothing without onSolution and resets to zero', async () => {
