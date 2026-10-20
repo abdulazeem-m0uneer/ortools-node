@@ -1,0 +1,32 @@
+[
+  {
+    "always": true,
+    "title": "ApplyLocksToAllVehicles on an open model (t6)",
+    "verdict": "API difference by design, not a parity break",
+    "analysis": "The spike calls it before CloseModelWithParameters to show it is refused. Python returns False and OR-Tools logs \"The model is not closed yet\"; ortools-node throws \"applyLocksToAllVehicles() needs a closed model\" instead of returning a value that is easy to ignore. The port catches that error and records false, so both report apply_locks_before_close=false; the locked and free solves after closing match exactly."
+  },
+  {
+    "always": true,
+    "title": "Transit callbacks (t2a \"python-callback\", t2f callback=True)",
+    "verdict": "Same results, different mechanism",
+    "analysis": "Python calls back into the interpreter for every arc evaluation during the search, holding the GIL. ortools-node's registerTransitCallback() evaluates the JS function once per index pair when it is registered and solves on the libuv threadpool without calling JS again, so the search never blocks the event loop. The exact-flavour signatures are identical to the matrix variant in both runtimes."
+  },
+  {
+    "always": true,
+    "title": "GUIDED_LOCAL_SEARCH with only a solution limit (exact flavour)",
+    "verdict": "OR-Tools behaviour in both runtimes, not a binding issue",
+    "analysis": "On about 1 in 10 single-bus instances GLS runs out of new solutions before reaching its solution limit and never stops; Python and Node hang on the same cases (first seen on t2a case 3 at solution_limit=10). The exact flavour therefore adds a guard time limit far above the normal solve time. Guarded cases are listed in the parity table, still compared (they matched), and left out of the latency tables."
+  },
+  {
+    "always": true,
+    "title": "SetAllowedVehiclesForIndex on Python 9.15 (google/or-tools#5415)",
+    "verdict": "Python binding bug, absent in ortools-node",
+    "analysis": "Python 9.15.6755 raises TypeError (absl::Span argument) for SetAllowedVehiclesForIndex, so the spike falls back to removing the other vehicles from VehicleVar. ortools-node accepts setAllowedVehiclesForIndex() on both pins. Parity is checked in the mode Python uses on each pin (span on 9.14, removevalues on 9.15); the latency appendix times both modes in Node."
+  },
+  {
+    "always": true,
+    "title": "Routing solve latency vs Python (t2b, 20 buses, GLS sl=50)",
+    "verdict": "glibc malloc, not the binding; no cheap binding fix",
+    "analysis": "Measured on 9.15, pinned to CPU 0, 5 repeats x 60 cases: solve p50 1482 ms in Python, 1880 ms in Node (async) and 1975 ms (solveWithParametersSync), with identical solutions and identical search counters (branches, failures, solutions), so both do the same work; per-case Node/Python solve ratio 1.28 (p10 1.24, p90 1.30). Build is faster in Node (2.56 vs 3.49 ms) and read too (0.09 vs 0.49 ms). Breakdown: (1) glibc malloc takes a lock-free fast path only while a process has one thread; the Python benchmark is single-threaded, a Node process never is. Starting one idle thread in Python makes its solve 1.19x slower, leaving Node 1.07x behind it. GLIBC_TUNABLES=glibc.malloc.tcache_count=1000 cuts Node solve p50 to 1304 ms (-26%), within 1.05x (per-case median) of Python with the same setting. (2) The binding adds a custom search limit (interrupt()) and an at-solution hook (onSolution) to every RoutingModel; adding the same two to Python costs it about 3% (1443 to 1494 ms). (3) The OR-Tools C++ archive library vs the wheel's libortools: loading the wheel's library into Node (LD_LIBRARY_PATH) moves the ratio from 1.28 to 1.235. Async vs sync is not a factor. The tunable is read only at process start, so the binding cannot set it; services that are allocation-bound can set it in their environment."
+  }
+]
