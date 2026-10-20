@@ -201,3 +201,24 @@ test('bench.js as the entry point writes its report and exits 1 when the gate fa
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('spikes_env.revision_matches: full hashes, abbreviated stored hashes of 7+ digits, and None only with None', (t) => {
+  const { spawnSync } = require('node:child_process');
+  const path = require('node:path');
+  const probe = spawnSync('python3', ['-I', '-c', 'import sys'], { encoding: 'utf8' });
+  if (probe.error || probe.status !== 0) {
+    t.skip('python3 is not available');
+    return;
+  }
+  const full = '700ee3f0123456789abcdef0123456789abcdef0';
+  const cases = [
+    [full, full, true], ['700ee3f', full, true], ['700ee3', full, false], ['700ee3e', full, false],
+    [full, '800ee3f0123456789abcdef0123456789abcdef0', false], [null, null, true], [null, full, false], ['700ee3f', null, false],
+  ];
+  const script = `import json, sys; sys.path.append(sys.argv[1]); import spikes_env
+print(json.dumps([spikes_env.revision_matches(a, b) for a, b, _ in json.loads(sys.argv[2])]))`;
+  const out = spawnSync('python3', ['-I', '-B', '-c', script, path.join(__dirname, '..', 'bench', 'dispatch'), JSON.stringify(cases)],
+    { encoding: 'utf8' });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(JSON.parse(out.stdout), cases.map((c) => c[2]));
+});

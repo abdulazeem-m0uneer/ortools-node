@@ -867,7 +867,7 @@ def main():
     spike, exact = SUITES[suite]
     fx = load(FIXTURE_OF.get(suite, suite))
     want, have = (fx.get("meta") or {}).get("spikes_revision"), spikes_env.spikes_revision(SPIKES)
-    if want != have:
+    if not spikes_env.revision_matches(want, have):
         raise SystemExit(f"the fixtures come from caby-dispatch spikes {want}, but {SPIKES} is at {have}: "
                          "check that revision out or regenerate the fixtures with gen_instances.py")
     out = dict(suite=suite, flavor=flavor, runtime="python", ortools=ortools.__version__, python=sys.version.split()[0],

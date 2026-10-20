@@ -16,9 +16,17 @@ def spikes_dir():
 
 
 def spikes_revision(spikes):
-    """The short git revision of the spikes checkout, or None outside git."""
+    """The full git commit hash of the spikes checkout, or None outside git."""
     try:
-        return subprocess.run(["git", "-C", spikes, "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
+        return subprocess.run(["git", "-C", spikes, "rev-parse", "HEAD"], capture_output=True, text=True,
                               check=True).stdout.strip()
     except (OSError, subprocess.CalledProcessError):
         return None
+
+
+def revision_matches(stored, current):
+    """Whether fixtures stamped with `stored` (a full hash, or an abbreviated one of at least 7 hex digits from
+    older fixtures) came from the `current` full hash. None (no git) only matches None."""
+    if stored is None or current is None:
+        return stored is None and current is None
+    return len(stored) >= 7 and current.startswith(stored)
