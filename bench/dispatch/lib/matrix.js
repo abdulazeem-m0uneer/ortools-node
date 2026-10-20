@@ -17,5 +17,7 @@ const SPIKE_SUITES = new Set(SUITES.filter((s) => s !== 'modules'));
 const EXACT_SUITES = new Set(['t1', 't2a', 't2b', 't2c', 't2d', 't3', 't4', 't6', 'cpsat', 'modules']);
 /** Suites whose spike flavour measures threads / processes / the event loop: never pinned to one CPU. */
 const CONCURRENT = new Set(['t2f', 't4', 't5', 'cpsat']);
+/** Spike suites that record only metrics, no per-case signatures: an empty case list is expected there. */
+const METRICS_ONLY = new Set(['t2f', 't4', 't6', 'cpsat']);
 
-module.exports = { RUNS, SPIKE_RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES, CONCURRENT };
+module.exports = { RUNS, SPIKE_RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES, CONCURRENT, METRICS_ONLY };
