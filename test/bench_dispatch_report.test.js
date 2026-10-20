@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { analyse } = require('../bench/dispatch/report');
-const { RUNS, SPIKE_RUNS, SPIKE_SUITES, EXACT_SUITES } = require('../bench/dispatch/lib/matrix');
+const { RUNS, SPIKE_RUNS, SPIKE_SUITES, EXACT_SUITES, METRICS_ONLY } = require('../bench/dispatch/lib/matrix');
 
 const sig = (objective) => ({ status: 'ROUTING_SUCCESS', objective, routes: '0:n0P,n0D', assigned: { n0: 0 } });
 const exactResult = (cases = [{ workload: 'w', id: '0', sig: sig(1), guard_hit: false }]) => (
@@ -76,6 +76,15 @@ test('a suite whose runs recorded no cases fails the gate', () => {
   for (const run of RUNS) r[run.label]['t6-exact'] = exactResult([]);
   assert.deepEqual(analyse(r, []).failures,
     ['9.14 t6: no cases recorded', '9.15 t6: no cases recorded', '9.14 modes t6: no cases recorded', '9.15 modes t6: no cases recorded']);
+});
+
+test('a spike suite with per-case results fails the gate when it recorded no cases; a metrics-only one does not', () => {
+  const r = complete();
+  for (const run of SPIKE_RUNS) r[run]['t1-spike'] = spikeResult([]);
+  assert.deepEqual(analyse(r, []).failures, ['9.14 t1 spike: no cases recorded', '9.15 t1 spike: no cases recorded']);
+  const m = complete();
+  for (const run of SPIKE_RUNS) for (const s of METRICS_ONLY) m[run][`${s}-spike`] = spikeResult([]);
+  assert.deepEqual(analyse(m, []).failures, []);
 });
 
 test('a time-limited difference fails the gate until findings.json analyses it', () => {

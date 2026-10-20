@@ -13,7 +13,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { summary } = require('../lib/stats');
 const { compareCases, canonical } = require('./lib/parity');
-const { RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES } = require('./lib/matrix');
+const { RUNS, SUITES, SPIKE_SUITES, EXACT_SUITES, METRICS_ONLY } = require('./lib/matrix');
 
 const FIXTURES = path.join(__dirname, 'fixtures');
 /** Python run, its Node counterpart (same pin, same allowed-vehicles mode). */
@@ -132,7 +132,9 @@ function spikeParity(results) {
     const perPin = PAIRS.map(([v, pyRun, nodeRun]) => {
       const a = get(results, pyRun, `${suite}-spike`), b = get(results, nodeRun, `${suite}-spike`);
       if (!a || !b) failures.push(`${v} ${suite} spike: not run (${[a ? null : pyRun, b ? null : nodeRun].filter(Boolean).join(', ')})`);
-      return [v, a && b ? compareCases(a.cases, b.cases) : null];
+      const c = a && b ? compareCases(a.cases, b.cases) : null;
+      if (c && !Object.keys(c).length && !METRICS_ONLY.has(suite)) failures.push(`${v} ${suite} spike: no cases recorded`);
+      return [v, c];
     });
     const groups = [...new Set(perPin.flatMap(([, c]) => (c ? Object.keys(c) : [])))];
     for (const g of groups) {
