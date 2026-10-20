@@ -11,12 +11,14 @@ t3's base plan comes from a time-limited solve (as in the spike), so it is solve
 import json
 import os
 import random
-import subprocess
 import sys
 
 sys.dont_write_bytecode = True
-SPIKES = os.path.join(os.environ.get("CABY_DISPATCH_DIR", "/mnt/5DBFBA707C791990/Projects/CABY/caby-dispatch"), "spikes")
-sys.path.insert(0, os.path.join(SPIKES, "ortools"))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))  # -I leaves the script's directory out
+import spikes_env  # noqa: E402
+
+SPIKES = spikes_env.spikes_dir()
+sys.path.append(os.path.join(SPIKES, "ortools"))
 
 import numpy as np  # noqa: E402
 import ortools  # noqa: E402
@@ -224,18 +226,10 @@ GENERATORS = dict(t1=gen_t1, t2a=gen_t2a, t2b=gen_t2b, t2c=gen_t2c, t2d=gen_t2d,
                   t2f=lambda: gen_fleet5(61), t3=gen_t3, t4=gen_t4, t6=gen_t6, cpsat=gen_cpsat, modules=gen_modules)
 
 
-def spikes_revision():
-    try:
-        return subprocess.run(["git", "-C", SPIKES, "rev-parse", "--short", "HEAD"], capture_output=True, text=True,
-                              check=True).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return None
-
-
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
     os.makedirs(out_dir, exist_ok=True)
-    meta = dict(format=FORMAT, spikes_revision=spikes_revision(), python=sys.version.split()[0],
+    meta = dict(format=FORMAT, spikes_revision=spikes_env.spikes_revision(SPIKES), python=sys.version.split()[0],
                 ortools=ortools.__version__, note="t3.base is a 5 s GLS solve on the generating ortools")
     names = sys.argv[2:] or list(GENERATORS)
     for name in names:
