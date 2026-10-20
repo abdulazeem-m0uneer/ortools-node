@@ -168,6 +168,19 @@ test('checkRun names the missing interpreter or addon and its override', () => {
   for (const r of RUNS) assert.doesNotThrow(() => checkRun(r, { exists: all }));
 });
 
+test('caby_model.solve() on one bus and one newcomer returns the exact route, objective and assignment', async () => {
+  const bus = caby.loadBus({ bid: 0, pos: [0, 0], seats: 4, aboard: [], waiting: [], plan: [], base_end: 0 });
+  const n0 = {
+    rid: 'n0', pick: [1, 0], drop: [2, 0], seats: 1, gender: 'F', direct: 144, boarded_at: null, promise_pick: null, promise_drop: null,
+  };
+  for (const mode of ['span', 'removevalues']) {
+    const res = await caby.solve([bus], [n0], { timeLimitMs: 0, mode });
+    // start -> pickup 144 s, pickup -> drop 144 s + 30 s service, drop -> end 30 s service.
+    assert.deepEqual(caby.signature(res), { status: 'ROUTING_SUCCESS', objective: 348, routes: '0:n0P,n0D', assigned: { n0: 0 } }, mode);
+    assert.deepEqual(caby.verify([bus], [n0], res), [], mode);
+  }
+});
+
 test('bench.js as the entry point writes its report and exits 1 when the gate fails (require-cycle regression)', () => {
   const { execFileSync } = require('node:child_process');
   const fs = require('node:fs');
