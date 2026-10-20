@@ -70,9 +70,10 @@ jobs:
               npm publish "$1" --access public --provenance
             fi
           }
+          # The ./ keeps npm from reading dist/<file>.tgz as a GitHub user/repo spec.
           shopt -s nullglob
-          platform=(dist/ortools-node-linux-*.tgz)
-          main=(dist/ortools-node-[0-9]*.tgz)
+          platform=(./dist/ortools-node-linux-*.tgz)
+          main=(./dist/ortools-node-[0-9]*.tgz)
           test ${#platform[@]} -eq 4 || { echo "Expected 4 platform tarballs, found ${#platform[@]}"; exit 1; }
           test ${#main[@]} -eq 1 || { echo "Expected 1 ortools-node tarball, found ${#main[@]}"; exit 1; }
           for tarball in "${platform[@]}"; do publish "$tarball"; done
