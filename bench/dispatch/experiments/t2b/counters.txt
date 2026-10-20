@@ -1,0 +1,9 @@
+# counters.py / counters.js output (OR-Tools 9.15.6755, pinned to CPU 0): runtime branches failures solutions wall_ms
+python 372 202 50 1540
+python 363 195 50 1230
+python 376 2055 50 1758
+python 353 188 50 951
+node 372 202 50 1939
+node 363 195 50 1574
+node 376 2055 50 2199
+node 353 188 50 1231
