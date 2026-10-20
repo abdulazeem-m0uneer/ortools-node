@@ -6,10 +6,6 @@ and arm64 with glibc, a source build everywhere else. The steps to install are
 in the [README](../README.md#installation); this page is the reference for what
 happens and why.
 
-> **Not yet published on npm; build from source until the first release**
-> ([Building from source](../README.md#building-from-source)). The packages and
-> install commands below describe the published package.
-
 ## Example
 
 What loaded, and against which OR-Tools release:
@@ -36,7 +32,7 @@ libraries it links, so it needs no compiler and no `ORTOOLS_ROOT`. The 9.15
 packages are optional dependencies of the published `ortools-node` (added when
 it is packed, by `scripts/prebuilt/set-optional-deps.js`); npm installs the one
 for your CPU. A 9.14 package is installed by hand at ortools-node's own version:
-`npm install @ortools-node/linux-x64-gnu-ortools9.14@0.1.0`.
+`npm install @ortools-node/linux-x64-gnu-ortools9.14@0.2.0`.
 
 Rules:
 

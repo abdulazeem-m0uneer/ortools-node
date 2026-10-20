@@ -6,9 +6,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-Everything merged since 0.1.0: pull requests [#1] to [#9].
+## [0.2.0] - 2026-10-20
+
+Everything merged since 0.1.0: pull requests [#1] to [#11]. First release
+published on npm, with prebuilt Linux x64 and arm64 packages.
 
 ### Added
+
+- Reference documentation per module under `docs/`, with every JavaScript
+  example run by the test suite, and tests that check the declarations against
+  the runtime exports ([#10]).
+- `npm run bench:dispatch`: caby-dispatch's routing, CP-SAT, graph and
+  linear-solver spikes ported to Node and compared with Python OR-Tools on
+  shared fixtures. The parity gate fails on any unexplained difference; results
+  for 9.14 and 9.15 are in `bench/dispatch/RESULTS.md` ([#11]).
 
 - Terminating a worker thread stops its running searches instead of waiting
   for their time limit (or forever, without one): async routing solves and CP
@@ -195,6 +206,9 @@ Everything merged since 0.1.0: pull requests [#1] to [#9].
 
 ### Fixed
 
+- The prebuilt smoke test no longer runs tests that need repository-only files
+  (docs, benchmarks, TypeScript) against the installed package ([#11]).
+
 - `new Solver('HIGHS')` no longer prints the HiGHS banner on every solve while
   output is off ([#5]).
 - `dispose()` during a pending `solve()`, including the implicit one at the end
@@ -235,7 +249,8 @@ First release.
 - TypeScript definitions.
 - Benchmark against OR-Tools' official Python binding (`npm run bench`).
 
-[Unreleased]: https://github.com/abdulazeem-m0uneer/ortools-node/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/abdulazeem-m0uneer/ortools-node/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/abdulazeem-m0uneer/ortools-node/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/abdulazeem-m0uneer/ortools-node/releases/tag/v0.1.0
 [#1]: https://github.com/abdulazeem-m0uneer/ortools-node/pull/1
 [#2]: https://github.com/abdulazeem-m0uneer/ortools-node/pull/2
@@ -246,3 +261,5 @@ First release.
 [#7]: https://github.com/abdulazeem-m0uneer/ortools-node/pull/7
 [#8]: https://github.com/abdulazeem-m0uneer/ortools-node/pull/8
 [#9]: https://github.com/abdulazeem-m0uneer/ortools-node/pull/9
+[#10]: https://github.com/abdulazeem-m0uneer/ortools-node/pull/10
+[#11]: https://github.com/abdulazeem-m0uneer/ortools-node/pull/11
