@@ -80,6 +80,10 @@ export class ElementDegreeSolutionGenerator extends SetCoverSolutionGenerator {
 export class LazyElementDegreeSolutionGenerator extends SetCoverSolutionGenerator {
   constructor(inv: SetCoverInvariant);
 }
+/**
+ * Removes redundant subsets, most expensive first; resolves false without a complete cover.
+ * OR-Tools itself can occasionally leave an element uncovered (about 0.5% of runs after RandomSolutionGenerator, also in Python 9.15); check numUncoveredElements().
+ */
 export class SteepestSearch extends SetCoverSolutionGenerator {
   constructor(inv: SetCoverInvariant);
 }

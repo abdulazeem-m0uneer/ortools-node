@@ -138,7 +138,7 @@ Base class of every generator and search below; each run updates its invariant i
 | `RandomSolutionGenerator` | Selects random useful subsets until everything is covered (not deterministic). |
 | `GreedySolutionGenerator` | Chvatal's greedy: cheapest cost per newly covered element first. |
 | `ElementDegreeSolutionGenerator`, `LazyElementDegreeSolutionGenerator` | Cover elements in decreasing degree order with the best subset for each. |
-| `SteepestSearch` | Removes redundant subsets, most expensive first; resolves `false` without a complete cover. |
+| `SteepestSearch` | Removes redundant subsets, most expensive first; resolves `false` without a complete cover. OR-Tools itself can occasionally leave an element uncovered (about 0.5% of runs after `RandomSolutionGenerator`, also in Python 9.15); check `numUncoveredElements()`. |
 | `GuidedLocalSearch` | Guided local search from a complete cover; penalties restart on every run. |
 | `GuidedTabuSearch` | Guided tabu search from a complete cover; also `setLagrangianFactor(f)`, `setPenaltyFactor(f)`, `setEpsilon(e)` (finite numbers) and `setTabuListSize(n)` (integer in `[1, 1e6]`), each returning `this`. |
 | `SetCoverMip` | Solves the focus as a MIP; subsets already selected stay selected. Also `useMipSolver(name)`, `useIntegers(bool)` (`false`: LP relaxation, sets only `lowerBound()`), `setTimeLimitInSeconds(s)` (`[0, 1e9]`), each returning `this`, and `solveStatus` (MPSolver status of the last run, e.g. `'OPTIMAL'`, `undefined` before). |
