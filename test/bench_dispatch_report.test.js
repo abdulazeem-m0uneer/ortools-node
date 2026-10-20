@@ -129,6 +129,12 @@ test('a finding whose case no longer differs fails the gate as stale', () => {
     ['stale finding: 9.15 t2d / g `g/1` no longer differs']);
 });
 
+test('an always finding never explains a time-limited difference, whatever suite it names', () => {
+  const always = { flavor: 'spike', always: true, suite: 't2d', title: 'broad note', text: 'x' };
+  assert.deepEqual(analyse(withSpikeDiffs('g/0'), [always]).failures,
+    ['9.15 t2d / g/0 (spike): difference not analysed in findings.json']);
+});
+
 test('a spike finding without pins, workload or ids fails the gate', () => {
   for (const over of [{ pins: undefined }, { pins: [] }, { workload: undefined }, { ids: undefined }, { ids: [] }]) {
     const { failures } = analyse(withSpikeDiffs('g/0'), [finding(over)]);
