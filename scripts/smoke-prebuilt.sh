@@ -81,9 +81,24 @@ for image in "${images[@]}"; do
 
       cd node_modules/ortools-node
       cp -r /tests test
-      # Tests the packaging scripts, which are not part of the published package.
-      rm test/prebuilt-packaging.test.js
-      npm test 2>&1 | tail -n 9
+      # Tests that need files or tools the published package does not ship. A listed file
+      # that no longer exists fails the smoke test, so the list cannot go stale.
+      repo_only=(
+        prebuilt-packaging.test.js     # the packaging scripts (scripts/prebuilt, scripts/*.sh)
+        docs_examples.test.js          # docs/ and the README links into the repository
+        types_runtime.test.js          # the typescript devDependency
+        bench_dispatch.test.js         # bench/
+        bench_dispatch_report.test.js  # bench/
+      )
+      for f in "${repo_only[@]}"; do
+        [[ -f "test/$f" ]] || { echo "smoke-prebuilt.sh lists test/$f, which does not exist" >&2; exit 1; }
+        rm "test/$f"
+      done
+      status=0
+      npm test > /tmp/test.log 2>&1 || status=$?
+      grep -E "^not ok|^\s*✖" /tmp/test.log || true
+      tail -n 9 /tmp/test.log
+      [[ $status -eq 0 ]] || { echo "npm test failed in the installed package" >&2; exit 1; }
       node -e "
         const ortools = require(\".\");
         const addon = Object.keys(require.cache).find((f) => f.endsWith(\".node\"));
