@@ -42,27 +42,125 @@
     "pins": [
       "9.14"
     ],
+    "ids": [
+      "cold PCA+GD(tl1000)/167",
+      "cold PCA+GD(tl1000)/203"
+    ],
     "verdict": "Time limit, not a model difference",
-    "analysis": "On 2 of 300 cold PATH_CHEAPEST_ARC cases the first solution takes about the whole 1 s limit: Python stopped at 1001 ms with ROUTING_FAIL_TIMEOUT, Node found its first solution at 885 ms and 959 ms. On 9.15 every case agrees, and the exact-flavour t2a workloads are identical on both pins."
+    "analysis": "The cold PATH_CHEAPEST_ARC first solution takes about the whole 1 s limit on these 2 of 300 cases: Python stopped at 1001 ms with ROUTING_FAIL_TIMEOUT, Node found its first solution at 885 ms and 959 ms. On 9.15 every case agrees, and the exact-flavour t2a workloads are identical on both pins."
   },
   {
     "flavor": "spike",
     "suite": "t2c",
+    "workload": "gender:off",
+    "pins": [
+      "9.14"
+    ],
+    "ids": [
+      "gender:off/45"
+    ],
     "verdict": "Time limit (300 ms GLS), not a model difference",
-    "analysis": "Of the 300 ms GLS solves, 5 (9.14) and 4 (9.15) end in different local optima: on 9.14 Node is better in all 5 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509), on 9.15 worse in all 4 (e.g. gender:on/58 and gender:off/58: one newcomer fewer, 20,006,921 vs 7,130). The exact-flavour t2c workloads (same model, solution limit instead of a time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (see the t2b latency finding) but was not measured separately."
+    "analysis": "A different local optimum within the limit: Node serves n2 instead of n0, objective 40,005,949 vs Python 40,005,979. The exact-flavour t2c workloads (same model, a solution limit instead of the time limit) are identical, 320/320 on both pins."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t2c",
+    "workload": "stay:off",
+    "pins": [
+      "9.14"
+    ],
+    "ids": [
+      "stay:off/3",
+      "stay:off/9",
+      "stay:off/12",
+      "stay:off/23"
+    ],
+    "verdict": "Time limit (300 ms GLS), not a model difference",
+    "analysis": "Node ends better in all 4 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509). The exact-flavour t2c workloads (same model, a solution limit instead of the time limit) are identical, 320/320 on both pins."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t2c",
+    "workload": "gender:on",
+    "pins": [
+      "9.15"
+    ],
+    "ids": [
+      "gender:on/58"
+    ],
+    "verdict": "Time limit (300 ms GLS), not a model difference",
+    "analysis": "Node leaves n0 unserved, 20,006,921 vs Python 7,130. The exact-flavour t2c workloads (same model, a solution limit instead of the time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (t2b latency finding) but was not measured separately."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t2c",
+    "workload": "gender:off",
+    "pins": [
+      "9.15"
+    ],
+    "ids": [
+      "gender:off/58",
+      "gender:off/62"
+    ],
+    "verdict": "Time limit (300 ms GLS), not a model difference",
+    "analysis": "Node ends worse in both (gender:off/58: n0 unserved, 20,006,921 vs 7,130; gender:off/62: 12,364 vs 12,252). The exact-flavour t2c workloads (same model, a solution limit instead of the time limit) are identical, 320/320 on both pins."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t2c",
+    "workload": "stay:off",
+    "pins": [
+      "9.15"
+    ],
+    "ids": [
+      "stay:off/16"
+    ],
+    "verdict": "Time limit (300 ms GLS), not a model difference",
+    "analysis": "Node ends worse, 40,007,155 vs 40,006,537 (same newcomers served). The exact-flavour t2c workloads (same model, a solution limit instead of the time limit) are identical, 320/320 on both pins."
   },
   {
     "flavor": "spike",
     "suite": "t2d",
     "workload": "one_model_tl3000",
+    "pins": [
+      "9.14",
+      "9.15"
+    ],
+    "ids": [
+      "one_model_tl3000"
+    ],
     "verdict": "Time-limited difference: Node serves one newcomer fewer on both pins",
-    "analysis": "The 200-bus model under a 3000 ms GLS limit: objective Python 820,521,086 vs Node 840,518,994 on 9.14 and Python 840,518,994 vs Node 860,517,702 on 9.15, both ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED. Each gap is about 2 x BIG_PENALTY (10,000,000 per unserved pickup and per unserved delivery), so Node leaves one more newcomer unassigned. The same model with a solution limit (exact flavour, t2d 200 buses sl=30) is identical in both runtimes, so this is search progress within the time limit, consistent with Node's slower search per iteration (t2b finding); a dispatcher on Node needs a somewhat longer limit for the same result."
+    "analysis": "The 200-bus model under a 3000 ms GLS limit: Python 820,521,086 vs Node 840,518,994 on 9.14 and Python 840,518,994 vs Node 860,517,702 on 9.15, all ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED. Each gap is about 2 x BIG_PENALTY (10,000,000 per unserved pickup and per unserved delivery), so Node leaves one more newcomer unassigned. The same model with a solution limit (exact flavour, t2d 200 buses sl=30) is identical in both runtimes, so this is search progress within the time limit, consistent with Node's slower search per iteration (t2b finding); a dispatcher on Node needs a somewhat longer limit for the same result."
   },
   {
     "flavor": "spike",
     "suite": "t5",
     "workload": "tl",
+    "pins": [
+      "9.14"
+    ],
+    "ids": [
+      "tl/loaded3",
+      "tl/loaded4",
+      "tl/loaded6",
+      "tl/loaded7"
+    ],
     "verdict": "Expected: the spike measures that time-limited solves are not reproducible",
-    "analysis": "The loaded time-limited runs vary between 960,508,411 and 1,000,504,178 within each runtime (Python itself returns both values across its 6 loaded runs); Node 9.15 once returns 980,506,300. The solution-limited half (sl/*) returns 440,556,967 in all 16 runs of every runtime and pin."
+    "analysis": "The loaded time-limited runs vary between 960,508,411 and 1,000,504,178 within each runtime (Python itself returns both across its 6 loaded runs). The solution-limited half (sl/*) returns 440,556,967 in all 16 runs of every runtime and pin."
+  },
+  {
+    "flavor": "spike",
+    "suite": "t5",
+    "workload": "tl",
+    "pins": [
+      "9.15"
+    ],
+    "ids": [
+      "tl/loaded3",
+      "tl/loaded6",
+      "tl/loaded7"
+    ],
+    "verdict": "Expected: the spike measures that time-limited solves are not reproducible",
+    "analysis": "As on 9.14: the loaded time-limited runs vary between 960,508,411 and 1,000,504,178 in both runtimes, and Node once returns 980,506,300. The solution-limited half (sl/*) returns 440,556,967 in every run."
   }
 ]
