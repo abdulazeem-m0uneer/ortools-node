@@ -27,46 +27,51 @@ return the same status, objective, routes and assignments, and times build / sol
 
 ## Parity
 
+**Gate: PASS.** 9444 exact-flavour case comparisons, all identical, none missing, unstable or not run; 28626 time-limited case comparisons, each difference analysed below.
+
 ### Exact flavour: identical results required (26 workloads)
 
 Cells: matching cases / cases. "guard": GUIDED_LOCAL_SEARCH ran out of new solutions before its solution
 limit and stopped at the guard time limit; those cases still compare, but are left out of the latency tables.
+The "modes" columns compare Node's SetAllowedVehiclesForIndex and VehicleVar().RemoveValues() runs on one pin.
 
-| Suite | Workload | 9.14 (py-9.14 vs node-9.14-span) | 9.15 (py-9.15 vs node-9.15-removevalues) |
-|---|---|--:|--:|
-| t1 | t1 one bus, GD | 850/850 | 850/850 |
-| t2a | t2a one bus 12 stops, warm GD | 300/300 | 300/300 |
-| t2a | t2a one bus 12 stops, warm GLS sl=100 | 300/300 (21 guard) | 300/300 (21 guard) |
-| t2a | t2a one bus 12 stops, warm GD, transit callback | 300/300 | 300/300 |
-| t2b | t2b 20 buses one model, warm GLS sl=50 | 60/60 | 60/60 |
-| t2c | t2c 6 buses 3 newcomers, warm GLS sl=50 | 320/320 | 320/320 |
-| t2c | t2c empty bus, mixed newcomers, GD | 2/2 | 2/2 |
-| t2d | t2d 200 buses x 50 newcomers, warm GLS sl=30 | 1/1 | 1/1 |
-| t2d | t2d two-stage: 600 single-bus GD solves | 1/1 | 1/1 |
-| t2d | t2d two-stage: min cost flow | 1/1 | 1/1 |
-| t2d | t2d two-stage: linear sum assignment | 1/1 | 1/1 |
-| t2d | t2d dense LSA 250x250 | 1/1 | 1/1 |
-| t3 | t3 nightly order 40 riders, GLS sl=50 | 1/1 | 1/1 |
-| t3 | t3 newcomer insertion, fixed times, warm GD | 200/200 | 200/200 |
-| t4 | t4 TSP 150 nodes, GLS sl=100 | 8/8 | 8/8 |
-| t6 | t6 rescue min cost flow 5x30 | 1/1 | 1/1 |
-| t6 | t6 locked order, 2 models, GLS sl=100 | 1/1 | 1/1 |
-| t6 | t6 intercity tour 42 nodes, GLS sl=200 | 2/2 | 2/2 |
-| t6 | t6 intercity 40 P&D pairs, GLS sl=100 | 1/1 | 1/1 |
-| cpsat | CP-SAT 40x40 assignment, 1 worker, to optimality | 4/4 | 4/4 |
-| modules | knapsack 60 items x 3 dims, branch and bound | 1/1 | 1/1 |
-| modules | knapsack 500 items, dynamic programming | 1/1 | 1/1 |
-| modules | set cover 1000 x 6000, greedy + steepest | 1/1 | 1/1 |
-| modules | max flow 5000 nodes x 50000 arcs | 1/1 | 1/1 |
-| modules | math_opt transport 100x100 LP, GLOP | 1/1 | 1/1 |
-| modules | math_opt knapsack 60x3 MIP, CP-SAT 1 thread | 1/1 | 1/1 |
+| Suite | Workload | 9.14 (py-9.14 vs node-9.14-span) | 9.15 (py-9.15 vs node-9.15-removevalues) | 9.14 modes (node-9.14-span vs node-9.14-removevalues) | 9.15 modes (node-9.15-removevalues vs node-9.15-span) |
+|---|---|--:|--:|--:|--:|
+| t1 | t1 one bus, GD | 850/850 | 850/850 | 850/850 | 850/850 |
+| t2a | t2a one bus 12 stops, warm GD | 300/300 | 300/300 | 300/300 | 300/300 |
+| t2a | t2a one bus 12 stops, warm GLS sl=100 | 300/300 (21 guard) | 300/300 (21 guard) | 300/300 (21 guard) | 300/300 (21 guard) |
+| t2a | t2a one bus 12 stops, warm GD, transit callback | 300/300 | 300/300 | 300/300 | 300/300 |
+| t2b | t2b 20 buses one model, warm GLS sl=50 | 60/60 | 60/60 | 60/60 | 60/60 |
+| t2c | t2c 6 buses 3 newcomers, warm GLS sl=50 | 320/320 | 320/320 | 320/320 | 320/320 |
+| t2c | t2c empty bus, mixed newcomers, GD | 2/2 | 2/2 | 2/2 | 2/2 |
+| t2d | t2d 200 buses x 50 newcomers, warm GLS sl=30 | 1/1 | 1/1 | 1/1 | 1/1 |
+| t2d | t2d two-stage: 600 single-bus GD solves | 1/1 | 1/1 | 1/1 | 1/1 |
+| t2d | t2d two-stage: min cost flow | 1/1 | 1/1 | 1/1 | 1/1 |
+| t2d | t2d two-stage: linear sum assignment | 1/1 | 1/1 | 1/1 | 1/1 |
+| t2d | t2d dense LSA 250x250 | 1/1 | 1/1 | 1/1 | 1/1 |
+| t3 | t3 nightly order 40 riders, GLS sl=50 | 1/1 | 1/1 | 1/1 | 1/1 |
+| t3 | t3 newcomer insertion, fixed times, warm GD | 200/200 | 200/200 | 200/200 | 200/200 |
+| t4 | t4 TSP 150 nodes, GLS sl=100 | 8/8 | 8/8 | 8/8 | 8/8 |
+| t6 | t6 rescue min cost flow 5x30 | 1/1 | 1/1 | 1/1 | 1/1 |
+| t6 | t6 locked order, 2 models, GLS sl=100 | 1/1 | 1/1 | 1/1 | 1/1 |
+| t6 | t6 intercity tour 42 nodes, GLS sl=200 | 2/2 | 2/2 | 2/2 | 2/2 |
+| t6 | t6 intercity 40 P&D pairs, GLS sl=100 | 1/1 | 1/1 | 1/1 | 1/1 |
+| cpsat | CP-SAT 40x40 assignment, 1 worker, to optimality | 4/4 | 4/4 | 4/4 | 4/4 |
+| modules | knapsack 60 items x 3 dims, branch and bound | 1/1 | 1/1 | 1/1 | 1/1 |
+| modules | knapsack 500 items, dynamic programming | 1/1 | 1/1 | 1/1 | 1/1 |
+| modules | set cover 1000 x 6000, greedy + steepest | 1/1 | 1/1 | 1/1 | 1/1 |
+| modules | max flow 5000 nodes x 50000 arcs | 1/1 | 1/1 | 1/1 | 1/1 |
+| modules | math_opt transport 100x100 LP, GLOP | 1/1 | 1/1 | 1/1 | 1/1 |
+| modules | math_opt knapsack 60x3 MIP, CP-SAT 1 thread | 1/1 | 1/1 | 1/1 | 1/1 |
 
 ### Spike flavour: per-case agreement under time limits
 
-Time-limited searches are not reproducible run to run, so these runs are compared on their accept
-counts, violations and objective distributions (next table); the per-case agreement is informative.
+Time-limited searches are not reproducible run to run, so per-case agreement is not required: the cells
+are informative. The spike metrics below (accept counts, violations, objective distributions) are shown
+side by side and are not compared automatically. Every per-case difference is listed under "Differences
+and their causes" with its analysis; an unanalysed one fails the gate.
 
-| Suite | Experiment | 9.14 (py-9.14 vs node-9.14-span) | 9.15 (py-9.15 vs node-9.15-removevalues) |
+| Suite | Workload | 9.14 (py-9.14 vs node-9.14-span) | 9.15 (py-9.15 vs node-9.15-removevalues) |
 |---|---|--:|--:|
 | t1 | seats:all | 25/25 | 25/25 |
 | t1 | seats:without | 25/25 | 25/25 |
@@ -326,10 +331,40 @@ counts, violations and objective distributions (next table); the per-case agreem
 - **Transit callbacks (t2a "python-callback", t2f callback=True)**: **Same results, different mechanism.** Python calls back into the interpreter for every arc evaluation during the search, holding the GIL. ortools-node's registerTransitCallback() evaluates the JS function once per index pair when it is registered and solves on the libuv threadpool without calling JS again, so the search never blocks the event loop. The exact-flavour signatures are identical to the matrix variant in both runtimes.
 - **GUIDED_LOCAL_SEARCH with only a solution limit (exact flavour)**: **OR-Tools behaviour in both runtimes, not a binding issue.** On about 1 in 10 single-bus instances GLS runs out of new solutions before reaching its solution limit and never stops; Python and Node hang on the same cases (first seen on t2a case 3 at solution_limit=10). The exact flavour therefore adds a guard time limit far above the normal solve time. Guarded cases are listed in the parity table, still compared (they matched), and left out of the latency tables.
 - **SetAllowedVehiclesForIndex on Python 9.15 (google/or-tools#5415)**: **Python binding bug, absent in ortools-node.** Python 9.15.6755 raises TypeError (absl::Span argument) for SetAllowedVehiclesForIndex, so the spike falls back to removing the other vehicles from VehicleVar. ortools-node accepts setAllowedVehiclesForIndex() on both pins. Parity is checked in the mode Python uses on each pin (span on 9.14, removevalues on 9.15); the latency appendix times both modes in Node.
-- **Routing solve latency vs Python (t2b, 20 buses, GLS sl=50)**: **glibc malloc, not the binding; no cheap binding fix.** Measured on 9.15, pinned to CPU 0, 5 repeats x 60 cases: solve p50 1482 ms in Python, 1880 ms in Node (async) and 1975 ms (solveWithParametersSync), with identical solutions and identical search counters (branches, failures, solutions), so both do the same work; per-case Node/Python solve ratio 1.28 (p10 1.24, p90 1.30). Build is faster in Node (2.56 vs 3.49 ms) and read too (0.09 vs 0.49 ms). Breakdown: (1) glibc malloc takes a lock-free fast path only while a process has one thread; the Python benchmark is single-threaded, a Node process never is. Starting one idle thread in Python makes its solve 1.19x slower, leaving Node 1.07x behind it. GLIBC_TUNABLES=glibc.malloc.tcache_count=1000 cuts Node solve p50 to 1304 ms (-26%), within 1.05x (per-case median) of Python with the same setting. (2) The binding adds a custom search limit (interrupt()) and an at-solution hook (onSolution) to every RoutingModel; adding the same two to Python costs it about 3% (1443 to 1494 ms). (3) The OR-Tools C++ archive library vs the wheel's libortools: loading the wheel's library into Node (LD_LIBRARY_PATH) moves the ratio from 1.28 to 1.235. Async vs sync is not a factor. The tunable is read only at process start, so the binding cannot set it; services that are allocation-bound can set it in their environment.
+- **Routing solve latency vs Python on OR-Tools 9.15 (t2b, 20 buses, GLS sl=50)**: **Mostly glibc malloc's single-thread fast path (~19%); ~3% the binding's interrupt/onSolution hooks; ~4% the libortools build.** Baseline: OR-Tools 9.15, Python 3.13 single-threaded vs Node async, pinned to CPU 0, 5 repeats x 60 cases (300 solves each), one idle machine; every ratio below is per case against that baseline. Solve p50 1482 ms in Python, 1880 ms in Node async, 1975 ms in Node sync: Node/Python 1.28 (p10 1.24, p90 1.30). Both find identical solutions with identical branches, failures and solutions counts, so they do the same work; build (2.56 vs 3.49 ms) and read (0.09 vs 0.49 ms) are faster in Node, and sync vs async is not a factor. (1) glibc malloc takes a lock-free fast path only while a process has one thread; the Python baseline has one, a Node process never does. One idle thread in Python makes its solve 1.19x slower, leaving Node 1.07x behind; GLIBC_TUNABLES=glibc.malloc.tcache_count=1000 cuts Node solve p50 to 1304 ms, within 1.05x of Python with the same setting. (2) The binding adds a custom search limit (interrupt()) and an at-solution hook (onSolution) to every RoutingModel; the same two in Python cost it about 3% (1443 to 1494 ms). (3) Loading the Python wheel's libortools into Node (LD_LIBRARY_PATH) moves the ratio from 1.28 to 1.235, so about 4% is the C++ archive build. The tunable is read only at process start, so the binding cannot set it; there is no cheap binding fix. The 9.14 gap (0.79x in the latency table) was not analysed. Scripts and per-case results: bench/dispatch/experiments/t2b/.
+- **Not investigated: Node slower on many tiny solves**: **Open; likely a fixed per-solve overhead.** Workloads made of many solves of a few milliseconds or less are slower in Node: t2d two-stage 600 single-bus solves 0.52x (9.14) / 0.61x (9.15), t1 solve 0.43x (9.14), set cover 0.61x and math_opt knapsack MIP 0.62x (9.15) in the latency tables. The results are identical; the cost per call (parameter conversion, the threadpool hop, the hooks above, malloc) was not measured.
 - Exact flavour: no differences.
 
 Spike flavour: 20 per-case difference(s) under time limits.
+
+- **9.14 t2a / cold PCA+GD(tl1000)**: 2 case(s) differ (`cold PCA+GD(tl1000)/167`, `cold PCA+GD(tl1000)/203`). **Time limit, not a model difference.** On 2 of 300 cold PATH_CHEAPEST_ARC cases the first solution takes about the whole 1 s limit: Python stopped at 1001 ms with ROUTING_FAIL_TIMEOUT, Node found its first solution at 885 ms and 959 ms. On 9.15 every case agrees, and the exact-flavour t2a workloads are identical on both pins.
+  - `cold PCA+GD(tl1000)/167`: Python status ROUTING_FAIL_TIMEOUT, objective null; Node status ROUTING_SUCCESS, objective 20003667
+  - `cold PCA+GD(tl1000)/203`: Python status ROUTING_FAIL_TIMEOUT, objective null; Node status ROUTING_SUCCESS, objective 20004304
+- **9.15 t2c / gender:on**: 1 case(s) differ (`gender:on/58`). **Time limit (300 ms GLS), not a model difference.** Of the 300 ms GLS solves, 5 (9.14) and 4 (9.15) end in different local optima: on 9.14 Node is better in all 5 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509), on 9.15 worse in all 4 (e.g. gender:on/58 and gender:off/58: one newcomer fewer, 20,006,921 vs 7,130). The exact-flavour t2c workloads (same model, solution limit instead of a time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (see the t2b latency finding) but was not measured separately.
+  - `gender:on/58`: Python status ROUTING_SUCCESS, objective 7130; Node status ROUTING_SUCCESS, objective 20006921
+- **9.14 t2c / gender:off**: 1 case(s) differ (`gender:off/45`). **Time limit (300 ms GLS), not a model difference.** Of the 300 ms GLS solves, 5 (9.14) and 4 (9.15) end in different local optima: on 9.14 Node is better in all 5 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509), on 9.15 worse in all 4 (e.g. gender:on/58 and gender:off/58: one newcomer fewer, 20,006,921 vs 7,130). The exact-flavour t2c workloads (same model, solution limit instead of a time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (see the t2b latency finding) but was not measured separately.
+  - `gender:off/45`: Python status ROUTING_SUCCESS, objective 40005979; Node status ROUTING_SUCCESS, objective 40005949
+- **9.15 t2c / gender:off**: 2 case(s) differ (`gender:off/58`, `gender:off/62`). **Time limit (300 ms GLS), not a model difference.** Of the 300 ms GLS solves, 5 (9.14) and 4 (9.15) end in different local optima: on 9.14 Node is better in all 5 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509), on 9.15 worse in all 4 (e.g. gender:on/58 and gender:off/58: one newcomer fewer, 20,006,921 vs 7,130). The exact-flavour t2c workloads (same model, solution limit instead of a time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (see the t2b latency finding) but was not measured separately.
+  - `gender:off/58`: Python status ROUTING_SUCCESS, objective 7130; Node status ROUTING_SUCCESS, objective 20006921
+  - `gender:off/62`: Python status ROUTING_SUCCESS, objective 12252; Node status ROUTING_SUCCESS, objective 12364
+- **9.14 t2c / stay:off**: 4 case(s) differ (`stay:off/3`, `stay:off/9`, `stay:off/12`, `stay:off/23`). **Time limit (300 ms GLS), not a model difference.** Of the 300 ms GLS solves, 5 (9.14) and 4 (9.15) end in different local optima: on 9.14 Node is better in all 5 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509), on 9.15 worse in all 4 (e.g. gender:on/58 and gender:off/58: one newcomer fewer, 20,006,921 vs 7,130). The exact-flavour t2c workloads (same model, solution limit instead of a time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (see the t2b latency finding) but was not measured separately.
+  - `stay:off/3`: Python status ROUTING_SUCCESS, objective 9871; Node status ROUTING_SUCCESS, objective 9855
+  - `stay:off/9`: Python status ROUTING_SUCCESS, objective 20006196; Node status ROUTING_SUCCESS, objective 20006188
+  - `stay:off/12`: Python status ROUTING_SUCCESS, objective 60006509; Node status ROUTING_SUCCESS, objective 40007313
+- **9.15 t2c / stay:off**: 1 case(s) differ (`stay:off/16`). **Time limit (300 ms GLS), not a model difference.** Of the 300 ms GLS solves, 5 (9.14) and 4 (9.15) end in different local optima: on 9.14 Node is better in all 5 (e.g. stay:off/12: one more newcomer served, 40,007,313 vs 60,006,509), on 9.15 worse in all 4 (e.g. gender:on/58 and gender:off/58: one newcomer fewer, 20,006,921 vs 7,130). The exact-flavour t2c workloads (same model, solution limit instead of a time limit) are identical, 320/320 on both pins. That Node lands worse on 9.15 fits its slower search per iteration (see the t2b latency finding) but was not measured separately.
+  - `stay:off/16`: Python status ROUTING_SUCCESS, objective 40006537; Node status ROUTING_SUCCESS, objective 40007155
+- **9.14 t2d / one_model_tl3000**: 1 case(s) differ (`one_model_tl3000`). **Time-limited difference: Node serves one newcomer fewer on both pins.** The 200-bus model under a 3000 ms GLS limit: objective Python 820,521,086 vs Node 840,518,994 on 9.14 and Python 840,518,994 vs Node 860,517,702 on 9.15, both ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED. Each gap is about 2 x BIG_PENALTY (10,000,000 per unserved pickup and per unserved delivery), so Node leaves one more newcomer unassigned. The same model with a solution limit (exact flavour, t2d 200 buses sl=30) is identical in both runtimes, so this is search progress within the time limit, consistent with Node's slower search per iteration (t2b finding); a dispatcher on Node needs a somewhat longer limit for the same result.
+  - `one_model_tl3000`: Python status ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED, objective 820521086; Node status ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED, objective 840518994
+- **9.15 t2d / one_model_tl3000**: 1 case(s) differ (`one_model_tl3000`). **Time-limited difference: Node serves one newcomer fewer on both pins.** The 200-bus model under a 3000 ms GLS limit: objective Python 820,521,086 vs Node 840,518,994 on 9.14 and Python 840,518,994 vs Node 860,517,702 on 9.15, both ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED. Each gap is about 2 x BIG_PENALTY (10,000,000 per unserved pickup and per unserved delivery), so Node leaves one more newcomer unassigned. The same model with a solution limit (exact flavour, t2d 200 buses sl=30) is identical in both runtimes, so this is search progress within the time limit, consistent with Node's slower search per iteration (t2b finding); a dispatcher on Node needs a somewhat longer limit for the same result.
+  - `one_model_tl3000`: Python status ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED, objective 840518994; Node status ROUTING_PARTIAL_SUCCESS_LOCAL_OPTIMUM_NOT_REACHED, objective 860517702
+- **9.14 t5 / tl**: 4 case(s) differ (`tl/loaded3`, `tl/loaded4`, `tl/loaded6`, `tl/loaded7`). **Expected: the spike measures that time-limited solves are not reproducible.** The loaded time-limited runs vary between 960,508,411 and 1,000,504,178 within each runtime (Python itself returns both values across its 6 loaded runs); Node 9.15 once returns 980,506,300. The solution-limited half (sl/*) returns 440,556,967 in all 16 runs of every runtime and pin.
+  - `tl/loaded3`: Python objective 960508411; Node objective 1000504178
+  - `tl/loaded4`: Python objective 1000504178; Node objective 960508411
+  - `tl/loaded6`: Python objective 960508411; Node objective 1000504178
+- **9.15 t5 / tl**: 3 case(s) differ (`tl/loaded3`, `tl/loaded6`, `tl/loaded7`). **Expected: the spike measures that time-limited solves are not reproducible.** The loaded time-limited runs vary between 960,508,411 and 1,000,504,178 within each runtime (Python itself returns both values across its 6 loaded runs); Node 9.15 once returns 980,506,300. The solution-limited half (sl/*) returns 440,556,967 in all 16 runs of every runtime and pin.
+  - `tl/loaded3`: Python objective 960508411; Node objective 980506300
+  - `tl/loaded6`: Python objective 960508411; Node objective 1000504178
+  - `tl/loaded7`: Python objective 1000504178; Node objective 960508411
 
 ## Latency (exact flavour, pinned)
 
