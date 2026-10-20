@@ -7,7 +7,7 @@ const { percentile, median, summary } = require('../bench/lib/stats');
 const { pinnedCpu, pinned } = require('../bench/lib/cpu');
 const { canonical, groupOf, compareCases } = require('../bench/dispatch/lib/parity');
 const { Exact } = require('../bench/dispatch/node/common');
-const { parseArgs, command } = require('../bench/dispatch/bench');
+const { parseArgs, command, checkRun, ADDON } = require('../bench/dispatch/bench');
 const { RUNS } = require('../bench/dispatch/lib/matrix');
 const caby = require('../bench/dispatch/node/caby_model');
 
@@ -125,7 +125,7 @@ test('command pins latency suites but not concurrency ones, and selects the addo
   assert.equal(c.cmd, 'taskset');
   assert.deepEqual(c.args.slice(0, 2), ['-c', '0']);
   assert.equal(c.args.at(-1), 'removevalues');
-  assert.match(c.env.ORTOOLS_NODE_ADDON, /v9\.14/);
+  assert.equal(c.env.ORTOOLS_NODE_ADDON, ADDON['9.14']);
   const t4 = command(RUNS.find((r) => r.label === 'py-9.15'), 't4', 'spike', 3, '0');
   assert.equal(command(RUNS.find((r) => r.label === 'py-9.15'), 't4', 'exact', 3, '0').cmd, 'taskset');
   assert.notEqual(t4.cmd, 'taskset');
@@ -156,6 +156,16 @@ test('loadBus resolves the plan to rider objects; checkRoute flags seats and pre
   const reversed = { ...bus, seats: 1 };
   assert.deepEqual(caby.checkRoute(reversed, [[w, 'D'], [w, 'P']]), ['precedence b0w0']);
   assert.deepEqual(caby.checkRoute(reversed, []), ['unserved b0w0']);
+});
+
+test('checkRun names the missing interpreter or addon and its override', () => {
+  const run = (label) => RUNS.find((r) => r.label === label);
+  const none = () => false, all = () => true;
+  assert.throws(() => checkRun(run('py-9.14'), { exists: none }), /py-9\.14: .* does not exist \(set DISPATCH_PY_914/);
+  assert.throws(() => checkRun(run('py-9.15'), { exists: none }), /set DISPATCH_PY_915/);
+  assert.throws(() => checkRun(run('node-9.14-span'), { exists: none }), /set DISPATCH_ADDON_914/);
+  assert.doesNotThrow(() => checkRun(run('node-9.15-span'), { exists: none }), 'the 9.15 runs use the default addon');
+  for (const r of RUNS) assert.doesNotThrow(() => checkRun(r, { exists: all }));
 });
 
 test('bench.js as the entry point writes its report and exits 1 when the gate fails (require-cycle regression)', () => {
