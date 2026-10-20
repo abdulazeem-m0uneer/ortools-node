@@ -12,6 +12,7 @@
 //        [--repeats 5] [--force] [--results dir]   (existing results are kept unless --force; the report
 //        is rewritten: bench/dispatch/RESULTS.md, or <dir>/RESULTS.md with --results; exit code 1 when its
 //        parity gate fails, see report.js). With every result present it only rewrites the report.
+// Python runs need CABY_DISPATCH_DIR (the caby-dispatch checkout whose spikes the fixtures came from).
 // Overrides: DISPATCH_PY_914, DISPATCH_PY_915 (interpreters), DISPATCH_ADDON_914 (addon), BENCH_CPU.
 
 const { execFileSync } = require('node:child_process');

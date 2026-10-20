@@ -20,8 +20,11 @@ import time
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 
 sys.dont_write_bytecode = True
-SPIKES = os.path.join(os.environ.get("CABY_DISPATCH_DIR", "/mnt/5DBFBA707C791990/Projects/CABY/caby-dispatch"), "spikes")
-sys.path.insert(0, os.path.join(SPIKES, "ortools"))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))  # -I leaves the script's directory out
+import spikes_env  # noqa: E402
+
+SPIKES = spikes_env.spikes_dir()
+sys.path.append(os.path.join(SPIKES, "ortools"))
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 import numpy as np  # noqa: E402
@@ -863,6 +866,10 @@ def main():
     _init_worker(FIXTURES)
     spike, exact = SUITES[suite]
     fx = load(FIXTURE_OF.get(suite, suite))
+    want, have = (fx.get("meta") or {}).get("spikes_revision"), spikes_env.spikes_revision(SPIKES)
+    if want != have:
+        raise SystemExit(f"the fixtures come from caby-dispatch spikes {want}, but {SPIKES} is at {have}: "
+                         "check that revision out or regenerate the fixtures with gen_instances.py")
     out = dict(suite=suite, flavor=flavor, runtime="python", ortools=ortools.__version__, python=sys.version.split()[0],
                mode=allowed_mode(), fixture_meta=fx.get("meta"))
     t0 = time.perf_counter()
