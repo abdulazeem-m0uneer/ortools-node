@@ -196,8 +196,11 @@ const brief = (sig) => (sig && typeof sig === 'object' && 'objective' in sig
 
 const caseOf = (m) => `${m.pin} ${m.suite} / ${m.id}`;
 
-/** A finding explains a difference when suite, workload, pin and case id all match (each optional unless strict). */
-const explains = (f, m) => f.suite === m.suite && (f.workload === undefined || f.workload === m.workload)
+/**
+ * A finding explains a difference when suite, workload, pin and case id all match (each optional unless strict).
+ * An `always` finding is general prose and never explains a per-case difference.
+ */
+const explains = (f, m) => !f.always && f.suite === m.suite && (f.workload === undefined || f.workload === m.workload)
   && (f.pins === undefined || f.pins.includes(m.pin)) && (f.ids === undefined || f.ids.includes(m.id));
 
 /**
