@@ -203,7 +203,7 @@ loaded with `node -p "require('ortools-node').buildInfo"`.
 
 The platform package must have exactly ortools-node's version. For OR-Tools
 9.14, install its package yourself
-(`npm install @ortools-node/linux-x64-gnu-ortools9.14@0.2.0`, or `linux-arm64-gnu`)
+(`npm install @ortools-nodejs/linux-x64-gnu-ortools9.14@0.2.0`, or `linux-arm64-gnu`)
 and set `ORTOOLS_NODE_PIN=9.14` when both are present. Alpine and other musl
 systems have no prebuilts: use a glibc-based image such as `node:22-trixie-slim`,
 or build from source. The packages, load order, install hook, environment
@@ -513,7 +513,7 @@ changes are recorded in [CHANGELOG.md](CHANGELOG.md).
 
 ## Roadmap
 
-- **Publish to npm.** Neither `ortools-node` nor the `@ortools-node/*` platform
+- **Publish to npm.** Neither `ortools-node` nor the `@ortools-nodejs/*` platform
   packages are on npm yet; the publish workflow releases them from a `v*` tag.
 - **Prebuilt binaries for macOS and Windows,** with CI on both. Linux x64 and
   arm64 with glibc have prebuilts; musl (Alpine) has none.

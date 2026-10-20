@@ -24,15 +24,15 @@ From a shell: `node -p "require('ortools-node').buildInfo"`.
 
 | Platform | OR-Tools 9.15 (installed automatically) | OR-Tools 9.14 (install it yourself) |
 |---|---|---|
-| Linux x64, glibc 2.28 or newer | `@ortools-node/linux-x64-gnu-ortools9.15` | `@ortools-node/linux-x64-gnu-ortools9.14` |
-| Linux arm64, glibc 2.28 or newer | `@ortools-node/linux-arm64-gnu-ortools9.15` | `@ortools-node/linux-arm64-gnu-ortools9.14` |
+| Linux x64, glibc 2.28 or newer | `@ortools-nodejs/linux-x64-gnu-ortools9.15` | `@ortools-nodejs/linux-x64-gnu-ortools9.14` |
+| Linux arm64, glibc 2.28 or newer | `@ortools-nodejs/linux-arm64-gnu-ortools9.15` | `@ortools-nodejs/linux-arm64-gnu-ortools9.14` |
 
 Each package holds the addon (`ortools_node.node`) and the OR-Tools shared
 libraries it links, so it needs no compiler and no `ORTOOLS_ROOT`. The 9.15
 packages are optional dependencies of the published `ortools-node` (added when
 it is packed, by `scripts/prebuilt/set-optional-deps.js`); npm installs the one
 for your CPU. A 9.14 package is installed by hand at ortools-node's own version:
-`npm install @ortools-node/linux-x64-gnu-ortools9.14@0.2.0`.
+`npm install @ortools-nodejs/linux-x64-gnu-ortools9.14@0.2.0`.
 
 Rules:
 

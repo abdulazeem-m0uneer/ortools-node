@@ -38,7 +38,7 @@ exactly_one() {
   echo "${matches[0]}"
 }
 main_tgz=$(exactly_one "$tarballs" 'ortools-node-[0-9]*.tgz')
-platform_tgz=$(exactly_one "$tarballs" "ortools-node-linux-${arch}-gnu-ortools${version%.*}-*.tgz")
+platform_tgz=$(exactly_one "$tarballs" "ortools-nodejs-linux-${arch}-gnu-ortools${version%.*}-*.tgz")
 
 # shellcheck source=scripts/common.sh
 source "$(dirname "$0")/common.sh"
@@ -76,7 +76,7 @@ for image in "${images[@]}"; do
 
       mkdir /app && cd /app && npm init -y >/dev/null
       npm install --foreground-scripts /pkgs/main.tgz /pkgs/platform.tgz 2>&1 | tee /tmp/install.log | tail -n 3
-      grep -q "ortools-node: using the prebuilt addon from @ortools-node/" /tmp/install.log ||
+      grep -q "ortools-node: using the prebuilt addon from @ortools-nodejs/" /tmp/install.log ||
         { echo "the install hook did not use the prebuilt" >&2; exit 1; }
 
       cd node_modules/ortools-node
@@ -104,7 +104,7 @@ for image in "${images[@]}"; do
       node -e "
         const ortools = require(\".\");
         const addon = Object.keys(require.cache).find((f) => f.endsWith(\".node\"));
-        if (!addon.includes(\"/node_modules/@ortools-node/\")) throw new Error(\"loaded \" + addon);
+        if (!addon.includes(\"/node_modules/@ortools-nodejs/\")) throw new Error(\"loaded \" + addon);
         if (ortools.ortoolsVersion !== process.env.EXPECTED_VERSION) throw new Error(ortools.ortoolsVersion);
         console.log(\"loaded OR-Tools \" + ortools.ortoolsVersion + \" from \" + addon);
       "

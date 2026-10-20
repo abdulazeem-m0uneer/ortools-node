@@ -135,4 +135,4 @@ jobs:
             cd /tmp && npm init -y >/dev/null
             if npm install --omit=optional /pkgs/ortools-node-*.tgz >install.log 2>&1; then echo "install succeeded"; exit 1; fi
             cat install.log
-            grep -qF "npm install @ortools-node/linux-x64-gnu-ortools9.15@$VERSION" install.log'
+            grep -qF "npm install @ortools-nodejs/linux-x64-gnu-ortools9.15@$VERSION" install.log'

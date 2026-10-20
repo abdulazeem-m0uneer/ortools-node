@@ -142,7 +142,7 @@ test('the install guides name the version in package.json', () => {
   assert.ok(readme.split('## Contents')[0].includes(`**Status: ${version},`), `README status does not name ${version}`);
   for (const [where, text] of [['README', readme], ['docs/install.md', install]]) {
     assert.doesNotMatch(text, /not yet published/i, `${where} still says the package is unpublished`);
-    const pins = [...text.matchAll(/@ortools-node\/[\w.-]+@(\d+\.\d+\.\d+)/g)].map((m) => m[1]);
+    const pins = [...text.matchAll(/@ortools-nodejs\/[\w.-]+@(\d+\.\d+\.\d+)/g)].map((m) => m[1]);
     assert.ok(pins.length > 0, `${where} pins no platform package version`);
     assert.deepEqual([...new Set(pins)], [version], `${where} pins a platform package at another version`);
   }
