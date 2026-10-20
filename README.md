@@ -29,10 +29,10 @@ console.log(result.status, result.objectiveValue, x.value(), y.value()); //=> OP
 solver.dispose();
 ```
 
-> **Status: 0.1.0, early release. Not yet published on npm; build from source
-> until the first release** ([how](#building-from-source), [roadmap](#roadmap)).
+> **Status: 0.2.0, early release, published on npm as `ortools-node`**
+> ([install](#installation), [roadmap](#roadmap)).
 > The API is tested on Linux x64 and arm64 with OR-Tools 9.14 and 9.15 and
-> Node.js 22, 24 and 26. Once published, `npm install` on Linux x64 and arm64
+> Node.js 22, 24 and 26. `npm install` on Linux x64 and arm64
 > with glibc uses a prebuilt addon that bundles OR-Tools and needs no compiler.
 
 ## Contents
@@ -189,10 +189,6 @@ and math_opt. `npm run bench:dispatch` regenerates it; the header of
 
 You need Node.js 22 or later. CI tests Node.js 22, 24 and 26.
 
-> **Not yet published on npm; build from source until the first release.** The
-> `npm install` commands below describe the published package; until then,
-> follow [Building from source](#building-from-source) in a clone.
-
 ### Prebuilt binaries (Linux x64 and arm64)
 
 ```bash
@@ -207,7 +203,7 @@ loaded with `node -p "require('ortools-node').buildInfo"`.
 
 The platform package must have exactly ortools-node's version. For OR-Tools
 9.14, install its package yourself
-(`npm install @ortools-node/linux-x64-gnu-ortools9.14@0.1.0`, or `linux-arm64-gnu`)
+(`npm install @ortools-node/linux-x64-gnu-ortools9.14@0.2.0`, or `linux-arm64-gnu`)
 and set `ORTOOLS_NODE_PIN=9.14` when both are present. Alpine and other musl
 systems have no prebuilts: use a glibc-based image such as `node:22-trixie-slim`,
 or build from source. The packages, load order, install hook, environment

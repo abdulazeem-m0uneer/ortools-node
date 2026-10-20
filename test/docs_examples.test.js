@@ -132,18 +132,19 @@ test('anchorOf matches GitHub heading anchors', () => {
   assert.equal(anchorOf('`new Solver(backend)` and `Variable`'), 'new-solverbackend-and-variable');
 });
 
-// Until the first npm release, every place that tells readers how to install
-// must say so (README status and Installation, docs/install.md).
-const NOT_PUBLISHED = 'Not yet published on npm; build from source until the first release';
-test('every install guide says the package is not on npm yet', () => {
-  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8').replace(/\n> /g, ' ').replace(/\s+/g, ' ');
-  const section = (text, heading) => text.split(`## ${heading} `)[1]?.split(' ## ')[0] ?? '';
+// The install guides track the released version: the README status names it, every
+// pinned platform-package install uses it, and none still says the package is unpublished.
+test('the install guides name the version in package.json', () => {
+  const { version } = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  const readme = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const install = fs.readFileSync(path.join(ROOT, 'docs', 'install.md'), 'utf8');
   assert.ok(readme.includes('## Contents'), 'README has no ## Contents heading to end the status block');
-  const status = readme.split('## Contents')[0];
-  const install = fs.readFileSync(path.join(ROOT, 'docs', 'install.md'), 'utf8').replace(/\n> /g, ' ').replace(/\s+/g, ' ');
-  for (const [where, text] of [['README status', status], ['README Installation', section(readme, 'Installation')],
-    ['docs/install.md', install]]) {
-    assert.ok(text.includes(NOT_PUBLISHED), `${where} does not say: ${NOT_PUBLISHED}`);
+  assert.ok(readme.split('## Contents')[0].includes(`**Status: ${version},`), `README status does not name ${version}`);
+  for (const [where, text] of [['README', readme], ['docs/install.md', install]]) {
+    assert.doesNotMatch(text, /not yet published/i, `${where} still says the package is unpublished`);
+    const pins = [...text.matchAll(/@ortools-node\/[\w.-]+@(\d+\.\d+\.\d+)/g)].map((m) => m[1]);
+    assert.ok(pins.length > 0, `${where} pins no platform package version`);
+    assert.deepEqual([...new Set(pins)], [version], `${where} pins a platform package at another version`);
   }
 });
 
